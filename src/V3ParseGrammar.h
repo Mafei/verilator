@@ -173,6 +173,15 @@ public:
         V3ParseImp::parsep()->tagNodep(nodep);
         return nodep;
     }
+    // Move the `systemc_* sections from stmtsp to scSectionsp
+    static void separateScSections(AstNodeModule* modp) {
+        for (AstNode *nodep = modp->stmtsp(), *nextp = nullptr; nodep; nodep = nextp) {
+            nextp = nodep->nextp();
+            if (AstSystemCSection* const scSectionp = VN_CAST(nodep, SystemCSection)) {
+                modp->addScSectionsp(scSectionp->unlinkFrBack());
+            }
+        }
+    }
     static void endLabel(FileLine* fl, const AstNode* nodep, const string* endnamep) {
         endLabel(fl, nodep->prettyName(), endnamep);
     }

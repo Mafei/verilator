@@ -1207,12 +1207,14 @@ module_declaration:             // ==IEEE: module_declaration
                           if ($2) $1->addStmtsp($2);
                           if ($3) $1->addStmtsp($3);
                           if ($5) $1->addStmtsp($5);
+                          GRAMMARP->separateScSections($1);
                           GRAMMARP->endLabel($<fl>7, $1, $7); }
         |       udpFront portsStarE ';'
         /*cont*/    module_itemListE yENDPRIMITIVE endLabelE
                         { $1->modTrace(false);  // Stash for implicit wires, etc
                           if ($2) $1->addStmtsp($2);
                           if ($4) $1->addStmtsp($4);
+                          GRAMMARP->separateScSections($1);
                           GRAMMARP->m_tracingParse = true;
                           GRAMMARP->endLabel($<fl>6, $1, $6); }
         //
@@ -7787,6 +7789,7 @@ class_declaration<nodep>:       // ==IEEE: part of class_declaration
                           $1->addExtendsp($3);
                           $1->addExtendsp($4);
                           $1->addMembersp($7);
+                          GRAMMARP->separateScSections($1);
                           GRAMMARP->endLabel($<fl>8, $1, $8); }
         ;
 
