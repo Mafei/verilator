@@ -107,6 +107,7 @@ export VERILATOR_ROOT="$root"
 python3 test_regress/driver.py --vlt -j2 \
     t_fourstate_isunknown t_fourstate_countones t_fourstate_packed_array \
     t_fourstate_struct t_fourstate_sampled_expr t_fourstate_lognot \
+    t_fourstate_api t_fourstate_noapi t_fourstate_dynarray t_fourstate_modport \
     t_fourstate_cond t_fourstate_trace_vcd t_fourstate_trace_fst \
     t_vpi_get t_vpi_get_value_array t_fourstate_portable
 python3 - <<'PY'
