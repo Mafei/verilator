@@ -119,11 +119,11 @@ fi
 export VERILATOR_ROOT="$root"
 regress_status=0
 (cd test_regress && python3 driver.py --vlt -j2 \
-    t_fourstate_isunknown t_fourstate_countones t_fourstate_packed_array \
-    t_fourstate_struct t_fourstate_sampled_expr t_fourstate_lognot \
-    t_fourstate_api t_fourstate_noapi t_fourstate_dynarray t_fourstate_modport \
-    t_fourstate_cond t_fourstate_trace_vcd t_fourstate_trace_fst \
-    t_vpi_get t_vpi_get_value_array t_fourstate_vpi t_fourstate_portable) || regress_status=$?
+    t/t_fourstate_isunknown.py t/t_fourstate_countones.py t/t_fourstate_packed_array.py \
+    t/t_fourstate_struct.py t/t_fourstate_sampled_expr.py t/t_fourstate_lognot.py \
+    t/t_fourstate_api.py t/t_fourstate_noapi.py t/t_fourstate_dynarray.py t/t_fourstate_modport.py \
+    t/t_fourstate_cond.py t/t_fourstate_trace_vcd.py t/t_fourstate_trace_fst.py \
+    t/t_vpi_get.py t/t_vpi_get_value_array.py t/t_fourstate_vpi.py t/t_fourstate_portable.py) || regress_status=$?
 [[ ${smoke_status:-0} == 0 && $regress_status == 0 ]]
 python3 - <<'PY'
 import hashlib,pathlib

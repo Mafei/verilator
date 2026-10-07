@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.sha }}
-          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
           persist-credentials: false
       - name: Install build tools on the cloud runner
         run: brew install autoconf automake help2man
@@ -39,8 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.sha }}
-          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
           persist-credentials: false
       - name: Build in Rocky Linux 8.10
         run: |
