@@ -56,7 +56,7 @@ jobs:
               set -e
               dnf -y install dnf-plugins-core
               dnf config-manager --set-enabled powertools
-              dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-static \
+              dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
                 autoconf automake make perl git curl tar gzip xz findutils diffutils \
                 python3.11 python3.11-pip zlib-devel help2man
               ln -s /usr/bin/python3.11 /usr/local/bin/python3
