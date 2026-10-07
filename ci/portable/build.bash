@@ -26,6 +26,24 @@ fi
 python3 -m venv .ci-venv
 source .ci-venv/bin/activate
 python3 -m pip install --disable-pip-version-check distro
+# Build the waveform comparator on the Rocky baseline; Ubuntu-built binaries
+# can require a newer glibc. macOS uses the official ARM64 release archive.
+if [[ $platform == rocky8-x86_64 ]]; then
+    export RUSTUP_HOME="$root/.ci-rustup" CARGO_HOME="$root/.ci-cargo"
+    curl --fail --location --retry 3 --proto '=https' -o .ci-tools-src/rustup-init.sh https://sh.rustup.rs
+    sh .ci-tools-src/rustup-init.sh -y --profile minimal --default-toolchain 1.88.0 --no-modify-path
+    export PATH="$CARGO_HOME/bin:$PATH"
+    cargo install --locked --version 0.1.2 --root "$root/.ci-tools" wavetools
+else
+    curl --fail --location --retry 3 --proto '=https' -o .ci-tools-src/wavetools.tar.gz https://github.com/hudson-trading/wavetools/releases/download/v0.1.2/wavetools-v0.1.2-macos-arm64.tar.gz
+    python3 - <<'PYHASH'
+import hashlib
+assert hashlib.sha256(open('.ci-tools-src/wavetools.tar.gz','rb').read()).hexdigest() == 'a468945b9646390c49c362a51edc7b54de53d0c3efaf852e3bf92098e7dd2867'
+PYHASH
+    mkdir -p .ci-tools/bin
+    tar xzf .ci-tools-src/wavetools.tar.gz -C .ci-tools-src
+    cp .ci-tools-src/wavetools-v0.1.2-macos-arm64/wavediff .ci-tools/bin/
+fi
 # The scanner and FlexLexer.h must be from the same GNU Flex release.
 cd .ci-tools-src
 curl --fail --location --retry 3 --proto '=https' -o bison.tar.xz https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz

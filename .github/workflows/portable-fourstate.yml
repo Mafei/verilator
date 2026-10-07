@@ -17,6 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Install build tools on the cloud runner
@@ -26,7 +27,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: macos-arm64-${{ github.sha }}
+          name: macos-arm64-${{ github.run_id }}
           path: |
             out/
             logs/
@@ -38,6 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Build in Rocky Linux 8.10
@@ -68,7 +70,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: rocky8-x86_64-${{ github.sha }}
+          name: rocky8-x86_64-${{ github.run_id }}
           path: |
             out/
             logs/
