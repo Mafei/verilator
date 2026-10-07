@@ -98,8 +98,10 @@ void VerilatedFst::close() VL_MT_SAFE_EXCLUDES(m_mutex) {
     const VerilatedLockGuard lock{m_mutex};
     Super::closeBase();
     emitTimeChangeMaybe();
-    if (m_fst) m_fst->close();  // LCOV_EXCL_BR_LINE
-    m_fst = nullptr;
+    if (m_fst) {
+        m_fst->close();
+        VL_DO_CLEAR(delete m_fst, m_fst = nullptr);
+    }
 }
 
 void VerilatedFst::flush() VL_MT_SAFE_EXCLUDES(m_mutex) {
@@ -380,7 +382,15 @@ VL_ATTR_ALWINLINE
 void VerilatedFstBuffer::emitBit(uint32_t code, CData newval) {
     VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
     m_owner.emitTimeChangeMaybe();
-    m_fst->emitValueChange(m_symbolp[code], uint64_t(newval));
+    m_fst->emitValueChange(m_symbolp[code], newval);
+}
+
+VL_ATTR_ALWINLINE
+void VerilatedFstBuffer::emitLogic(uint32_t code, CData newval, CData newvalXZ) {
+    VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
+    m_owner.emitTimeChangeMaybe();
+    const uint32_t newvals[2] = {static_cast<uint32_t>(newval), static_cast<uint32_t>(newvalXZ)};
+    m_fst->emitValueChange(m_symbolp[code], newvals, fst::EncodingType::VERILOG);
 }
 
 VL_ATTR_ALWINLINE
@@ -391,10 +401,26 @@ void VerilatedFstBuffer::emitCData(uint32_t code, CData newval, int) {
 }
 
 VL_ATTR_ALWINLINE
+void VerilatedFstBuffer::emitFourstateCData(uint32_t code, CData newval, CData newvalXZ, int) {
+    VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
+    m_owner.emitTimeChangeMaybe();
+    const uint32_t newvals[2] = {static_cast<uint32_t>(newval), static_cast<uint32_t>(newvalXZ)};
+    m_fst->emitValueChange(m_symbolp[code], newvals, fst::EncodingType::VERILOG);
+}
+
+VL_ATTR_ALWINLINE
 void VerilatedFstBuffer::emitSData(uint32_t code, SData newval, int) {
     VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
     m_owner.emitTimeChangeMaybe();
     m_fst->emitValueChange(m_symbolp[code], newval);
+}
+
+VL_ATTR_ALWINLINE
+void VerilatedFstBuffer::emitFourstateSData(uint32_t code, SData newval, SData newvalXZ, int) {
+    VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
+    m_owner.emitTimeChangeMaybe();
+    const uint64_t newvals[2] = {static_cast<uint64_t>(newval), static_cast<uint64_t>(newvalXZ)};
+    m_fst->emitValueChange(m_symbolp[code], newvals, fst::EncodingType::VERILOG);
 }
 
 VL_ATTR_ALWINLINE
@@ -405,6 +431,14 @@ void VerilatedFstBuffer::emitIData(uint32_t code, IData newval, int) {
 }
 
 VL_ATTR_ALWINLINE
+void VerilatedFstBuffer::emitFourstateIData(uint32_t code, IData newval, IData newvalXZ, int) {
+    VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
+    m_owner.emitTimeChangeMaybe();
+    const uint64_t newvals[2] = {static_cast<uint64_t>(newval), static_cast<uint64_t>(newvalXZ)};
+    m_fst->emitValueChange(m_symbolp[code], newvals, fst::EncodingType::VERILOG);
+}
+
+VL_ATTR_ALWINLINE
 void VerilatedFstBuffer::emitQData(uint32_t code, QData newval, int) {
     VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
     m_owner.emitTimeChangeMaybe();
@@ -412,7 +446,15 @@ void VerilatedFstBuffer::emitQData(uint32_t code, QData newval, int) {
 }
 
 VL_ATTR_ALWINLINE
-void VerilatedFstBuffer::emitWData(uint32_t code, WDataInP newval, int) {
+void VerilatedFstBuffer::emitFourstateQData(uint32_t code, QData newval, QData newvalXZ, int) {
+    VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
+    m_owner.emitTimeChangeMaybe();
+    const uint64_t newvals[2] = {newval, newvalXZ};
+    m_fst->emitValueChange(m_symbolp[code], newvals, fst::EncodingType::VERILOG);
+}
+
+VL_ATTR_ALWINLINE
+void VerilatedFstBuffer::emitWData(uint32_t code, const WDataInP newval, int) {
     VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
     m_owner.emitTimeChangeMaybe();
     m_fst->emitValueChange(m_symbolp[code], newval.datap());
@@ -421,30 +463,20 @@ void VerilatedFstBuffer::emitWData(uint32_t code, WDataInP newval, int) {
 VL_ATTR_ALWINLINE
 void VerilatedFstBuffer::emitFourstateWData(uint32_t code, const WDataInP newval,
                                             const WDataInP newvalXZ, int bits) {
-    char buf[VL_BYTESIZE];
-    char* wp = buf;
-    VL_DEBUG_IFDEF(assert(m_symbolp[code]););
-    const int lastIdx = (bits - 1) / VL_EDATASIZE;
-    {
-        const EData value = newval[lastIdx];
-        const EData xz = newvalXZ[lastIdx];
-        for (int i = (bits - 1) % VL_EDATASIZE; i >= 0; --i) {
-            const EData mask = 1 << i;
-            *wp++ = (xz & mask) ? (value & mask ? 'x' : 'z')
-                                : ('0' | (static_cast<char>(value >> i) & 1));
-        }
+    VL_DEBUG_IFDEF(assert(m_symbolp[code]););  // LCOV_EXCL_BR_LINE
+    // TODO: When four-states will be shuffled remove it since copying will be no longer necessary
+    thread_local std::vector<uint32_t> newvals;
+    newvals.clear();
+    const size_t wordCount = static_cast<size_t>(VL_WORDS_I(bits));
+    newvals.reserve(wordCount * 2);
+    for (size_t i = 0; i < wordCount; ++i) {
+        newvals.push_back(newval[i]);
+        newvals.push_back(newvalXZ[i]);
     }
-    for (int w = lastIdx - 1; w >= 0; --w) {
-        const EData value = newval[w];
-        const EData xz = newvalXZ[w];
-        for (int i = VL_EDATASIZE - 1; i >= 0; --i) {
-            const EData mask = 1 << i;
-            *wp++ = (xz & mask) ? (value & mask ? 'x' : 'z')
-                                : ('0' | (static_cast<char>(value >> i) & 1));
-        }
-    }
+
     m_owner.emitTimeChangeMaybe();
-    fstWriterEmitValueChange(m_fst, m_symbolp[code], buf);
+    // call emitValueChange(handle, uint32_t*)
+    m_fst->emitValueChange(m_symbolp[code], newvals.data(), fst::EncodingType::VERILOG);
 }
 
 VL_ATTR_ALWINLINE

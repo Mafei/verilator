@@ -307,6 +307,114 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
     void visit(AstCoverInc*) override {}  // N/A
     void visit(AstCoverToggle*) override {}  // N/A
 
+    void visit(AstCovergroup* nodep) override {
+        // AstCovergroup appears as a member inside the lowered AstClass body.
+        // The outer covergroup/endcovergroup wrapper is already emitted by the
+        // AstNodeModule visitor (verilogKwd()="covergroup" on AstClass::isCovergroup).
+        // Here we only emit the clocking event, if any.
+        if (nodep->eventp()) {
+            putfs(nodep, "");
+            iterateConst(nodep->eventp());
+        }
+    }
+    void visit(AstCoverpoint* nodep) override {
+        putfs(nodep, nodep->name() + ": coverpoint ");
+        iterateAndNextConstNull(nodep->exprp());
+        if (nodep->binsp() || nodep->optionsp()) {
+            puts(" {\n");
+            iterateAndNextConstNull(nodep->optionsp());
+            iterateAndNextConstNull(nodep->binsp());
+            puts("}");
+        }
+        puts(";\n");
+    }
+    void visit(AstCoverBin* nodep) override {
+        switch (nodep->binsType()) {
+        case VCoverBinsType::BINS_IGNORE: putfs(nodep, "ignore_bins "); break;
+        case VCoverBinsType::BINS_ILLEGAL: putfs(nodep, "illegal_bins "); break;
+        default: putfs(nodep, "bins "); break;
+        }
+        puts(nodep->name());
+        if (nodep->binsType() == VCoverBinsType::BINS_DEFAULT) {
+            puts(" = default");
+        } else if (nodep->transp()) {
+            puts(" = ");
+            for (AstNode* setp = nodep->transp(); setp; setp = setp->nextp()) {
+                if (setp != nodep->transp()) puts(", ");
+                iterateConst(setp);
+            }
+        } else if (nodep->rangesp()) {  // LCOV_EXCL_BR_LINE - false: CoverBin always has
+                                        // transp/rangesp/default
+            puts(" = {");
+            for (AstNode* rangep = nodep->rangesp(); rangep; rangep = rangep->nextp()) {
+                if (rangep != nodep->rangesp()) puts(", ");
+                iterateConst(rangep);
+            }
+            puts("}");
+        }
+        puts(";\n");
+    }
+    void visit(AstCoverBinsof* nodep) override {
+        putfs(nodep, nodep->isNegated() ? "!binsof(" : "binsof(");
+        iterateConst(nodep->pointp());
+        if (!nodep->name().empty()) puts("." + nodep->name());
+        puts(")");
+        if (nodep->rangesp()) {
+            puts(" intersect {");
+            iterateAndCommaConstNull(nodep->rangesp());
+            puts("}");
+        }
+    }
+    void visit(AstCoverCrossBin* nodep) override {
+        putfs(nodep, nodep->verilogKwd() + " " + nodep->name() + " = ");
+        iterateConstNull(nodep->selectp());
+        if (nodep->iffp()) {
+            puts(" iff (");
+            iterateConst(nodep->iffp());
+            puts(")");
+        }
+        puts(";\n");
+    }
+    void visit(AstCoverCrossSelect* nodep) override {
+        putfs(nodep, "(");
+        iterateConstNull(nodep->lhsp());
+        putbs(" " + nodep->verilogKwd() + " ");
+        iterateConstNull(nodep->rhsp());
+        puts(")");
+    }
+    void visit(AstCoverpointRef* nodep) override {
+        putfs(nodep, nodep->name());
+        iterateConstNull(nodep->exprp());
+    }
+    void visit(AstCoverCross* nodep) override {
+        putfs(nodep, nodep->name() + ": cross ");
+        for (AstNode* itemp = nodep->itemsp(); itemp; itemp = itemp->nextp()) {
+            if (itemp != nodep->itemsp()) puts(", ");
+            iterateConst(itemp);
+        }
+        if (nodep->iffp()) {
+            puts(" iff (");
+            iterateConst(nodep->iffp());
+            puts(")");
+        }
+        if (nodep->binsp()) {
+            puts(" {\n");
+            iterateAndNextConstNull(nodep->binsp());
+            puts("}\n");
+        } else {
+            puts(";\n");
+        }
+    }
+    void visit(AstCoverTransSet* nodep) override {
+        puts("(");
+        for (AstNode* itemp = nodep->itemsp(); itemp; itemp = itemp->nextp()) {
+            if (itemp != nodep->itemsp()) puts(" => ");
+            iterateConst(itemp);
+        }
+        puts(")");
+    }
+    void visit(AstCoverTransItem* nodep) override { iterateChildrenConst(nodep); }
+
     void visit(AstCvtPackString* nodep) override {
         putfs(nodep, "");
         if (AstConst* const lhsConstp = VN_CAST(nodep->lhsp(), Const)) {
@@ -574,9 +682,9 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         puts(";\n");
     }
     void visit(AstFourstateExpr* const nodep) override {
-        puts("Four-state expression: (Value part: ");
+        puts("FOUR_STATE_EXPR(VAL=");
         iterateConst(nodep->valuep());
-        puts(", XZ part:");
+        puts(", XZ=");
         iterateConst(nodep->xzp());
         puts(")");
     }
@@ -751,6 +859,13 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         putbs(" : ");
         iterateAndNextConstNull(nodep->elsep());
         puts(")");
+    }
+    void visit(AstInsideRange* nodep) override {
+        puts("[");
+        iterateAndNextConstNull(nodep->lhsp());
+        puts(":");
+        iterateAndNextConstNull(nodep->rhsp());
+        puts("]");
     }
     void visit(AstRange* nodep) override {
         puts("[");
@@ -949,6 +1064,10 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
             puts("\n???? // "s + nodep->prettyTypeName() + " -> UNLINKED\n");
         }
     }
+    void visit(AstClassRefDType* nodep) override {
+        UASSERT_OBJ(nodep->classp(), nodep, "AstClassRefDType not linked");
+        putfs(nodep, EmitCUtil::prefixNameProtect(nodep->classp()));
+    }
     void visit(AstRequireDType* nodep) override { iterateConst(nodep->lhsp()); }
     void visit(AstModport* nodep) override {
         puts(nodep->verilogKwd());
@@ -980,8 +1099,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         if (nodep->packed()) puts("packed ");
         {
             puts("{\n");
-            VL_RESTORER(m_packedps);
-            m_packedps.clear();
+            VL_RESTORER_CLEAR(m_packedps);
             for (AstMemberDType* itemp = nodep->membersp(); itemp;
                  itemp = VN_AS(itemp->nextp(), MemberDType)) {
                 iterateConst(itemp);
@@ -1061,7 +1179,12 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         }
 
         puts(" ");
+        if (nodep->propStrength() != VPropStrength::DEFAULT) {
+            puts(nodep->propStrength().ascii());
+            puts("(");
+        }
         iterateConstNull(nodep->propp());
+        if (nodep->propStrength() != VPropStrength::DEFAULT) puts(")");
         puts("\n");
     }
     void visit(AstPExpr* nodep) override { iterateConst(nodep->bodyp()); }
@@ -1071,6 +1194,13 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         iterateConst(nodep->condp());
         puts(") ");
         iterateConst(nodep->propp());
+    }
+    void visit(AstSClocked* nodep) override {
+        puts("@(");
+        iterateConst(nodep->sensesp());
+        puts(") ");
+        iterateConst(nodep->exprp());
+        puts("\n");
     }
     void visit(AstPropAlways* nodep) override {
         puts(nodep->isStrong() ? "s_always" : "always");
@@ -1121,6 +1251,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         }
     }
     void visit(AstConst* nodep) override { putfs(nodep, nodep->num().ascii(m_prefixed, true)); }
+    void visit(AstUnbounded* nodep) override { emitVerilogFormat(nodep, nodep->emitVerilog()); }
 
     // Just iterate
     void visit(AstTopScope* nodep) override { iterateChildrenConst(nodep); }

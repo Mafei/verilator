@@ -23,6 +23,7 @@
 
 #include "V3AssertPre.h"
 
+#include "V3Assert.h"
 #include "V3Const.h"
 #include "V3Task.h"
 #include "V3UniqueNames.h"
@@ -60,6 +61,7 @@ private:
     AstNodeExpr* m_disablep = nullptr;  // Last disable
     AstIf* m_disableSeqIfp = nullptr;  // Used for handling disable iff in sequences
     AstPExpr* m_pexprp = nullptr;  // Last AstPExpr
+    bool m_underCover = false;  // True if the enclosing assertion is a cover
     // Other:
     V3UniqueNames m_cycleDlyNames{"__VcycleDly"};  // Cycle delay counter name generator
     V3UniqueNames m_consRepNames{"__VconsRep"};  // Consecutive repetition counter name generator
@@ -77,6 +79,14 @@ private:
 
     // METHODS
 
+    static void checkSamplingFuncDType(AstNodeExpr* nodep, const AstNode* exprp) {
+        const AstNodeDType* const dtypep = exprp->dtypep()->skipRefp();
+        if (!dtypep->isIntegralOrPacked()) {
+            nodep->v3error("Expected numeric type, but got a " << dtypep->prettyDTypeNameQ()
+                                                               << " data type");
+        }
+    }
+
     AstSenTree* newSenTree(AstNode* nodep, AstSenTree* useTreep = nullptr,
                            AstNodeCoverOrAssert* cassertp = nullptr) {
         // Create sentree based on clocked or default clock
@@ -91,7 +101,10 @@ private:
             fromAlways = true;
         }
         if (!senip) {
-            nodep->v3warn(E_UNSUPPORTED, "Unsupported: Unclocked assertion");
+            nodep->v3error("Concurrent assertion has no clock (IEEE 1800-2023 16.16)\n"
+                           << nodep->warnMore()
+                           << "... Suggest provide a clocking event, a default"
+                              " clocking, or a clocked procedural context");
             newp = new AstSenTree{nodep->fileline(), nullptr};
         } else {
             if (cassertp && fromAlways) cassertp->senFromAlways(true);
@@ -366,8 +379,8 @@ private:
             if (skewp->num().is1Step()) {
                 // #1step means the value that is sampled is always the signal's last value
                 // before the clock edge (IEEE 1800-2023 14.4)
-                AstSampled* const sampledp = new AstSampled{flp, exprp->cloneTreePure(false)};
-                sampledp->dtypeFrom(exprp);
+                AstSampled* const sampledp
+                    = new AstSampled{flp, exprp->cloneTreePure(false), exprp->dtypep(), true};
                 AstAssign* const assignp = new AstAssign{flp, refp, sampledp};
                 m_clockingp->addNextHere(new AstAlways{
                     flp, VAlwaysKwd::ALWAYS,
@@ -401,6 +414,7 @@ private:
                     flp, new AstVarRef{flp, queueVarp, VAccess::READWRITE}, VCMethod::DYN_POP,
                     new AstTime{nodep->fileline(), m_modp->timeunit()}};
                 popp->addPinsp(skewp->unlinkFrBack());
+                refp->access(VAccess::READWRITE);  // Only conditionally assigned
                 popp->addPinsp(refp);
                 popp->dtypeSetVoid();
                 m_clockingp->addNextHere(
@@ -413,7 +427,7 @@ private:
         }
     }
     void visit(AstDelay* nodep) override {
-        m_hasCycleDelay = true;
+        m_hasCycleDelay |= nodep->isCycleDelay();
         // Only cycle delays are relevant in this stage; also only process once
         if (!nodep->isCycleDelay()) {
             if (m_inSynchDrive) {
@@ -678,6 +692,7 @@ private:
     void visit(AstFalling* nodep) override {
         if (nodep->user1SetOnce()) return;
         iterateChildren(nodep);
+        checkSamplingFuncDType(nodep, nodep->exprp());
         FileLine* const fl = nodep->fileline();
         AstNodeExpr* exprp = nodep->exprp()->unlinkFrBack();
         if (exprp->width() > 1) exprp = new AstSel{fl, exprp, 0, 1};
@@ -691,6 +706,7 @@ private:
     void visit(AstFell* nodep) override {
         if (nodep->user1SetOnce()) return;
         iterateChildren(nodep);
+        checkSamplingFuncDType(nodep, nodep->exprp());
         FileLine* const fl = nodep->fileline();
         AstNodeExpr* exprp = nodep->exprp()->unlinkFrBack();
         if (exprp->width() > 1) exprp = new AstSel{fl, exprp, 0, 1};
@@ -707,11 +723,13 @@ private:
     void visit(AstFuture* nodep) override {
         if (nodep->user1SetOnce()) return;
         iterateChildren(nodep);
+        checkSamplingFuncDType(nodep, nodep->exprp());
         AstSenTree* const sentreep = nodep->sentreep();
         if (sentreep) VL_DO_DANGLING(pushDeletep(sentreep->unlinkFrBack()), sentreep);
         nodep->sentreep(newSenTree(nodep));
     }
     void visit(AstPast* nodep) override {
+        checkSamplingFuncDType(nodep, nodep->exprp());
         if (nodep->sentreep()) return;  // Already processed
         iterateChildren(nodep);
         nodep->sentreep(newSenTree(nodep));
@@ -769,6 +787,7 @@ private:
     void visit(AstRising* nodep) override {
         if (nodep->user1SetOnce()) return;
         iterateChildren(nodep);
+        checkSamplingFuncDType(nodep, nodep->exprp());
         FileLine* const fl = nodep->fileline();
         AstNodeExpr* exprp = nodep->exprp()->unlinkFrBack();
         if (exprp->width() > 1) exprp = new AstSel{fl, exprp, 0, 1};
@@ -782,6 +801,7 @@ private:
     void visit(AstRose* nodep) override {
         if (nodep->user1SetOnce()) return;
         iterateChildren(nodep);
+        checkSamplingFuncDType(nodep, nodep->exprp());
         FileLine* const fl = nodep->fileline();
         AstNodeExpr* exprp = nodep->exprp()->unlinkFrBack();
         if (exprp->width() > 1) exprp = new AstSel{fl, exprp, 0, 1};
@@ -811,7 +831,6 @@ private:
     static AstStmtExpr* getProcessAssocArrayDelete(AstVarRef* const refp) {
         // Constructs refp.delete(std::process::self()) statement
         FileLine* const flp = refp->fileline();
-        refp->classOrPackagep(v3Global.rootp()->stdPackageProcessp());
         AstCMethodHard* const deletep = new AstCMethodHard{
             flp, refp, VCMethod::ASSOC_ERASE, v3Global.rootp()->stdPackageProcessSelfp(flp)};
         deletep->dtypep(refp->findVoidDType());
@@ -819,7 +838,6 @@ private:
     }
     static AstNodeExpr* getProcessAssocArraySize(AstVarRef* const refp) {
         // Constructs refp.size() statement
-        refp->classOrPackagep(v3Global.rootp()->stdPackageProcessp());
         AstCMethodHard* const sizep
             = new AstCMethodHard{refp->fileline(), refp, VCMethod::ASSOC_SIZE};
         sizep->dtypep(refp->findBasicDType(VBasicDTypeKwd::UINT32));
@@ -846,7 +864,8 @@ private:
 
         // Assertion condition check
         AstLoop* const loopp = new AstLoop{flp};
-        AstNodeExpr* const condp = new AstSampled{flp, nodep->exprp()->unlinkFrBack()};
+        AstSampled* const condp
+            = new AstSampled{flp, nodep->exprp()->unlinkFrBack(), nullptr, true};
         loopp->addStmtsp(new AstLoopTest{flp, loopp, new AstLogNot{flp, condp}});
         loopp->addStmtsp(new AstEventControl{flp, sentreep, nullptr});
 
@@ -913,6 +932,7 @@ private:
     void visit(AstStable* nodep) override {
         if (nodep->user1SetOnce()) return;
         iterateChildren(nodep);
+        checkSamplingFuncDType(nodep, nodep->exprp());
         FileLine* const fl = nodep->fileline();
         AstNodeExpr* exprp = nodep->exprp()->unlinkFrBack();
         AstSenTree* sentreep = nodep->sentreep();
@@ -928,6 +948,7 @@ private:
     void visit(AstSteady* nodep) override {
         if (nodep->user1SetOnce()) return;
         iterateChildren(nodep);
+        checkSamplingFuncDType(nodep, nodep->exprp());
         FileLine* const fl = nodep->fileline();
         AstNodeExpr* exprp = nodep->exprp()->unlinkFrBack();
         if (exprp->width() > 1) exprp = new AstSel{fl, exprp, 0, 1};
@@ -937,6 +958,10 @@ private:
         exprp->dtypeSetBit();
         nodep->replaceWith(exprp);
         VL_DO_DANGLING(pushDeletep(nodep), nodep);
+    }
+    void visit(AstSampled* nodep) override {
+        iterateChildren(nodep);
+        if (!nodep->internal()) checkSamplingFuncDType(nodep, nodep->exprp());
     }
 
     // Validate repetition count: must be a non-negative elaboration-time constant.
@@ -949,7 +974,7 @@ private:
             nodep->v3error("Repetition count is not an elaboration-time constant"
                            " (IEEE 1800-2023 16.9.2)");
             VL_DO_DANGLING(pushDeletep(countp), countp);
-            nodep->replaceWith(new AstConst{nodep->fileline(), AstConst::BitFalse{}});
+            nodep->replaceWith(new AstConst{nodep->fileline(), AstConst::BitFalseErroring{}});
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
             return nullptr;
         }
@@ -957,7 +982,7 @@ private:
             nodep->v3error("Repetition count must be non-negative"
                            " (IEEE 1800-2023 16.9.2)");
             VL_DO_DANGLING(pushDeletep(countp), countp);
-            nodep->replaceWith(new AstConst{nodep->fileline(), AstConst::BitFalse{}});
+            nodep->replaceWith(new AstConst{nodep->fileline(), AstConst::BitFalseErroring{}});
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
             return nullptr;
         }
@@ -1200,11 +1225,7 @@ private:
                     AstNode* const nextp = stmtp->nextp();
                     if (AstAssign* const assignp = VN_CAST(stmtp, Assign)) {
                         assignp->unlinkFrBack();
-                        if (!matchAssignsp) {
-                            matchAssignsp = assignp;
-                        } else {
-                            matchAssignsp->addNext(assignp);
-                        }
+                        matchAssignsp = AstNode::addNextNull(matchAssignsp, assignp);
                     }
                     stmtp = nextp;
                 }
@@ -1230,11 +1251,7 @@ private:
                         AstNodeExpr* const assignRhsp = assignp->rhsp()->unlinkFrBack();
                         AstAssignDly* const dlyp = new AstAssignDly{flp, assignLhsp, assignRhsp};
                         VL_DO_DANGLING(pushDeletep(assignp), assignp);
-                        if (!matchAssignsp) {
-                            matchAssignsp = dlyp;
-                        } else {
-                            matchAssignsp->addNext(dlyp);
-                        }
+                        matchAssignsp = AstNode::addNextNull(matchAssignsp, dlyp);
                     }
                     stmtp = nextp;
                 }
@@ -1268,7 +1285,8 @@ private:
                     lhsp
                         = new AstAnd{flp, new AstNot{flp, m_disablep->cloneTreePure(false)}, lhsp};
                 }
-                AstPast* const pastp = new AstPast{flp, lhsp};
+                AstPast* const pastp
+                    = new AstPast{flp, lhsp, nullptr, nullptr, /* propertyTiming */ true};
                 pastp->dtypeFrom(lhsp);
                 pastp->sentreep(newSenTree(nodep));
                 condp = pastp;
@@ -1283,16 +1301,22 @@ private:
             // Don't iterate pexprp here -- it was already iterated when created
             // (in visit(AstSExpr*)), so delays and disable iff are already processed.
         } else if (nodep->isOverlapped()) {
-            nodep->replaceWith(new AstLogOr{flp, new AstLogNot{flp, lhsp}, rhsp});
+            AstNodeExpr* const exprp
+                = m_underCover ? static_cast<AstNodeExpr*>(new AstLogAnd{flp, lhsp, rhsp})
+                               : new AstLogOr{flp, new AstLogNot{flp, lhsp}, rhsp};
+            nodep->replaceWith(exprp);
         } else {
             if (m_disablep) {
                 lhsp = new AstAnd{flp, new AstNot{flp, m_disablep->cloneTreePure(false)}, lhsp};
             }
 
-            AstPast* const pastp = new AstPast{flp, lhsp};
+            AstPast* const pastp
+                = new AstPast{flp, lhsp, nullptr, nullptr, /* propertyTiming */ true};
             pastp->dtypeFrom(lhsp);
             pastp->sentreep(newSenTree(nodep));
-            AstNodeExpr* const exprp = new AstOr{flp, new AstNot{flp, pastp}, rhsp};
+            AstNodeExpr* const exprp
+                = m_underCover ? static_cast<AstNodeExpr*>(new AstAnd{flp, pastp, rhsp})
+                               : new AstOr{flp, new AstNot{flp, pastp}, rhsp};
             exprp->dtypeSetBit();
             nodep->replaceWith(exprp);
         }
@@ -1300,17 +1324,128 @@ private:
     }
     void visit(AstUntil* nodep) override {
         FileLine* const flp = nodep->fileline();
-        if (m_pexprp) {
-            nodep->v3warn(E_UNSUPPORTED, "Unsupported: 'until' in complex property expression");
+        UASSERT_OBJ(
+            !m_pexprp, nodep,
+            "'" << nodep->verilogKwd()
+                << "' in complex property expression should have been rejected by V3AssertNfa");
+        if (nodep->isStrong()
+            && (v3Global.opt.timing().isSetFalse() || !v3Global.opt.timing().isSetTrue())) {
+            nodep->v3warn(E_NOTIMING, nodep->verilogKwd() << " requires --timing");
             nodep->replaceWith(new AstConst{flp, AstConst::BitFalse{}});
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
             return;
         }
         if (nodep->isStrong()) {
-            nodep->v3warn(E_UNSUPPORTED, "Unsupported: s_until"
-                                             << (nodep->isOverlapping() ? "_with" : "")
-                                             << " (in property expresion)");
-            nodep->replaceWith(new AstConst{flp, AstConst::BitFalse{}});
+            // p s_until q / p s_until_with q: q must eventually be true. Until then, p must
+            // be true on every sampled tick. For s_until, check q first: when q is true on
+            // this tick, p is not required. For s_until_with, p must be true on the q tick too.
+            AstNodeExpr* const rawLhsp = nodep->lhsp()->unlinkFrBack();
+            AstNodeExpr* const rawRhsp = nodep->rhsp()->unlinkFrBack();
+            AstSampled* const lhsp = new AstSampled{flp, rawLhsp, rawLhsp->dtypep(), true};
+            AstSampled* const rhsp = new AstSampled{flp, rawRhsp, rawRhsp->dtypep(), true};
+            AstNodeExpr* finalCondp = rhsp->cloneTreePure(false);
+            if (nodep->isOverlapping()) {
+                finalCondp = new AstLogAnd{flp, lhsp->cloneTreePure(false), finalCondp};
+            }
+
+            // Track active assertion attempts. Only the count is needed to emit final failures.
+            AstVar* const activep = new AstVar{flp, VVarType::MODULETEMP, m_activeNames.get(""),
+                                               nodep->findBasicDType(VBasicDTypeKwd::UINT32)};
+            activep->lifetime(VLifetime::STATIC_EXPLICIT);
+            m_modp->addStmtsp(activep);
+
+            AstVar* const donep
+                = new AstVar{flp, VVarType::BLOCKTEMP, "__VassertDone", nodep->findBitDType()};
+            donep->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
+            auto setDone = [&]() {
+                return new AstAssign{flp, new AstVarRef{flp, donep, VAccess::WRITE},
+                                     new AstConst{flp, AstConst::BitTrue{}}};
+            };
+
+            AstLoop* const loopp = new AstLoop{flp};
+            AstAssign* const decrementVar = new AstAssign{
+                flp, new AstVarRef{flp, activep, VAccess::WRITE},
+                new AstSub{flp, new AstVarRef{flp, activep, VAccess::READ}, new AstConst{flp, 1}}};
+            loopp->addStmtsp(new AstLoopTest{
+                flp, loopp, new AstLogNot{flp, new AstVarRef{flp, donep, VAccess::READ}}});
+            {
+                AstBegin* const passp = new AstBegin{flp, "", nullptr, true};
+                passp->addStmtsp(new AstPExprClause{flp});
+                passp->addStmtsp(decrementVar);
+                passp->addStmtsp(setDone());
+                AstNodeExpr* passCondp = rhsp;
+                if (nodep->isOverlapping()) {
+                    passCondp = new AstLogAnd{flp, lhsp->cloneTreePure(false), passCondp};
+                }
+                loopp->addStmtsp(new AstIf{flp, passCondp, passp});
+            }
+            {
+                AstBegin* const failp = new AstBegin{flp, "", nullptr, true};
+                failp->addStmtsp(new AstPExprClause{flp, false});
+                failp->addStmtsp(decrementVar->cloneTree(false));
+                failp->addStmtsp(setDone());
+                loopp->addStmtsp(new AstIf{
+                    flp,
+                    new AstLogAnd{flp,
+                                  new AstLogNot{flp, new AstVarRef{flp, donep, VAccess::READ}},
+                                  new AstLogNot{flp, lhsp}},
+                    failp});
+            }
+            AstDelay* const delayp = new AstDelay{flp, new AstConst{flp, 1}, false};
+            delayp->timeunit(m_modp->timeunit());
+            loopp->addStmtsp(new AstIf{
+                flp, new AstLogNot{flp, new AstVarRef{flp, donep, VAccess::READ}}, delayp});
+
+            // Main assertion block
+            AstBegin* const bodyp = new AstBegin{flp, "", nullptr, true};
+            bodyp->addStmtsp(donep);
+            bodyp->addStmtsp(new AstAssign{flp, new AstVarRef{flp, donep, VAccess::WRITE},
+                                           new AstConst{flp, AstConst::BitFalse{}}});
+            FileLine* const flp = activep->fileline();
+            bodyp->addStmtsp(
+                new AstAssign{flp, new AstVarRef{flp, activep, VAccess::WRITE},
+                              new AstAdd{flp, new AstVarRef{flp, activep, VAccess::READ},
+                                         new AstConst{flp, 1}}});
+            bodyp->addStmtsp(loopp);
+
+            // Validate assertion condition for each active assert
+            AstVar* const activeCountp = new AstVar{flp, VVarType::BLOCKTEMP, "__VassertCount",
+                                                    nodep->findBasicDType(VBasicDTypeKwd::UINT32)};
+            activeCountp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
+
+            AstAssign* const initActiveCountp
+                = new AstAssign{flp, new AstVarRef{flp, activeCountp, VAccess::WRITE},
+                                new AstVarRef{flp, activep, VAccess::READ}};
+            AstLoop* const finalLoopp = new AstLoop{flp};
+            finalLoopp->addStmtsp(
+                new AstLoopTest{flp, finalLoopp,
+                                new AstNeq{flp, new AstVarRef{flp, activeCountp, VAccess::READ},
+                                           new AstConst{flp, 0}}});
+            finalLoopp->addStmtsp(new AstIf{flp, finalCondp, new AstPExprClause{flp},
+                                            new AstPExprClause{flp, false}});
+            finalLoopp->addStmtsp(
+                new AstAssign{flp, new AstVarRef{flp, activeCountp, VAccess::WRITE},
+                              new AstSub{flp, new AstVarRef{flp, activeCountp, VAccess::READ},
+                                         new AstConst{flp, 1}}});
+
+            // Final assertion block
+            AstBegin* const finalp = new AstBegin{flp, "", nullptr, true};
+            finalp->addStmtsp(activeCountp);
+            finalp->addStmtsp(initActiveCountp);
+            finalp->addStmtsp(finalLoopp);
+
+            AstPExpr* const pexprp = new AstPExpr{flp, bodyp, finalp, nodep->dtypep()};
+            VL_RESTORER(m_pexprp);
+            VL_RESTORER(m_hasCycleDelay);
+            m_pexprp = pexprp;
+            m_hasCycleDelay = false;
+            iterate(bodyp);
+            iterate(finalp);
+
+            UASSERT_OBJ(!m_hasCycleDelay, nodep,
+                        "s_until cycle delay should have been handled by V3AssertNfa");
+
+            nodep->replaceWith(pexprp);
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
             return;
         }
@@ -1336,12 +1471,6 @@ private:
     }
 
     void visit(AstDefaultDisable* nodep) override {
-        if (m_defaultDisablep) {
-            nodep->v3error("Only one 'default disable iff' allowed per module"
-                           " (IEEE 1800-2023 16.15)");
-        } else {
-            m_defaultDisablep = nodep;
-        }
         VL_DO_DANGLING(pushDeletep(nodep->unlinkFrBack()), nodep);
     }
     void visit(AstInferredDisable* nodep) override {
@@ -1360,7 +1489,9 @@ private:
         iterateAndNextNull(nodep->sensesp());
         if (m_senip && m_senip != nodep->sensesp())
             nodep->v3warn(E_UNSUPPORTED, "Unsupported: Only one PSL clock allowed per assertion");
-        if (!nodep->disablep() && m_defaultDisablep) {
+        const AstCover* const coverp = VN_CAST(nodep->backp(), Cover);
+        const bool seqEvent = coverp && coverp->isSeqEvent();
+        if (!nodep->disablep() && m_defaultDisablep && !seqEvent) {
             nodep->disablep(m_defaultDisablep->condp()->cloneTreePure(true));
         }
         m_disablep = nodep->disablep();
@@ -1369,9 +1500,13 @@ private:
         iterateNull(nodep->disablep());
         if (!VN_AS(nodep->backp(), NodeCoverOrAssert)->immediate()) {
             const AstNodeDType* const propDtp = nodep->propp()->dtypep();
-            nodep->propp(new AstSampled{nodep->fileline(), nodep->propp()->unlinkFrBack()});
-            nodep->propp()->dtypeFrom(propDtp);
+            nodep->propp(new AstSampled{nodep->fileline(), nodep->propp()->unlinkFrBack(),
+                                        propDtp->dtypep(), true});
         }
+        // cover counts non-vacuous matches only (IEEE 1800-2023 16.15.2), so an
+        // implication antecedent must hold; assert passes vacuously instead.
+        VL_RESTORER(m_underCover);
+        m_underCover = VN_IS(nodep->backp(), Cover);
         iterate(nodep->propp());
     }
     void visit(AstPExpr* nodep) override {
@@ -1463,8 +1598,13 @@ private:
         VL_RESTORER(m_modp);
         m_defaultClockingp = nullptr;
         m_defaultClkEvtVarp = nullptr;
-        m_defaultDisablep = nullptr;
+        m_defaultDisablep = nodep->defaultDisablep();
         m_modp = nodep;
+        iterateChildren(nodep);
+    }
+    void visit(AstGenBlock* nodep) override {
+        VL_RESTORER(m_defaultDisablep);
+        m_defaultDisablep = nodep->defaultDisablep();
         iterateChildren(nodep);
     }
     void visit(AstProperty* nodep) override {

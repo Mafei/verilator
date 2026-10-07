@@ -30,6 +30,7 @@
 #include "V3Ast.h"
 #include "V3Control.h"
 #include "V3Graph.h"
+#include "V3UniqueNames.h"
 
 #include <algorithm>
 #include <cctype>
@@ -700,7 +701,9 @@ class FsmDetectVisitor final : public VNVisitor {
                 AstVarScope* resetStateVscp = nullptr;
                 const ResetAssignStatus resetStatus = FsmDetectVisitor::collectConstStateAssigns(
                     firstIfp->thensp(), resetStateVscp, reg.resetArcs());
-                if (resetStatus == ResetAssignStatus::NONE || resetStateVscp != vscp) {
+                if (resetStatus == ResetAssignStatus::EMPTY) {
+                    reg.resetArcs().clear();
+                } else if (resetStatus == ResetAssignStatus::NONE || resetStateVscp != vscp) {
                     reg.resetArcs().clear();
                     FsmStateValue resetValue;
                     AstNode* const thenNodep
@@ -991,10 +994,9 @@ class FsmDetectVisitor final : public VNVisitor {
                                              AstVarScope*& fromVscp) {
         AstNodeAssign* const assp = VN_CAST(nodep, NodeAssign);
         if (!assp) return nullptr;
-        AstVarRef* const lhsp = VN_AS(assp->lhsp(), VarRef);
-        UASSERT_OBJ(lhsp, assp, "register commit lhs should be normalized to a VarRef");
+        AstVarRef* const lhsp = VN_CAST(assp->lhsp()->baseFromp(true), VarRef);
         AstVarRef* const rhsp = VN_CAST(assp->rhsp(), VarRef);
-        if (!rhsp) return nullptr;
+        if (!rhsp || !lhsp) return nullptr;
         stateVscp = lhsp->varScopep();
         fromVscp = rhsp->varScopep();
         return assp;
@@ -1006,11 +1008,9 @@ class FsmDetectVisitor final : public VNVisitor {
                                                    FsmStateValue& resetValue) {
         AstNodeAssign* const assp = VN_CAST(nodep, NodeAssign);
         if (!assp) return nullptr;
-        AstVarRef* const lhsp = VN_AS(assp->lhsp(), VarRef);
-        UASSERT_OBJ(lhsp, assp,
-                    "conditional register commit lhs should be normalized to a VarRef");
+        AstVarRef* const lhsp = VN_CAST(assp->lhsp()->baseFromp(true), VarRef);
         AstCond* const rhsp = VN_CAST(assp->rhsp(), Cond);
-        if (!rhsp) return nullptr;
+        if (!rhsp || !lhsp) return nullptr;
         if (AstVarRef* const elsep = VN_CAST(rhsp->elsep(), VarRef)) {
             if (constValueStatus(rhsp->thenp(), resetValue) != ConstValueStatus::OK)
                 return nullptr;
@@ -1033,7 +1033,7 @@ class FsmDetectVisitor final : public VNVisitor {
                                                      FsmStateValue& value) {
         AstNodeAssign* const assp = VN_CAST(nodep, NodeAssign);
         if (!assp) return nullptr;
-        AstVarRef* const lhsp = VN_AS(assp->lhsp(), VarRef);
+        AstVarRef* const lhsp = VN_CAST(assp->lhsp()->baseFromp(true), VarRef);
         UASSERT_OBJ(lhsp, assp,
                     "direct constant state assignment lhs should be normalized to a VarRef");
         if (constValueStatus(assp->rhsp(), value) != ConstValueStatus::OK) return nullptr;
@@ -1042,6 +1042,7 @@ class FsmDetectVisitor final : public VNVisitor {
     }
 
     enum class ResetAssignStatus : uint8_t {
+        EMPTY,  // Reset branch had no non-coverage statements.
         NONE,  // Reset branch was not the supported direct-constant shape.
         SINGLE,  // Exactly one supported reset assignment was collected.
         MULTI_SAME_STATE  // Multiple assignments to the same FSM state var; warn and ignore.
@@ -1054,7 +1055,7 @@ class FsmDetectVisitor final : public VNVisitor {
     static ResetAssignStatus collectConstStateAssigns(AstNode* stmtp, AstVarScope*& stateVscp,
                                                       std::vector<FsmResetArcDesc>& resetArcs) {
         AstNode* nodep = skipLeadingIgnorableStmt(stmtp);
-        UASSERT_OBJ(nodep, stmtp, "Empty reset branch unexpectedly survived to FSM detection");
+        if (!nodep) return ResetAssignStatus::EMPTY;
         for (;; nodep = nodep->nextp()) {
             AstVarScope* assignStateVscp = nullptr;
             FsmStateValue value;
@@ -1108,9 +1109,8 @@ class FsmDetectVisitor final : public VNVisitor {
         AstVarScope* thenVscp = nullptr;
         AstVarScope* elseVscp = nullptr;
         AstNode* const thenNodep = singleMeaningfulBranch(skipLeadingIgnorableStmt(ifp->thensp()));
-        UASSERT_OBJ(thenNodep, ifp, "Empty then-branch unexpectedly survived to FSM detection");
         AstNode* const elseNodep = singleMeaningfulBranch(skipLeadingIgnorableStmt(ifp->elsesp()));
-        if (!elseNodep) return false;
+        if (!thenNodep || !elseNodep) return false;
         if (!directConstStateAssignNode(thenNodep, thenVscp, thenValue)) return false;
         if (!directConstStateAssignNode(elseNodep, elseVscp, elseValue)) return false;
         if (thenVscp == stateVscp && elseVscp == stateVscp) return true;
@@ -1220,7 +1220,8 @@ class FsmDetectVisitor final : public VNVisitor {
         AstVarRef* vrefp = VN_CAST(eqp->lhsp(), VarRef);
         AstNodeExpr* valuep = eqp->rhsp();
         if (!vrefp) {
-            vrefp = VN_AS(eqp->rhsp(), VarRef);
+            vrefp = VN_CAST(eqp->rhsp()->baseFromp(true), VarRef);
+            if (!vrefp) { return false; }
             valuep = eqp->lhsp();
         }
 
@@ -1412,7 +1413,10 @@ class FsmDetectVisitor final : public VNVisitor {
             AstVarScope* resetStateVscp = nullptr;
             const ResetAssignStatus resetStatus
                 = collectConstStateAssigns(ifp->thensp(), resetStateVscp, cand.resetArcs());
-            if (resetStatus == ResetAssignStatus::NONE) {
+            const bool emptyResetBranch = resetStatus == ResetAssignStatus::EMPTY;
+            if (emptyResetBranch) {
+                cand.resetArcs().clear();
+            } else if (resetStatus == ResetAssignStatus::NONE) {
                 cand.resetArcs().clear();
                 FsmStateValue resetValue;
                 AstNode* const thenNodep = singleMeaningfulBranch(ifp->thensp());
@@ -1427,7 +1431,7 @@ class FsmDetectVisitor final : public VNVisitor {
             AstNode* const elseNodep = singleMeaningfulBranch(ifp->elsesp());
             UASSERT_OBJ(elseNodep, ifp, "register reset match requires a non-empty commit branch");
             if (!nodeStateVarAssign(elseNodep, stateVscp, nextVscp)) return false;
-            if (resetStateVscp != stateVscp) return false;
+            if (!emptyResetBranch && resetStateVscp != stateVscp) return false;
             cand.resetCond() = describeResetCond(ifp->condp());
             cand.hasResetCond(cand.resetCond().varScopep != nullptr);
         } else {
@@ -2082,6 +2086,7 @@ public:
 class FsmLowerVisitor final {
     // STATE - across all visitors
     const FsmState& m_state;
+    V3UniqueNames m_fsmBuildNames;
 
     // METHODS
     // Rebuild a state-typed constant using the tracked state variable
@@ -2133,8 +2138,8 @@ class FsmLowerVisitor final {
         AstNodeModule* const modp = scopep->modp();
         AstNodeDType* const prevDTypep = scopep->findLogicDType(
             sampleVscp->width(), sampleVscp->width(), sampleVscp->dtypep()->numeric());
-        AstVarScope* const prevVscp
-            = scopep->createTemp("__Vfsmcov_prev__" + stateVscp->varp()->shortName(), prevDTypep);
+        const std::string tmpName = m_fsmBuildNames.get(stateVscp->varp()->shortName());
+        AstVarScope* const prevVscp = scopep->createTemp(tmpName, prevDTypep);
         // The saved previous-state temp crosses the scheduler's pre/post split
         // in the same way as Verilator's built-in NBA shadow variables, so keep
         // both vars marked as post-life participants for stable MT ordering.
@@ -2283,7 +2288,8 @@ public:
     // concrete coverage instrumentation while the saved scoped pointers are
     // still valid in the same pass.
     explicit FsmLowerVisitor(const FsmState& state)
-        : m_state{state} {
+        : m_state{state}
+        , m_fsmBuildNames{"__Vfsmcov_prev"} {
         for (const DetectedFsm& fsm : m_state.fsms()) { buildOne(*fsm.graphp); }
     }
 };

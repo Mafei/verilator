@@ -49,26 +49,31 @@ bool VNUser4InUse::s_userBusy = false;
 
 int AstNodeDType::s_uniqueNum = 0;
 
-V3AST_VCMETHOD_ITEMDATA_DECL;
-
 //======================================================================
 // VCMethod information
 
 VCMethod VCMethod::arrayMethod(const string& name) {
-    for (const auto& it : s_itemData)
-        if (it.m_name == name) return it.m_e;
-    v3fatalSrc("Not a method name known to VCMethod::s_itemData: '" << name << '\'');
+    for (int i = 0; i < _ENUM_MAX; ++i) {
+        const VCMethod method{i};
+        if (name == method.ascii()) return method;
+    }
+    v3fatalSrc("Not a method name known to VCMethod: '" << name << '\'');
     return VCMethod{};
 }
-void VCMethod::selfTest() {
-    int i = 0;
-    for (const auto& it : s_itemData) {
-        const VCMethod exp{i};
-        UASSERT_STATIC(it.m_e == exp,
-                       "VCMethod::s_itemData table rows are out-of-order, starting at row "s
-                           + cvtToStr(i) + " '" + +it.m_name + '\'');
-        ++i;
-    }
+
+//######################################################################
+// VNUser
+
+std::string VNUser::dumpStr(std::string (*fmtAddrp)(const void*)) const {
+#ifdef VL_USER_TYPE_CHECKS
+    if (const uint64_t* const uip = std::get_if<uint64_t>(&m_u)) return "#"s + cvtToStr(*uip);
+    if (void* const* const upp = std::get_if<void*>(&m_u)) return fmtAddrp(*upp);
+    return "";
+#else
+    // Dumps void* representation
+    if (!m_u.up) return "";
+    return fmtAddrp(m_u.up);
+#endif
 }
 
 //######################################################################
@@ -1384,10 +1389,15 @@ void AstNode::dumpPtrs(std::ostream& os) const {
     if (op2p()) os << " op2p=" << cvtToHex(op2p());
     if (op3p()) os << " op3p=" << cvtToHex(op3p());
     if (op4p()) os << " op4p=" << cvtToHex(op4p());
-    if (user1p()) os << " user1p=" << cvtToHex(user1p());
-    if (user2p()) os << " user2p=" << cvtToHex(user2p());
-    if (user3p()) os << " user3p=" << cvtToHex(user3p());
-    if (user4p()) os << " user4p=" << cvtToHex(user4p());
+    const auto dumpUser = [&os](const char* prefix, const VNUser& user) {
+        const std::string s
+            = user.dumpStr([](const void* p) -> std::string { return cvtToHex(p); });
+        if (!s.empty()) os << prefix << s;
+    };
+    dumpUser(" user1p=", user1u());
+    dumpUser(" user2p=", user2u());
+    dumpUser(" user3p=", user3u());
+    dumpUser(" user4p=", user4u());
     if (m_iterpp) {
         os << " iterpp=" << cvtToHex(m_iterpp);
         // This may cause address sanitizer failures as iterpp can be stale
@@ -1542,14 +1552,14 @@ string AstNode::instanceStr() const {
     return "";
 }
 void AstNode::v3errorEnd(const std::ostringstream& str) const VL_RELEASE(V3Error::s().m_mutex) {
-    // Don't look for instance name when warning is disabled.
-    // In case of large number of warnings, this can
-    // take significant amount of time
-    const string instanceStrExtra
-        = m_fileline->warnIsOff(V3Error::s().errorCode()) ? "" : instanceStr();
     if (!m_fileline) {
-        V3Error::v3errorEnd(str, instanceStrExtra, nullptr);
+        V3Error::v3errorEnd(str, "", nullptr);
     } else {
+        // Don't look for instance name when warning is disabled.
+        // In case of large number of warnings, this can
+        // take significant amount of time
+        const string instanceStrExtra
+            = m_fileline->warnIsOff(V3Error::s().errorCode()) ? "" : instanceStr();
         std::ostringstream nsstr;
         nsstr << str.str();
         if (debug()) {
@@ -1660,7 +1670,7 @@ static const AstNodeDType* computeCastableBase(const AstNodeDType* nodep) {
 }
 
 static VCastable computeCastableImp(const AstNodeDType* toDtp, const AstNodeDType* fromDtp,
-                                    const AstNode* fromConstp) {
+                                    const AstNode* fromConstp, const bool checkIfaceArgCompat) {
     const VCastable castable = VCastable::UNSUPPORTED;
     toDtp = toDtp->skipRefToEnump();
     fromDtp = fromDtp->skipRefToEnump();
@@ -1698,22 +1708,52 @@ static VCastable computeCastableImp(const AstNodeDType* toDtp, const AstNodeDTyp
         if (upcast) return VCastable::COMPATIBLE;
         if (downcast) return VCastable::DYNAMIC_CLASS;
         return VCastable::INCOMPATIBLE;
-    } else if (const AstIfaceRefDType* const toIfp = VN_CAST(toDtp, IfaceRefDType)) {
+    } else if (const AstIfaceRefDType* const toIfp
+               = VN_CAST(checkIfaceArgCompat ? toDtp->elemDTypep(true) : toDtp, IfaceRefDType)) {
         // Two interface refs are compatible if they point at the same interface
         // module (and modport, if any). Pointer-equality on the dtype isn't
         // enough since every cell binding clones the dtype.
-        const AstIfaceRefDType* const fromIfp = VN_CAST(fromDtp, IfaceRefDType);
-        if (fromIfp && toIfp->ifaceViaCellp() == fromIfp->ifaceViaCellp()
-            && (!toIfp->modportp() || toIfp->modportp() == fromIfp->modportp())) {
+        // Argument compatibility also requires matching virtualness for ref arguments, while
+        // input arguments may bind an unqualified or same-modport source to a virtual target.
+        // Argument compatibility also supports fixed-size arrays of interface references.
+        const AstIfaceRefDType* const fromIfp
+            = VN_CAST(checkIfaceArgCompat ? fromDtp->elemDTypep(true) : fromDtp, IfaceRefDType);
+        if (checkIfaceArgCompat && fromIfp && (toDtp != toIfp || fromDtp != fromIfp)) {
+            const AstUnpackArrayDType* const toArrayp = VN_CAST(toDtp, UnpackArrayDType);
+            const AstUnpackArrayDType* const fromArrayp = VN_CAST(fromDtp, UnpackArrayDType);
+            // IEEE 1800-2023 6.22.2: Equal-sized fixed arrays have equivalent types.
+            if (!toArrayp || !fromArrayp
+                || toArrayp->elementsConst() != fromArrayp->elementsConst()) {
+                return VCastable::INCOMPATIBLE;
+            }
+            return computeCastableImp(toArrayp->subDTypep(), fromArrayp->subDTypep(), nullptr,
+                                      checkIfaceArgCompat);
+        }
+        if (!fromIfp || toIfp->ifaceViaCellp() != fromIfp->ifaceViaCellp()) {
+            if (!checkIfaceArgCompat) return castable;
+            return VCastable::INCOMPATIBLE;
+        }
+        const bool sameModport = toIfp->modportp() == fromIfp->modportp();
+        if (!checkIfaceArgCompat) {
+            if (!toIfp->modportp() || sameModport) return VCastable::COMPATIBLE;
+            return castable;
+        }
+        if (toIfp->isVirtual() == fromIfp->isVirtual() && sameModport) {
+            return VCastable::SAMEISH;
+        }
+        // An unqualified interface or virtual interface may bind to a modport-qualified
+        // virtual interface.
+        if (toIfp->isVirtual() && (!fromIfp->modportp() || sameModport)) {
             return VCastable::COMPATIBLE;
         }
+        return VCastable::INCOMPATIBLE;
     }
     return castable;
 }
 
 VCastable AstNode::computeCastable(const AstNodeDType* toDtp, const AstNodeDType* fromDtp,
-                                   const AstNode* fromConstp) {
-    const auto castable = computeCastableImp(toDtp, fromDtp, fromConstp);
+                                   const AstNode* fromConstp, const bool checkIfaceArgCompat) {
+    const auto castable = computeCastableImp(toDtp, fromDtp, fromConstp, checkIfaceArgCompat);
     UINFO(9, "  castable=" << castable << "  for " << toDtp);
     UINFO(9, "     =?= " << fromDtp);
     if (fromConstp) UINFO(9, "     const= " << fromConstp);
@@ -1735,14 +1775,167 @@ AstNodeDType* AstNode::getCommonClassTypep(AstNode* node1p, AstNode* node2p) {
         if (castable == VCastable::DYNAMIC_CLASS) return node2p->dtypep();
     }
 
-    AstClassRefDType* classDtypep1 = VN_CAST(node1p->dtypep(), ClassRefDType);
+    AstClassRefDType* classDtypep1 = VN_CAST(node1p->dtypep()->skipRefp(), ClassRefDType);
     while (classDtypep1) {
         const VCastable castable = computeCastable(classDtypep1, node2p->dtypep(), node2p);
         if (castable == VCastable::COMPATIBLE) return classDtypep1;
-        const AstClassExtends* const extendsp = classDtypep1->classp()->extendsp();
-        classDtypep1 = extendsp ? VN_AS(extendsp->dtypep(), ClassRefDType) : nullptr;
+        AstClassExtends* const extendsp = classDtypep1->classp()->extendsp();
+        if (!extendsp) break;
+        AstNodeDType* const edtp
+            = extendsp->dtypep() ? extendsp->dtypep() : extendsp->childDTypep();
+        classDtypep1 = VN_AS(edtp->skipRefp(), ClassRefDType);
     }
     return nullptr;
+}
+
+//######################################################################
+// Renders the canonical pattern S-expression for a single AstNode
+
+class VNPatternString final {
+    std::ostream& m_os;
+
+    std::map<std::string, std::string> m_internedConsts;  // Interned constants
+    std::map<int, std::string> m_internedWordWidths;  // Interned widths
+    std::map<int, std::string> m_internedWideWidths;  // Interned widths
+
+    // Whether to dump the widhtMin as well
+    const bool m_dumpWidthMin = v3Global.widthMinUsage() != VWidthMinUsage::MATCHES_WIDTH;
+
+    static std::string toLetters(size_t value, bool lowerCase = false) {
+        const char base = lowerCase ? 'a' : 'A';
+        std::string s;
+        do { s += static_cast<char>(base + value % 26); } while (value /= 26);
+        return s;
+    }
+
+    const std::string& internConst(const AstConst& nodep) {
+        const auto pair = m_internedConsts.emplace(nodep.num().ascii(false), "");
+        if (pair.second) pair.first->second += toLetters(m_internedConsts.size() - 1);
+        return pair.first->second;
+    }
+
+    const std::string& internWordWidth(int value) {
+        const auto pair = m_internedWordWidths.emplace(value, "");
+        if (pair.second) pair.first->second += toLetters(m_internedWordWidths.size() - 1, true);
+        return pair.first->second;
+    }
+
+    const std::string& internWideWidth(int value) {
+        const auto pair = m_internedWideWidths.emplace(value, "");
+        if (pair.second) pair.first->second += toLetters(m_internedWideWidths.size() - 1);
+        return pair.first->second;
+    }
+
+    // True if the node has no operands (e.g. a VarRef or Const)
+    static bool isLeaf(const AstNode* nodep) {
+        const VNTypeInfo& typeInfo = VNType::typeInfo(nodep->type());
+        for (const VNTypeInfo::OpEn& opType : typeInfo.m_opType) {
+            if (opType != VNTypeInfo::OP_UNUSED) return false;
+        }
+        return true;
+    }
+
+    // Render operand, return true if not unused
+    void renderOperand(VNTypeInfo::OpEn opType, const AstNode* const opp, uint32_t depth) {
+        switch (opType) {
+        case VNTypeInfo::OP_UNUSED:  //
+            break;
+        case VNTypeInfo::OP_USED:  //
+            m_os << ' ';
+            render(opp, depth);
+            break;
+        case VNTypeInfo::OP_LIST:
+            m_os << " [";
+            for (const AstNode* nodep = opp; nodep; nodep = nodep->nextp()) {
+                if (nodep != opp) m_os << ", ";
+                render(opp, depth);
+            }
+            m_os << ']';
+            break;
+        case VNTypeInfo::OP_OPTIONAL:
+            if (opp) {
+                m_os << " ";
+                render(opp, depth);
+            } else {
+                m_os << " nil";
+            }
+            break;
+        }
+    }
+
+    // Render the node into the stream.
+    void render(const AstNode* nodep, uint32_t depth) {
+        if (const AstConst* const constp = VN_CAST(nodep, Const)) {
+            // Base case 1: constant
+            if (constp->isZero()) {
+                m_os << "(CONST ZERO)";
+            } else if (constp->isEqAllOnes()) {
+                m_os << "(CONST ONES)";
+            } else {
+                m_os << "(CONST #" << internConst(*constp) << ')';
+            }
+        } else if (isLeaf(nodep)) {
+            // Base case 2: expression with no operands (e.g. a variable reference)
+            m_os << '(' << nodep->typeName() << ')';
+        } else if (depth == 0) {
+            // Base case 3: deep expression
+            m_os << '_';
+        } else {
+            // Recursively print an S-expression for the expression
+            m_os << '(';
+            // Name
+            m_os << nodep->typeName();
+            // Operands
+            const VNTypeInfo& typeInfo = VNType::typeInfo(nodep->type());
+            renderOperand(typeInfo.m_opType[0], nodep->op1p(), depth - 1);
+            renderOperand(typeInfo.m_opType[1], nodep->op2p(), depth - 1);
+            renderOperand(typeInfo.m_opType[2], nodep->op3p(), depth - 1);
+            renderOperand(typeInfo.m_opType[3], nodep->op4p(), depth - 1);
+            // S-expression end
+            m_os << ')';
+        }
+
+        // Annotate type
+        m_os << ':';
+        const AstNodeDType* const dtypep = nodep->dtypep() ? nodep->dtypep()->skipRefp() : nullptr;
+        if (!dtypep) {
+            m_os << '?';
+        } else if (dtypep->isCompound() || VN_IS(dtypep, UnpackArrayDType)) {
+            dtypep->dumpSmall(m_os);
+        } else {
+            const int width = nodep->width();
+            if (width == 1) {
+                m_os << '1';
+            } else if (width <= VL_QUADSIZE) {
+                m_os << internWordWidth(width);
+            } else {
+                m_os << internWideWidth(width);
+            }
+            if (m_dumpWidthMin) {
+                m_os << '/';
+                const int widthMin = nodep->widthMin();
+                if (widthMin == 1) {
+                    m_os << '1';
+                } else if (widthMin <= VL_QUADSIZE) {
+                    m_os << internWordWidth(widthMin);
+                } else {
+                    m_os << internWideWidth(widthMin);
+                }
+            }
+        }
+    }
+
+public:
+    VNPatternString(std::ostream& os, const AstNode* nodep, uint32_t depth)
+        : m_os{os} {
+        render(nodep, depth);
+    }
+};
+
+std::string AstNodeExpr::patternString(uint32_t depth) const {
+    std::ostringstream oss;
+    VNPatternString{oss, this, depth};
+    return oss.str();
 }
 
 //######################################################################

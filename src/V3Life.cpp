@@ -60,7 +60,7 @@ public:
 
 class LifeVarEntry final {
     // Last assignment to this varscope, nullptr if no longer relevant
-    AstNodeStmt* m_assignp = nullptr;
+    AstNodeStmt* m_assignp = nullptr;  // Last simple assignment
     AstConst* m_constp = nullptr;  // Known constant value
     bool m_isNew = true;  // Is just created
     // First access was a set (and thus block above may have a set that can be deleted
@@ -77,6 +77,17 @@ public:
         m_isNew = false;
         m_setBeforeUse = setBeforeUse;
     }
+    string ascii() const {  // LCOV_EXCL_START
+        std::ostringstream os;
+        os << "[Life ";
+        if (m_isNew) os << " isNew";
+        if (m_setBeforeUse) os << " setBeforeUse";
+        if (m_everSet) os << " everSet";
+        if (m_assignp) os << " assignp=" << AstNode::nodeAddr(m_assignp);
+        if (m_constp) os << " constp=" << AstNode::nodeAddr(m_constp);
+        os << "]";
+        return os.str();
+    }  // LCOV_EXCL_STOP
 
     void simpleAssign(AstNodeStmt* nodep) {  // New simple A=.... assignment
         UASSERT_OBJ(!m_isNew, nodep, "Uninitialized new entry");
@@ -84,7 +95,10 @@ public:
         m_constp = nullptr;
         m_everSet = true;
         if (AstNodeAssign* const assp = VN_CAST(nodep, Assign)) {
-            if (VN_IS(assp->rhsp(), Const)) m_constp = VN_AS(assp->rhsp(), Const);
+            if (VN_IS(assp->rhsp(), Const)) {
+                m_constp = VN_AS(assp->rhsp(), Const);
+                UINFO(9, "assign-const " << assp->rhsp() << " = " << m_constp);
+            }
         }
     }
     void complexAssign() {  // A[x]=... or some complicated assignment
@@ -110,7 +124,7 @@ public:
 class LifeBlock final {
     // NODE STATE
     // Cleared each AstIf:
-    //   AstVarScope::user1()   -> int.       Used in combining to detect duplicates
+    //   AstVarScope::user1()   -> uint64_t.  Used in combining to detect duplicates
 
     // LIFE MAP
     // For each basic block, we'll make a new map of what variables that if/else is changing
@@ -118,6 +132,7 @@ class LifeBlock final {
     std::unordered_map<AstVarScope*, LifeVarEntry> m_map;
     LifeBlock* const m_aboveLifep;  // Upper life, or nullptr
     LifeState* const m_statep;  // Current global state
+    bool m_noopt = false;  // Opaque operation seen; invalidates the block above at exit
     bool m_replacedVref = false;  // Replaced a variable reference since last clearing
     VNDeleter m_deleter;  // Used to delay deletion of nodes
 
@@ -179,6 +194,7 @@ public:
                     // Aha, variable is constant; substitute in.
                     // We'll later constant propagate
                     UINFO(4, "     replaceconst: " << varrefp);
+                    UINFO(9, "     replaceval: " << constp);
                     varrefp->replaceWith(constp->cloneTree(false));
                     m_replacedVref = true;
                     VL_DO_DANGLING(varrefp->deleteTree(), varrefp);
@@ -204,6 +220,7 @@ public:
     void lifeToAbove() {
         // Any varrefs under a if/else branch affect statements outside and after the if/else
         UASSERT(m_aboveLifep, "Pushing life when already at the top level");
+        if (m_noopt) m_aboveLifep->noopt();
         for (auto& itr : m_map) {
             AstVarScope* const nodep = itr.first;
             m_aboveLifep->complexAssignFind(nodep);
@@ -237,7 +254,11 @@ public:
         }
         // this->lifeDump();
     }
-    void clear() { m_map.clear(); }
+    void noopt() {
+        // The block above is invalidated at exit, see lifeToAbove()
+        m_map.clear();
+        m_noopt = true;
+    }
     // DEBUG
     void lifeDump() {
         UINFO(5, "  LifeMap:");
@@ -264,9 +285,11 @@ class LifeVisitor final : public VNVisitor {
     LifeBlock* m_lifep = nullptr;  // Current active lifetime map for current scope
 
     // METHODS
-    void setNoopt() {
+    void setNoopt(const char* reasonp) {
+        (void)reasonp;
+        // UINFO(9, "setNoopt " << reasonp);
         m_noopt = true;
-        m_lifep->clear();
+        m_lifep->noopt();
     }
 
     void processAssignment(AstNodeStmt* nodep, AstNodeExpr* lhsp, AstNodeExpr* rhsp) {
@@ -310,7 +333,7 @@ class LifeVisitor final : public VNVisitor {
     void visit(AstNodeAssign* nodep) override {
         if (nodep->isTimingControl() || VN_IS(nodep, AssignForce)) {
             // V3Life doesn't understand time sense nor force assigns - don't optimize
-            setNoopt();
+            setNoopt("timing|force");
             if (nodep->isTimingControl()) m_containsTiming = true;
             iterateChildren(nodep);
             return;
@@ -325,7 +348,7 @@ class LifeVisitor final : public VNVisitor {
         // V3Life doesn't understand time sense
         if (nodep->isTimingControl()) {
             // Don't optimize
-            setNoopt();
+            setNoopt("assigndly");
             m_containsTiming = true;
         }
         // Don't treat as normal assign
@@ -337,19 +360,19 @@ class LifeVisitor final : public VNVisitor {
         UINFO(4, "   IF " << nodep);
         // Condition is part of PREVIOUS block
         iterateAndNextNull(nodep->condp());
-        LifeBlock* const prevLifep = m_lifep;
-        LifeBlock* const ifLifep = new LifeBlock{prevLifep, m_statep};
-        LifeBlock* const elseLifep = new LifeBlock{prevLifep, m_statep};
+        LifeBlock* const ifLifep = new LifeBlock{m_lifep, m_statep};
+        LifeBlock* const elseLifep = new LifeBlock{m_lifep, m_statep};
         {
+            VL_RESTORER(m_lifep);
             m_lifep = ifLifep;
             iterateAndNextNull(nodep->thensp());
         }
         {
+            VL_RESTORER(m_lifep);
             m_lifep = elseLifep;
             iterateAndNextNull(nodep->elsesp());
         }
-        m_lifep = prevLifep;
-        UINFO(4, "   join ");
+        UINFO(4, "   join " << nodep);
         // Find sets on both flows
         m_lifep->dualBranch(ifLifep, elseLifep);
         // For the next assignments, clear any variables that were read or written in the block
@@ -357,6 +380,7 @@ class LifeVisitor final : public VNVisitor {
         elseLifep->lifeToAbove();
         VL_DO_DANGLING(delete ifLifep, ifLifep);
         VL_DO_DANGLING(delete elseLifep, elseLifep);
+        UINFO(4, "   if-done " << nodep);
     }
     void visit(AstLoop* nodep) override {
         // Similar problem to AstJumpBlock, don't optimize loop bodies - most are unrolled
@@ -366,14 +390,16 @@ class LifeVisitor final : public VNVisitor {
             VL_RESTORER(m_noopt);
             VL_RESTORER(m_lifep);
             m_lifep = new LifeBlock{m_lifep, m_statep};
-            setNoopt();
+            // Disable optimization in the body, but don't flag the block:
+            // a pure body must not invalidate tracking above
+            m_noopt = true;
             iterateAndNextNull(nodep->stmtsp());
             UINFO(4, "   joinloop");
             // For the next assignments, clear any variables that were read or written in the block
             m_lifep->lifeToAbove();
             VL_DO_DANGLING(delete m_lifep, m_lifep);
         }
-        if (m_containsTiming) setNoopt();
+        if (m_containsTiming) setNoopt("timing");
     }
     void visit(AstJumpBlock* nodep) override {
         // As with Loop's we can't predict if a JumpGo will kill us or not
@@ -384,14 +410,15 @@ class LifeVisitor final : public VNVisitor {
             VL_RESTORER(m_noopt);
             VL_RESTORER(m_lifep);
             m_lifep = new LifeBlock{m_lifep, m_statep};
-            setNoopt();
+            // Structural only, as for AstLoop above
+            m_noopt = true;
             iterateAndNextNull(nodep->stmtsp());
             UINFO(4, "   joinjump");
             // For the next assignments, clear any variables that were read or written in the block
             m_lifep->lifeToAbove();
             VL_DO_DANGLING(delete m_lifep, m_lifep);
         }
-        if (m_containsTiming) setNoopt();
+        if (m_containsTiming) setNoopt("timing");
     }
     void visit(AstNodeCCall* nodep) override {
         // UINFO(4, "  CCALL " << nodep);
@@ -399,7 +426,7 @@ class LifeVisitor final : public VNVisitor {
         // Enter the function and trace it
         // else is non-inline or public function we optimize separately
         if (nodep->funcp()->entryPoint()) {
-            setNoopt();
+            setNoopt("ccall");
         } else {
             m_tracingCall = true;
             iterate(nodep->funcp());
@@ -409,8 +436,8 @@ class LifeVisitor final : public VNVisitor {
         // UINFO(4, "  CFUNC " << nodep);
         if (!m_tracingCall && !nodep->entryPoint()) return;
         m_tracingCall = false;
-        if (nodep->recursive()) setNoopt();
-        if (nodep->noLife()) setNoopt();
+        if (nodep->recursive()) setNoopt("recursive");
+        if (nodep->noLife()) setNoopt("nolife");
         if (nodep->dpiImportPrototype() && !nodep->dpiPure()) {
             m_sideEffect = true;  // If appears on assign RHS, don't ever delete the assignment
         }
@@ -429,7 +456,7 @@ class LifeVisitor final : public VNVisitor {
     void visit(AstNode* nodep) override {
         if (nodep->isTimingControl()) {
             // V3Life doesn't understand time sense - don't optimize
-            setNoopt();
+            setNoopt("timing");
             m_containsTiming = true;
         }
         iterateChildren(nodep);

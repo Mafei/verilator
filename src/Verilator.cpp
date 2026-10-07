@@ -22,6 +22,7 @@
 #include "V3AssertNfa.h"
 #include "V3AssertPre.h"
 #include "V3Ast.h"
+#include "V3AstPatterns.h"
 #include "V3Begin.h"
 #include "V3Branch.h"
 #include "V3Broken.h"
@@ -38,6 +39,7 @@
 #include "V3Control.h"
 #include "V3Coverage.h"
 #include "V3CoverageJoin.h"
+#include "V3Covergroup.h"
 #include "V3Dead.h"
 #include "V3Delayed.h"
 #include "V3Depth.h"
@@ -61,6 +63,7 @@
 #include "V3Gate.h"
 #include "V3Global.h"
 #include "V3Graph.h"
+#include "V3HashTable.h"
 #include "V3HierBlock.h"
 #include "V3Inline.h"
 #include "V3InlineCFuncs.h"
@@ -95,15 +98,12 @@
 #include "V3Sampled.h"
 #include "V3Sched.h"
 #include "V3Scope.h"
-#include "V3Scoreboard.h"
 #include "V3Slice.h"
 #include "V3Split.h"
-#include "V3SplitAs.h"
 #include "V3SplitVar.h"
 #include "V3Stats.h"
 #include "V3String.h"
 #include "V3Subst.h"
-#include "V3TSP.h"
 #include "V3Table.h"
 #include "V3Task.h"
 #include "V3ThreadPool.h"
@@ -129,7 +129,6 @@ V3Global v3Global;
 static void reportStatsIfEnabled() {
     if (v3Global.opt.stats()) {
         FileLine::stats();
-        V3Stats::statsFinalAll(v3Global.rootp());
         V3Stats::statsReport();
     }
 }
@@ -209,10 +208,7 @@ static void process() {
             V3Hierarchical::createGraph(v3Global.rootp());
             // If a plan is created, further analysis is not necessary.
             // The actual Verilation will be done based on this plan.
-            if (v3Global.hierGraphp()) {
-                reportStatsIfEnabled();
-                return;
-            }
+            if (v3Global.hierGraphp()) return;
         }
 
         // Calculate and check widths, edit tree to TRUNC/EXTRACT any width mismatches
@@ -235,11 +231,26 @@ static void process() {
             v3Global.vlExit(0);
         }
 
-        // Insert generic non-FSM coverage before dead code elimination and
-        // inlining, or those opportunities may be optimized away. FSM
-        // coverage is handled later in V3FsmDetect, after scoping has created
-        // the AST context needed to recover and lower FSMs reliably.
-        if (v3Global.opt.coverageNonFsm()) V3Coverage::coverage(v3Global.rootp());
+        if (!v3Global.opt.serializeOnly() || v3Global.opt.flatten()) {
+            // Add top level wrapper with instance pointing to old top
+            // Move packages to under new top
+            // Must do this after we know parameters and dtypes (as don't clone dtype decls)
+            V3LinkLevel::wrapTop(v3Global.rootp());
+        } else {
+            V3LinkLevel::nonWrapTop(v3Global.rootp());
+        }
+
+        if (!v3Global.opt.serializeOnly()) {
+            // Insert generic code coverage before dead code elimination and
+            // inlining, or those opportunities may be optimized away. FSM
+            // coverage is handled later in V3FsmDetect, after scoping has created
+            // the AST context needed to recover and lower FSMs reliably.
+            if (v3Global.opt.coverageNonFsm()) V3Coverage::coverage(v3Global.rootp());
+        }
+
+        // Functional coverage code generation
+        //    Generate code for covergroups/coverpoints
+        if (v3Global.useCovergroup()) V3Covergroup::covergroup(v3Global.rootp());
 
         // Resolve randsequence if they are used by the design
         if (v3Global.useRandSequence()) V3RandSequence::randSequenceNetlist(v3Global.rootp());
@@ -257,21 +268,14 @@ static void process() {
 
         // Assertion insertion
         //    After we've added block coverage, but before other nasty transforms
+        V3AssertCommon::collectDefaultDisable(v3Global.rootp());
+        V3AssertCommon::lowerSequenceEvents(v3Global.rootp());
         V3AssertNfa::assertNfaAll(v3Global.rootp());
         // V3AssertProp removed: NFA subsumes multi-cycle property lowering.
         // Unsupported constructs fall through to V3AssertPre.
         V3AssertPre::assertPreAll(v3Global.rootp());
         //
         V3Assert::assertAll(v3Global.rootp());
-
-        if (!(v3Global.opt.serializeOnly() && !v3Global.opt.flatten())) {
-            // Add top level wrapper with instance pointing to old top
-            // Move packages to under new top
-            // Must do this after we know parameters and dtypes (as don't clone dtype decls)
-            V3LinkLevel::wrapTop(v3Global.rootp());
-        } else {
-            V3LinkLevel::nonWrapTop(v3Global.rootp());
-        }
 
         // Propagate constants into expressions
         if (v3Global.opt.fConstBeforeDfg()) V3Const::constifyAllLint(v3Global.rootp());
@@ -306,7 +310,7 @@ static void process() {
 
         if (!v3Global.opt.serializeOnly()) {
             // Lift expressions out of statements.
-            if (v3Global.opt.fLiftExpr()) V3LiftExpr::liftExprAll(v3Global.rootp());
+            V3LiftExpr::liftExprAll(v3Global.rootp());
 
             // Move assignments from X into MODULE temps.
             // (Before flattening, so each new X variable is shared between all scopes of that
@@ -326,7 +330,10 @@ static void process() {
             }
         }
 
-        if (v3Global.opt.trace()) V3Interface::interfaceAll(v3Global.rootp());
+        // Interface references feed trace file aliases and VPI name resolution
+        if (v3Global.opt.trace() || v3Global.opt.vpi()) {
+            V3Interface::interfaceAll(v3Global.rootp());
+        }
 
         // --PRE-FLAT OPTIMIZATIONS------------------
 
@@ -419,7 +426,6 @@ static void process() {
 
             // Split single ALWAYS blocks into multiple blocks for better ordering chances
             if (v3Global.opt.fSplit()) V3Split::splitAll(v3Global.rootp());
-            V3SplitAs::splitAsAll(v3Global.rootp());
 
             // Create tracing sample points, before we start eliminating signals
             if (v3Global.opt.trace()) V3TraceDecl::traceDeclAll(v3Global.rootp());
@@ -541,6 +547,8 @@ static void process() {
             V3Const::constifyAll(v3Global.rootp());
             V3Dead::deadifyAll(v3Global.rootp());
 
+            if (v3Global.opt.dumpAstPatterns()) V3AstPatterns::dumpAll(v3Global.rootp(), "prec");
+
             // Here down, widthMin() is the Verilog width, and width() is the C++ width
             // Bits between widthMin() and width() are irrelevant, but may be non-zero.
             v3Global.widthMinUsage(VWidthMinUsage::VERILOG_WIDTH);
@@ -582,8 +590,10 @@ static void process() {
                 // Must be after all Sel/array index based optimizations
                 V3Reloop::reloopAll(v3Global.rootp());
             }
+        }
 
-            if (v3Global.opt.inlineCFuncs()) {
+        if (!v3Global.opt.lintOnly() && !v3Global.opt.serializeOnly()) {
+            if (v3Global.opt.fInlineCFuncs()) {
                 // Inline small CFuncs to reduce function call overhead
                 V3InlineCFuncs::inlineAll(v3Global.rootp());
             }
@@ -628,6 +638,8 @@ static void process() {
                 v3Global.currentHierBlockCost(V3Control::getCurrentHierBlockCost());
             }
         }
+
+        if (v3Global.opt.dumpAstPatterns()) V3AstPatterns::dumpAll(v3Global.rootp(), "emit");
 
         // Output the text
         if (!v3Global.opt.lintOnly() && !v3Global.opt.serializeOnly()
@@ -725,20 +737,18 @@ static bool verilate(const string& argString) {
     // and after removing files as may make debug output)
     VBasicDTypeKwd::selfTest();
     if (v3Global.opt.debugSelfTest()) {
+        AstClassRefDType::selfTest();
         V3Os::selfTest();
         V3Number::selfTest();
-        VCMethod::selfTest();
         VString::selfTest();
         VHashSha256::selfTest();
         VSpellCheck::selfTest();
         V3Graph::selfTest();
-        V3TSP::selfTest();
-        V3ScoreboardBase::selfTest();
-        V3Order::selfTestParallel();
         V3ExecGraph::selfTest();
         V3PreShell::selfTest();
         V3Broken::selfTest();
         V3Control::selfTest();
+        V3HashTableInternals::selfTest();
         V3ThreadPool::selfTest();
         UINFO(2, "selfTest done");
     }
@@ -806,17 +816,11 @@ static bool verilate(const string& argString) {
     V3Os::filesystemFlushBuildDir(v3Global.opt.makeDir());
     if (v3Global.opt.hierTop()) V3Os::filesystemFlushBuildDir(v3Global.opt.hierTopDataDir());
     if (v3Global.opt.stats()) V3Stats::statsStageAll(v3Global.rootp(), "WroteAll");
-    if (v3Global.opt.stats()) V3Stats::statsStageAll(v3Global.rootp(), "WroteFast");
+    if (v3Global.opt.stats()) V3Stats::statsStageAll(v3Global.rootp(), "WroteFast", true);
 
     // Final writing shouldn't throw warnings, but...
     V3Error::abortIfWarnings();
 
-    // Free memory so compiler has more for --build
-    // No need to do this if skipped (above) as didn't alloc much
-    UINFO(1, "Releasing netlist memory");
-    v3Global.rootp()->deleteContents();
-    V3Os::releaseMemory();
-    if (v3Global.opt.stats()) V3Stats::statsStage("released");
     return true;
 }
 
@@ -840,10 +844,18 @@ static string buildMakeCmd(const string& makefile, const string& target) {
     return cmd.str();
 }
 
+static void releaseNetlistMemory() {
+    UINFO(1, "Releasing netlist memory");
+    v3Global.rootp()->deleteContents();
+    V3Os::releaseMemory();
+    if (v3Global.opt.stats()) V3Stats::statsStage("released");
+}
+
 static void execBuildJob() {
     UASSERT(v3Global.opt.build(), "--build is not specified.");
     UASSERT(v3Global.opt.gmake(), "--build requires GNU Make.");
     UASSERT(!v3Global.opt.makeJson(), "--build cannot use json build.");
+    releaseNetlistMemory();
     const VlOs::DeltaWallTime buildWallTime{true};
     UINFO(1, "Start Build");
 
@@ -860,6 +872,7 @@ static void execBuildJob() {
 
 static void execHierVerilation() {
     UASSERT(v3Global.hierGraphp(), "must be called only when plan exists");
+    releaseNetlistMemory();
     const string makefile = v3Global.opt.prefix() + "_hier.mk ";
     const string target = v3Global.opt.build() ? " hier_build" : " hier_verilation";
     const string cmdStr = buildMakeCmd(makefile, target);

@@ -51,6 +51,7 @@ set(HEADERS
     V3AstNodeExpr.h
     V3AstNodeOther.h
     V3AstNodeStmt.h
+    V3AstPatterns.h
     V3AstUserAllocator.h
     V3Begin.h
     V3Branch.h
@@ -61,6 +62,7 @@ set(HEADERS
     V3Cast.h
     V3Cfg.h
     V3Class.h
+    V3ClassGraph.h
     V3Clean.h
     V3Clock.h
     V3Combine.h
@@ -70,6 +72,7 @@ set(HEADERS
     V3Control.h
     V3Coverage.h
     V3CoverageJoin.h
+    V3Covergroup.h
     V3Dead.h
     V3DebugBisect.h
     V3Delayed.h
@@ -112,6 +115,7 @@ set(HEADERS
     V3GraphPathChecker.h
     V3GraphStream.h
     V3Hash.h
+    V3HashTable.h
     V3Hasher.h
     V3HierBlock.h
     V3Inline.h
@@ -148,6 +152,7 @@ set(HEADERS
     V3OrderGraph.h
     V3OrderInternal.h
     V3OrderMoveGraph.h
+    V3OrderMTaskGraph.h
     V3Os.h
     V3PairingHeap.h
     V3Param.h
@@ -155,6 +160,7 @@ set(HEADERS
     V3ParseImp.h
     V3PchAstMT.h
     V3PchAstNoMT.h
+    V3PoolAllocator.h
     V3PreExpr.h
     V3PreLex.h
     V3PreProc.h
@@ -169,13 +175,11 @@ set(HEADERS
     V3Sampled.h
     V3Sched.h
     V3Scope.h
-    V3Scoreboard.h
     V3SenExprBuilder.h
     V3SenTree.h
     V3Simulate.h
     V3Slice.h
     V3Split.h
-    V3SplitAs.h
     V3SplitVar.h
     V3StackCount.h
     V3Stats.h
@@ -183,7 +187,6 @@ set(HEADERS
     V3String.h
     V3Subst.h
     V3SymTable.h
-    V3TSP.h
     V3Table.h
     V3Task.h
     V3ThreadPool.h
@@ -230,6 +233,7 @@ set(COMMON_SOURCES
     V3CfgBuilder.cpp
     V3CfgLiveVariables.cpp
     V3Class.cpp
+    V3ClassGraph.cpp
     V3Clean.cpp
     V3Clock.cpp
     V3Combine.cpp
@@ -238,6 +242,7 @@ set(COMMON_SOURCES
     V3Const__gen.cpp
     V3Coverage.cpp
     V3CoverageJoin.cpp
+    V3Covergroup.cpp
     V3Dead.cpp
     V3Delayed.cpp
     V3Depth.cpp
@@ -251,7 +256,6 @@ set(COMMON_SOURCES
     V3DfgDataType.cpp
     V3DfgDecomposition.cpp
     V3DfgDfgToAst.cpp
-    V3DfgDumpPatterns.cpp
     V3DfgOptimizer.cpp
     V3DfgPasses.cpp
     V3DfgPeephole.cpp
@@ -291,6 +295,7 @@ set(COMMON_SOURCES
     V3GraphPathChecker.cpp
     V3GraphTest.cpp
     V3Hash.cpp
+    V3HashTable.cpp
     V3Hasher.cpp
     V3HierBlock.cpp
     V3Inline.cpp
@@ -321,6 +326,9 @@ set(COMMON_SOURCES
     V3Order.cpp
     V3OrderGraphBuilder.cpp
     V3OrderMoveGraph.cpp
+    V3OrderMTaskContraction.cpp
+    V3OrderMTaskFixHazards.cpp
+    V3OrderMTaskGraph.cpp
     V3OrderParallel.cpp
     V3OrderProcessDomains.cpp
     V3OrderSerial.cpp
@@ -329,6 +337,7 @@ set(COMMON_SOURCES
     V3ParseGrammar.cpp
     V3ParseImp.cpp
     V3ParseLex.cpp
+    V3PatternStats.cpp
     V3PreProc.cpp
     V3PreShell.cpp
     V3Premit.cpp
@@ -340,6 +349,7 @@ set(COMMON_SOURCES
     V3Sampled.cpp
     V3Sched.cpp
     V3SchedAcyclic.cpp
+    V3SchedCovergroup.cpp
     V3SchedPartition.cpp
     V3SchedReplicate.cpp
     V3SchedTiming.cpp
@@ -347,17 +357,14 @@ set(COMMON_SOURCES
     V3SchedUtil.cpp
     V3SchedVirtIface.cpp
     V3Scope.cpp
-    V3Scoreboard.cpp
     V3Slice.cpp
     V3Split.cpp
-    V3SplitAs.cpp
     V3SplitVar.cpp
     V3StackCount.cpp
     V3Stats.cpp
     V3StatsReport.cpp
     V3String.cpp
     V3Subst.cpp
-    V3TSP.cpp
     V3Table.cpp
     V3Task.cpp
     V3ThreadPool.cpp

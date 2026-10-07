@@ -69,6 +69,11 @@ struct VMemberQualifiers final {
         q.m_flags = a.m_flags | b.m_flags;
         return q;
     }
+    VRandAttr randAttr() const {
+        if (m_randc) return VRandAttr::RAND_CYCLIC;
+        if (m_rand) return VRandAttr::RAND;
+        return VRandAttr::NONE;
+    }
     void applyToNodes(AstNodeFTask* nodesp) const {
         for (AstNodeFTask* nodep = nodesp; nodep; nodep = VN_AS(nodep->nextp(), NodeFTask)) {
             if (m_local) nodep->isHideLocal(true);
@@ -168,6 +173,7 @@ class V3ParseImp final {
     std::deque<string*> m_stringps;  // Created strings for later cleanup
     std::deque<V3Number*> m_numberps;  // Created numbers for later cleanup
     std::deque<FileLine> m_lexLintState;  // Current lint state for save/restore
+    std::string m_lexString;  // Text of the quoted or triple-quoted string currently being lexed
     std::deque<string> m_ppBuffers;  // Preprocessor->lex buffer of characters to process
     size_t m_ppBytes = 0;  // Preprocessor->lex bytes transferred
 
@@ -195,6 +201,7 @@ public:
 
     void lexFileline(FileLine* fl) { m_lexFileline = fl; }
     FileLine* lexFileline() const { return m_lexFileline; }
+    std::string& lexString() { return m_lexString; }
     static void lexErrorPreprocDirective(FileLine* fl, const char* textp) VL_MT_DISABLED;
     static string lexParseTag(const char* textp) VL_MT_DISABLED;
     static double lexParseTimenum(const char* text) VL_MT_DISABLED;
@@ -284,7 +291,7 @@ public:
     size_t flexPpInputToLex(char* buf, size_t max_size) { return ppInputToLex(buf, max_size); }
 
     //==== Symbol tables
-    AstPackage* unitPackage(FileLine* /*fl*/) { return parsep()->rootp()->dollarUnitPkgAddp(); }
+    AstPackage* unitPackage(FileLine* /*fl*/) { return parsep()->rootp()->dollarUnitPkgp(); }
 
     // CONSTRUCTORS
     V3ParseImp(AstNetlist* rootp, VInFilter* filterp)
@@ -303,11 +310,13 @@ public:
     int tokenToBison() VL_MT_DISABLED;  // Pass token to bison
 
     void parseFile(FileLine* fileline, const string& modfilename, bool inLibrary, bool inLibMap,
-                   const string& libname, const string& errmsg) VL_MT_DISABLED;
+                   const string& libname, const string& errmsg,
+                   const std::string& notFoundName) VL_MT_DISABLED;
     void dumpInputsFile() VL_MT_DISABLED;
     void dumpTokensAhead(int line) VL_MT_DISABLED;
     static void candidatePli(VSpellCheck* spellerp) VL_MT_DISABLED;
     void importIfInStd(FileLine* fileline, const string& id, bool doImport);
+    AstNodeExpr* makePropertyCase(FileLine* flp, AstNodeExpr* exprp, AstCaseItem* itemsp);
 
 private:
     void preprocDumps(std::ostream& os);

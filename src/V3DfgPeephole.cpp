@@ -138,11 +138,14 @@ template <> const DfgDataType& resultDType<DfgXor>        (const DfgVertex* lhsp
 
 // Unary constant folding
 template<typename Vertex> void foldOp(V3Number& out, const V3Number& src);
+template <> void foldOp<DfgCountOnes>  (V3Number& out, const V3Number& src) { out.opCountOnes(src); }
 template <> void foldOp<DfgExtend>     (V3Number& out, const V3Number& src) { out.opAssign(src); }
 template <> void foldOp<DfgExtendS>    (V3Number& out, const V3Number& src) { out.opExtendS(src, src.width()); }
 template <> void foldOp<DfgLogNot>     (V3Number& out, const V3Number& src) { out.opLogNot(src); }
 template <> void foldOp<DfgNegate>     (V3Number& out, const V3Number& src) { out.opNegate(src); }
 template <> void foldOp<DfgNot>        (V3Number& out, const V3Number& src) { out.opNot(src); }
+template <> void foldOp<DfgOneHot>     (V3Number& out, const V3Number& src) { out.opOneHot(src); }
+template <> void foldOp<DfgOneHot0>    (V3Number& out, const V3Number& src) { out.opOneHot0(src); }
 template <> void foldOp<DfgRedAnd>     (V3Number& out, const V3Number& src) { out.opRedAnd(src); }
 template <> void foldOp<DfgRedOr>      (V3Number& out, const V3Number& src) { out.opRedOr(src); }
 template <> void foldOp<DfgRedXor>     (V3Number& out, const V3Number& src) { out.opRedXor(src); }
@@ -192,6 +195,7 @@ class V3DfgPeephole final : public DfgVisitor {
         size_t m_iterListIndex = 0;  // Position of this vertx m_iterList (0 means not in list)
         size_t m_generation = 0;  // Generation number of this vertex - for uniqueness check
         size_t m_id = 0;  // Unique vertex ID (0 means unassigned) - for sorting
+        bool m_isCachedVertex = false;  // This vertex is the vertex cached for its operation
     };
 
     // STATE
@@ -221,6 +225,41 @@ class V3DfgPeephole final : public DfgVisitor {
         UINFO(9, "Applying DFG pattern " << id.ascii());
         ++m_ctx.m_count[id];
         return true;
+    }
+
+    // Add vertex to the cache. If an equivalent (but different) vertex is
+    // already cached, it is returned and the cache is not updated.
+    DfgVertex* cacheVertex(DfgVertex* vtxp) {
+        DfgVertex* const equivp = m_cache.cache(vtxp);
+        UASSERT_OBJ(!m_vInfo[vtxp].m_isCachedVertex || !equivp, vtxp,
+                    "Vertex marked 'm_isCachedVertex' has a cached equivalent");
+        m_vInfo[vtxp].m_isCachedVertex = !equivp;
+        return equivp;
+    }
+
+    // Remove vertex from the cache (no-op if it is not the cached vertex)
+    void invalidateVertex(DfgVertex* vtxp) {
+        m_cache.invalidate(vtxp);
+        m_vInfo[vtxp].m_isCachedVertex = false;
+    }
+
+    // Find the vertex of the given type with the given operands in the
+    // cache, or create a new one and add it to the cache.
+    template <typename Vertex, typename... Operands>
+    Vertex* getOrCreateVertex(FileLine* flp, const DfgDataType& dtype, Operands... operands) {
+        Vertex* const vtxp = m_cache.getOrCreate<Vertex, Operands...>(flp, dtype, operands...);
+        m_vInfo[vtxp].m_isCachedVertex = true;
+        return vtxp;
+    }
+
+    // Find the vertex of the given type with the given operands in the
+    // cache, or nullptr if there is no such vertex.
+    template <typename Vertex, typename... Operands>
+    Vertex* getVertex(const DfgDataType& dtype, Operands... operands) {
+        Vertex* const vtxp = m_cache.get<Vertex>(dtype, operands...);
+        UASSERT_OBJ(!vtxp || m_vInfo[vtxp].m_isCachedVertex, vtxp,
+                    "Cached vertex not marked 'm_isCachedVertex'");
+        return vtxp;
     }
 
     void incrementGeneration() {
@@ -263,9 +302,11 @@ class V3DfgPeephole final : public DfgVisitor {
     void deleteVertex(DfgVertex* vtxp) {
         UASSERT_OBJ(!m_vInfo[vtxp].m_workListIndex, vtxp, "Deleted Vertex is in work list");
         UASSERT_OBJ(!vtxp->hasSinks(), vtxp, "Should not delete used vertex");
+        const DfgVertexVar* const varp = vtxp->cast<DfgVertexVar>();
+        UASSERT_OBJ(!varp || !varp->hasPrev(), vtxp, "Deleting variable consumed via DfgPrev");
 
         // Invalidate cache entry
-        m_cache.invalidate(vtxp);
+        invalidateVertex(vtxp);
 
         // It might be in the iter list, remove it
         removeFromIterList(vtxp);
@@ -290,7 +331,6 @@ class V3DfgPeephole final : public DfgVisitor {
         // This pass only removes variables that are either not driven in this graph,
         // or are not observable outside the graph. If there is also no external write
         // to the variable and no references in other graph then delete the Ast var too.
-        const DfgVertexVar* const varp = vtxp->cast<DfgVertexVar>();
         if (varp && !varp->isVolatile() && !varp->hasDfgRefs()) {
             m_ctx.m_deleteps.push_back(varp->vscp());
             VL_DO_DANGLING(vtxp->unlinkDelete(m_dfg), vtxp);
@@ -340,14 +380,14 @@ class V3DfgPeephole final : public DfgVisitor {
 
         // Remove sinks of the original vertex from the cache - their inputs are changing
         m_vtxp->foreachSink([&](DfgVertex& dst) {
-            m_cache.invalidate(&dst);
+            invalidateVertex(&dst);
             return false;
         });
         // Replace vertex with the replacement
         m_vtxp->replaceWith(resp);
         // Re-cache all sinks of the replacement
         resp->foreachSink([&](DfgVertex& dst) {
-            m_cache.cache(&dst);
+            cacheVertex(&dst);
             return false;
         });
 
@@ -386,7 +426,7 @@ class V3DfgPeephole final : public DfgVisitor {
     template <typename Vertex, typename... Operands>
     Vertex* make(FileLine* flp, const DfgDataType& dtype, Operands... operands) {
         // Find or create an equivalent vertex
-        Vertex* const vtxp = m_cache.getOrCreate<Vertex, Operands...>(flp, dtype, operands...);
+        Vertex* const vtxp = getOrCreateVertex<Vertex, Operands...>(flp, dtype, operands...);
         // Sanity check
         UASSERT_OBJ(vtxp->dtype() == dtype, vtxp, "Vertex dtype mismatch");
         if (VL_UNLIKELY(v3Global.opt.debugCheck())) vtxp->typeCheck(m_dfg);
@@ -590,7 +630,7 @@ class V3DfgPeephole final : public DfgVisitor {
 
                 // '(a OP (b OP c))' -> '(a OP b) OP c'
                 if (Vertex* const existingp
-                    = m_cache.get<Vertex>(resultDType<Vertex>(lhsp, rlVtxp), lhsp, rlVtxp)) {
+                    = getVertex<Vertex>(resultDType<Vertex>(lhsp, rlVtxp), lhsp, rlVtxp)) {
                     UASSERT_OBJ(existingp->hasSinks(), vtxp, "Existing vertex should be used");
                     if (existingp != rhsp) {
                         APPLYING(REUSE_ASSOC_BINARY_LHS_WITH_LHS_OF_RHS) {
@@ -603,7 +643,7 @@ class V3DfgPeephole final : public DfgVisitor {
                 // '(a OP (b OP c))' -> '(a OP c) OP b' iff also commutative
                 if VL_CONSTEXPR_CXX17 (IsCommutative<Vertex>::value) {
                     if (Vertex* const existingp
-                        = m_cache.get<Vertex>(resultDType<Vertex>(lhsp, rrVtxp), lhsp, rrVtxp)) {
+                        = getVertex<Vertex>(resultDType<Vertex>(lhsp, rrVtxp), lhsp, rrVtxp)) {
                         UASSERT_OBJ(existingp->hasSinks(), vtxp, "Existing vertex should be used");
                         if (existingp != rhsp) {
                             APPLYING(REUSE_ASSOC_BINARY_LHS_WITH_RHS_OF_RHS) {
@@ -1155,24 +1195,24 @@ class V3DfgPeephole final : public DfgVisitor {
 
             // Sel from a partial variable (including narrowed vertex)
             if (DfgVarPacked* const varp = fromp->cast<DfgVarPacked>()) {
-                if (varp->srcp() && !varp->isVolatile()) {
-                    // Must be a splice, otherwise it would have been inlined
-                    DfgSplicePacked* splicep = varp->srcp()->as<DfgSplicePacked>();
-                    DfgVertex* driverp = nullptr;
-                    uint32_t driverLsb = 0;
-                    splicep->foreachDriver([&](DfgVertex& src, const uint32_t dLsb) {
-                        const uint32_t dMsb = dLsb + src.width() - 1;
-                        // If it does not cover the whole searched bit range, move on
-                        if (lsb < dLsb || dMsb < msb) return false;
-                        // Save the driver
-                        driverp = &src;
-                        driverLsb = dLsb;
-                        return true;
-                    });
-                    if (driverp) {
+                // Find the driver of this range
+                const auto pair = varp->driverOfRange(lsb, width);
+                DfgVertex* const driverp = pair.first;
+                const uint32_t driverLsb = pair.second;
+                UASSERT_OBJ(
+                    !driverp || driverp != varp->srcp(), varp,
+                    "'varp' should be partially driven, otherwise should have been inlined");
+                if (driverp) {
+                    if (driverp == varp->defaultp()) {
+                        APPLYING(PUSH_SEL_THROUGH_DEFAULT) {
+                            fromp = driverp;
+                            lsb = driverLsb;
+                            continue;
+                        }
+                    } else {
                         APPLYING(PUSH_SEL_THROUGH_SPLICE) {
                             fromp = driverp;
-                            lsb -= driverLsb;
+                            lsb = driverLsb;
                             continue;
                         }
                     }
@@ -1185,6 +1225,102 @@ class V3DfgPeephole final : public DfgVisitor {
         return {fromp, lsb};
     }
 
+    // Given a pair of vertices, returns a vertex representing the common LSBs of the two,
+    // and the number of common LSBs. Returns {nullptr, 0} if no common LSBs are found.
+    std::pair<DfgVertex*, uint32_t> commonLSBs(DfgVertex* ap, DfgVertex* bp) {
+        if (ap == bp) return {ap, ap->width()};
+
+        // If both constants, check LSBs
+        if (DfgConst* const aConstp = ap->cast<DfgConst>()) {
+            if (DfgConst* const bConstp = bp->cast<DfgConst>()) {
+                const V3Number& aNum = aConstp->num();
+                const V3Number& bNum = bConstp->num();
+                // Max match is the shorter constant
+                const uint32_t maxMatch = std::min(aConstp->width(), bConstp->width());
+                // Check all bits
+                uint32_t matchWidth = 0;
+                for (; matchWidth < maxMatch; ++matchWidth) {
+                    if (aNum.bitIs0(matchWidth) != bNum.bitIs0(matchWidth)) break;
+                }
+                // Will always return the shorter constant in case it can be used directly
+                DfgConst* const shorterp = aConstp->width() < bConstp->width() ? aConstp : bConstp;
+                return {matchWidth ? shorterp : nullptr, matchWidth};
+            }
+        }
+
+        // If Concat, check against the RHS
+        if (DfgConcat* const catp = ap->cast<DfgConcat>()) return commonLSBs(catp->rhsp(), bp);
+        if (DfgConcat* const catp = bp->cast<DfgConcat>()) return commonLSBs(ap, catp->rhsp());
+
+        // If selecting the LSBs, check against the source of the Sel
+        if (DfgSel* const selp = ap->cast<DfgSel>()) {
+            if (selp->lsb() == 0) {
+                DfgVertex* const fromp = selp->fromp();
+                const std::pair<DfgVertex*, uint32_t> common = commonLSBs(fromp, bp);
+                return {common.first, std::min(common.second, selp->width())};
+            }
+        }
+        if (DfgSel* const selp = bp->cast<DfgSel>()) {
+            if (selp->lsb() == 0) {
+                DfgVertex* const fromp = selp->fromp();
+                const std::pair<DfgVertex*, uint32_t> common = commonLSBs(ap, fromp);
+                return {common.first, std::min(common.second, selp->width())};
+            }
+        }
+
+        // Otherwise no common LSBs
+        return {nullptr, 0};
+    }
+
+    // Given a pair of vertices, returns a vertex representing the common MSBs of the two,
+    // and the number of common LSBs. Returns {nullptr, 0} if no common LSBs are found.
+    std::pair<DfgVertex*, uint32_t> commonMSBs(DfgVertex* ap, DfgVertex* bp) {
+        if (ap == bp) return {ap, ap->width()};
+
+        // If both constants, check MSBs
+        if (DfgConst* const aConstp = ap->cast<DfgConst>()) {
+            if (DfgConst* const bConstp = bp->cast<DfgConst>()) {
+                const uint32_t aMsb = aConstp->width() - 1;
+                const uint32_t bMsb = bConstp->width() - 1;
+                const V3Number& aNum = aConstp->num();
+                const V3Number& bNum = bConstp->num();
+                // Max match is the shorter constant
+                const uint32_t maxMatch = std::min(aConstp->width(), bConstp->width());
+                // Check all bits
+                uint32_t matchWidth = 0;
+                for (; matchWidth < maxMatch; ++matchWidth) {
+                    if (aNum.bitIs0(aMsb - matchWidth) != bNum.bitIs0(bMsb - matchWidth)) break;
+                }
+                // Will always return the shorter constant in case it can be used directly
+                DfgConst* const shorterp = aMsb < bMsb ? aConstp : bConstp;
+                return {matchWidth ? shorterp : nullptr, matchWidth};
+            }
+        }
+
+        // If Concat, check against the LHS
+        if (DfgConcat* const catp = ap->cast<DfgConcat>()) return commonMSBs(catp->lhsp(), bp);
+        if (DfgConcat* const catp = bp->cast<DfgConcat>()) return commonMSBs(ap, catp->lhsp());
+
+        // If selecting the MSBs, check against the source of the Sel
+        if (DfgSel* const selp = ap->cast<DfgSel>()) {
+            DfgVertex* const fromp = selp->fromp();
+            if (selp->msb() == fromp->width() - 1) {
+                const std::pair<DfgVertex*, uint32_t> common = commonMSBs(fromp, bp);
+                return {common.first, std::min(common.second, selp->width())};
+            }
+        }
+        if (DfgSel* const selp = bp->cast<DfgSel>()) {
+            DfgVertex* const fromp = selp->fromp();
+            if (selp->msb() == fromp->width() - 1) {
+                const std::pair<DfgVertex*, uint32_t> common = commonMSBs(ap, fromp);
+                return {common.first, std::min(common.second, selp->width())};
+            }
+        }
+
+        // Otherwise no common MSBs
+        return {nullptr, 0};
+    }
+
     // VISIT methods
 
     void visit(DfgVertex*) override {}
@@ -1192,6 +1328,10 @@ class V3DfgPeephole final : public DfgVisitor {
     //=========================================================================
     //  DfgVertexUnary
     //=========================================================================
+
+    void visit(DfgCountOnes* const vtxp) override {
+        if (foldUnary(vtxp)) return;
+    }
 
     void visit(DfgExtend* const vtxp) override {
         if (foldUnary(vtxp)) return;
@@ -1323,6 +1463,14 @@ class V3DfgPeephole final : public DfgVisitor {
                 }
             }
         }
+    }
+
+    void visit(DfgOneHot* const vtxp) override {
+        if (foldUnary(vtxp)) return;
+    }
+
+    void visit(DfgOneHot0* const vtxp) override {
+        if (foldUnary(vtxp)) return;
     }
 
     void visit(DfgRedOr* const vtxp) override {
@@ -1774,10 +1922,24 @@ class V3DfgPeephole final : public DfgVisitor {
         if (!idxp) return;
         DfgVarArray* const varp = vtxp->fromp()->cast<DfgVarArray>();
         if (!varp) return;
-        if (varp->vscp()->varp()->isForced()) return;
-        if (varp->vscp()->varp()->isSigUserRWPublic()) return;
+        AstVar* const astVarp = varp->vscp()->varp();
+        if (astVarp->isForced()) return;
+        if (astVarp->isSigUserRWPublic()) return;
         DfgVertex* const srcp = varp->srcp();
-        if (!srcp) return;
+        if (!srcp) {
+            if (vtxp->isPacked()) {
+                if (AstInitArray* const iap = VN_CAST(astVarp->valuep(), InitArray)) {
+                    if (AstConst* const valp
+                        = VN_CAST(iap->getIndexDefaultedValuep(idxp->toSizeT()), Const)) {
+                        APPLYING(FOLD_ARRAYSEL_TABLE) {
+                            replace(new DfgConst{m_dfg, valp->fileline(), valp->num()});
+                            return;
+                        }
+                    }
+                }
+            }
+            return;
+        }
 
         if (DfgSpliceArray* const splicep = srcp->cast<DfgSpliceArray>()) {
             DfgVertex* const driverp = splicep->driverAt(idxp->toSizeT());
@@ -2144,7 +2306,7 @@ class V3DfgPeephole final : public DfgVisitor {
     }
 
     void visit(DfgLogAnd* const vtxp) override {
-        if (binary(vtxp)) return;
+        if (binary(vtxp) || vtxp->rhsp()->unsafe()) return;
 
         DfgVertex* const lhsp = vtxp->lhsp();
         DfgVertex* const rhsp = vtxp->rhsp();
@@ -2162,11 +2324,11 @@ class V3DfgPeephole final : public DfgVisitor {
     }
 
     void visit(DfgLogIf* const vtxp) override {
-        if (binary(vtxp)) return;
+        if (binary(vtxp) || vtxp->rhsp()->unsafe()) return;
     }
 
     void visit(DfgLogOr* const vtxp) override {
-        if (binary(vtxp)) return;
+        if (binary(vtxp) || vtxp->rhsp()->unsafe()) return;
 
         DfgVertex* const lhsp = vtxp->lhsp();
         DfgVertex* const rhsp = vtxp->rhsp();
@@ -2423,7 +2585,13 @@ class V3DfgPeephole final : public DfgVisitor {
         if (DfgShiftL* const lShiftLp = lhsp->cast<DfgShiftL>()) {
             if (!lShiftLp->hasMultipleSinks() && rhsp->dtype() == lShiftLp->rhsp()->dtype()) {
                 APPLYING(REPLACE_SHIFTL_SHIFTL) {
-                    DfgAdd* const addp = make<DfgAdd>(rhsp, rhsp, lShiftLp->rhsp());
+                    // Fold '(a << b) << c' to 'a << (b + c)'.  Compute 'b + c'
+                    // one bit wider than the amounts so it cannot overflow.
+                    FileLine* const flp = vtxp->fileline();
+                    const DfgDataType& sumDType = DfgDataType::packed(rhsp->width() + 1);
+                    DfgVertex* const bp = make<DfgExtend>(flp, sumDType, lShiftLp->rhsp());
+                    DfgVertex* const cp = make<DfgExtend>(flp, sumDType, rhsp);
+                    DfgAdd* const addp = make<DfgAdd>(flp, sumDType, bp, cp);
                     replace(make<DfgShiftL>(vtxp, lShiftLp->lhsp(), addp));
                     return;
                 }
@@ -2512,7 +2680,13 @@ class V3DfgPeephole final : public DfgVisitor {
         if (DfgShiftR* const lShiftRp = lhsp->cast<DfgShiftR>()) {
             if (!lShiftRp->hasMultipleSinks() && rhsp->dtype() == lShiftRp->rhsp()->dtype()) {
                 APPLYING(REPLACE_SHIFTR_SHIFTR) {
-                    DfgAdd* const addp = make<DfgAdd>(rhsp, rhsp, lShiftRp->rhsp());
+                    // Fold '(a >> b) >> c' to 'a >> (b + c)'.  Compute 'b + c'
+                    // one bit wider than the amounts so it cannot overflow.
+                    FileLine* const flp = vtxp->fileline();
+                    const DfgDataType& sumDType = DfgDataType::packed(rhsp->width() + 1);
+                    DfgVertex* const bp = make<DfgExtend>(flp, sumDType, lShiftRp->rhsp());
+                    DfgVertex* const cp = make<DfgExtend>(flp, sumDType, rhsp);
+                    DfgAdd* const addp = make<DfgAdd>(flp, sumDType, bp, cp);
                     replace(make<DfgShiftR>(vtxp, lShiftRp->lhsp(), addp));
                     return;
                 }
@@ -2622,6 +2796,16 @@ class V3DfgPeephole final : public DfgVisitor {
                     replace(make<DfgNot>(vtxp->fileline(), m_bitDType, lhsp));
                     return;
                 }
+            }
+        }
+    }
+
+    void visit(DfgMatchMasked* const vtxp) override {
+        if (DfgConst* const constp = vtxp->lhsp()->cast<DfgConst>()) {
+            APPLYING(FOLD_MATCHMASKED) {
+                AstVar* const matchVarp = vtxp->matchp()->as<DfgVarPacked>()->vscp()->varp();
+                replace(makeI32(vtxp->fileline(), AstMatchMasked::fold(constp->num(), matchVarp)));
+                return;
             }
         }
     }
@@ -2755,13 +2939,13 @@ class V3DfgPeephole final : public DfgVisitor {
         }
 
         if (vtxp->dtype() == m_bitDType) {
-            if (isSame(condp, thenp)) {  // a ? a : b becomes a | b
+            if (isSame(condp, thenp) && !elsep->unsafe()) {  // a ? a : b becomes a | b
                 APPLYING(REPLACE_COND_WITH_THEN_BRANCH_COND) {
                     replace(make<DfgOr>(vtxp, condp, elsep));
                     return;
                 }
             }
-            if (isSame(condp, elsep)) {  // a ? b : a becomes a & b
+            if (isSame(condp, elsep) && !thenp->unsafe()) {  // a ? b : a becomes a & b
                 APPLYING(REPLACE_COND_WITH_ELSE_BRANCH_COND) {
                     replace(make<DfgAnd>(vtxp, condp, thenp));
                     return;
@@ -2770,28 +2954,28 @@ class V3DfgPeephole final : public DfgVisitor {
         }
 
         if (vtxp->width() <= VL_QUADSIZE) {
-            if (isZero(thenp)) {  // a ? 0 : b becomes ~a & b
+            if (isZero(thenp) && !elsep->unsafe()) {  // a ? 0 : b becomes ~a & b
                 APPLYING(REPLACE_COND_WITH_THEN_BRANCH_ZERO) {
                     DfgVertex* const maskp = replicate(vtxp, make<DfgNot>(condp, condp));
                     replace(make<DfgAnd>(vtxp, maskp, elsep));
                     return;
                 }
             }
-            if (isOnes(thenp)) {  // a ? 1 : b becomes a | b
+            if (isOnes(thenp) && !elsep->unsafe()) {  // a ? 1 : b becomes a | b
                 APPLYING(REPLACE_COND_WITH_THEN_BRANCH_ONES) {
                     DfgVertex* const maskp = replicate(vtxp, condp);
                     replace(make<DfgOr>(vtxp, maskp, elsep));
                     return;
                 }
             }
-            if (isZero(elsep)) {  // a ? b : 0 becomes a & b
+            if (isZero(elsep) && !thenp->unsafe()) {  // a ? b : 0 becomes a & b
                 APPLYING(REPLACE_COND_WITH_ELSE_BRANCH_ZERO) {
                     DfgVertex* const maskp = replicate(vtxp, condp);
                     replace(make<DfgAnd>(vtxp, maskp, thenp));
                     return;
                 }
             }
-            if (isOnes(elsep)) {  // a ? b : 1 becomes ~a | b
+            if (isOnes(elsep) && !thenp->unsafe()) {  // a ? b : 1 becomes ~a | b
                 APPLYING(REPLACE_COND_WITH_ELSE_BRANCH_ONES) {
                     DfgVertex* const maskp = replicate(vtxp, make<DfgNot>(condp, condp));
                     replace(make<DfgOr>(vtxp, maskp, thenp));
@@ -2800,7 +2984,8 @@ class V3DfgPeephole final : public DfgVisitor {
             }
 
             if (DfgOr* const tOrp = thenp->cast<DfgOr>()) {
-                if (isSame(tOrp->lhsp(), elsep)) {  // a ? b | c : b becomes b | (a & c)
+                if (isSame(tOrp->lhsp(), elsep)
+                    && !tOrp->rhsp()->unsafe()) {  // a ? b | c : b becomes b | (a & c)
                     APPLYING(REPLACE_COND_THEN_OR_LHS) {
                         DfgVertex* const maskp = replicate(vtxp, condp);
                         DfgAnd* const andp = make<DfgAnd>(vtxp, maskp, tOrp->rhsp());
@@ -2808,7 +2993,8 @@ class V3DfgPeephole final : public DfgVisitor {
                         return;
                     }
                 }
-                if (isSame(tOrp->rhsp(), elsep)) {  // a ? b | c : c becomes c | (a & b)
+                if (isSame(tOrp->rhsp(), elsep)
+                    && !tOrp->lhsp()->unsafe()) {  // a ? b | c : c becomes c | (a & b)
                     APPLYING(REPLACE_COND_THEN_OR_RHS) {
                         DfgVertex* const maskp = replicate(vtxp, condp);
                         DfgAnd* const andp = make<DfgAnd>(vtxp, maskp, tOrp->lhsp());
@@ -2819,56 +3005,62 @@ class V3DfgPeephole final : public DfgVisitor {
             }
         }
 
-        if (DfgConcat* const tConcatp = thenp->cast<DfgConcat>()) {
-            if (DfgConcat* const eConcatp = elsep->cast<DfgConcat>()) {
-                DfgVertex* const tRhsp = tConcatp->rhsp();
-                DfgVertex* const tLhsp = tConcatp->lhsp();
-                DfgVertex* const eRhsp = eConcatp->rhsp();
-                DfgVertex* const eLhsp = eConcatp->lhsp();
-
-                if (isSame(tRhsp, eRhsp)) {
-                    APPLYING(REPLACE_COND_SAME_CAT_RHS) {
-                        DfgCond* const newCondp
-                            = make<DfgCond>(flp, tLhsp->dtype(), condp, tLhsp, eLhsp);
-                        replace(make<DfgConcat>(vtxp, newCondp, tRhsp));
+        if (!thenp->is<DfgConst>() && !elsep->is<DfgConst>()) {
+            const std::pair<DfgVertex*, uint32_t> cLSBs = commonLSBs(thenp, elsep);
+            if (cLSBs.first) {
+                APPLYING(REPLACE_COND_COMMON_LSBS) {
+                    // Create new RHS
+                    const uint32_t rWidth = cLSBs.second;
+                    DfgVertex* rhsp = cLSBs.first;
+                    if (rWidth != rhsp->width()) {
+                        const DfgDataType& rDtype = DfgDataType::packed(rWidth);
+                        rhsp = make<DfgSel>(flp, rDtype, rhsp, 0U);
+                    }
+                    // If it's all the same, just replace
+                    if (rhsp->dtype() == vtxp->dtype()) {
+                        // Note this branch can only be hit if rules run in the right order,
+                        // it might have missing code coverage after a refactor.
+                        replace(rhsp);
                         return;
                     }
-                }
-
-                if (isSame(tLhsp, eLhsp)) {
-                    APPLYING(REPLACE_COND_SAME_CAT_LHS) {
-                        DfgCond* const newCondp
-                            = make<DfgCond>(flp, tRhsp->dtype(), condp, tRhsp, eRhsp);
-                        replace(make<DfgConcat>(vtxp, tLhsp, newCondp));
-                        return;
-                    }
+                    // Create new LHS
+                    const uint32_t lWidth = vtxp->width() - rWidth;
+                    const DfgDataType& lDtype = DfgDataType::packed(lWidth);
+                    DfgVertex* const lThenp = make<DfgSel>(flp, lDtype, thenp, rWidth);
+                    DfgVertex* const lElsep = make<DfgSel>(flp, lDtype, elsep, rWidth);
+                    DfgVertex* const lhsp = make<DfgCond>(flp, lDtype, condp, lThenp, lElsep);
+                    // Replace with concat
+                    replace(make<DfgConcat>(vtxp, lhsp, rhsp));
+                    return;
                 }
             }
 
-            if (!tConcatp->hasMultipleSinks()) {
-                if (DfgConcat* const tRCatp = tConcatp->rhsp()->cast<DfgConcat>()) {
-                    if (!tRCatp->hasMultipleSinks()) {
-                        if (DfgSel* const tLSelp = tConcatp->lhsp()->cast<DfgSel>()) {
-                            if (DfgSel* const tRRSelp = tRCatp->rhsp()->cast<DfgSel>()) {
-                                if (tLSelp->lsb() == tRCatp->width()  //
-                                    && tRRSelp->lsb() == 0  //
-                                    && isSame(tLSelp->fromp(), elsep)  //
-                                    && isSame(tRRSelp->fromp(), elsep)) {
-                                    APPLYING(REPLACE_COND_INSERT) {
-                                        DfgVertex* const newTp = tRCatp->lhsp();
-                                        DfgVertex* const newEp = make<DfgSel>(
-                                            flp, newTp->dtype(), elsep, tRRSelp->width());
-                                        DfgCond* const newCp = make<DfgCond>(flp, newTp->dtype(),
-                                                                             condp, newTp, newEp);
-                                        replace(make<DfgConcat>(
-                                            vtxp, tLSelp,
-                                            make<DfgConcat>(tRCatp, newCp, tRRSelp)));
-                                        return;
-                                    }
-                                }
-                            }
-                        }
+            const std::pair<DfgVertex*, uint32_t> cMSBs = commonMSBs(thenp, elsep);
+            if (cMSBs.first) {
+                APPLYING(REPLACE_COND_COMMON_MSBS) {
+                    // Create new LHS
+                    const uint32_t lWidth = cMSBs.second;
+                    DfgVertex* lhsp = cMSBs.first;
+                    if (lWidth != lhsp->width()) {
+                        const DfgDataType& lDtype = DfgDataType::packed(lWidth);
+                        lhsp = make<DfgSel>(flp, lDtype, lhsp, lhsp->width() - lWidth);
                     }
+                    // If it's all the same, just replace
+                    if (lhsp->dtype() == vtxp->dtype()) {
+                        // Note this branch can only be hit if rules run in the right order,
+                        // it might have missing code coverage after a refactor.
+                        replace(lhsp);
+                        return;
+                    }
+                    // Create new RHS
+                    const uint32_t rWidth = vtxp->width() - lWidth;
+                    const DfgDataType& rDtype = DfgDataType::packed(rWidth);
+                    DfgVertex* const rThenp = make<DfgSel>(flp, rDtype, thenp, 0U);
+                    DfgVertex* const rElsep = make<DfgSel>(flp, rDtype, elsep, 0U);
+                    DfgVertex* const rhsp = make<DfgCond>(flp, rDtype, condp, rThenp, rElsep);
+                    // Replace with concat
+                    replace(make<DfgConcat>(vtxp, lhsp, rhsp));
+                    return;
                 }
             }
         }
@@ -2971,6 +3163,9 @@ class V3DfgPeephole final : public DfgVisitor {
         // Assign vertex IDs
         m_dfg.forEachVertex([&](DfgVertex& vtx) { m_vInfo[vtx].m_id = ++m_lastId; });
 
+        // Add all operation vertices to the cache
+        for (DfgVertex& vtx : m_dfg.opVertices()) cacheVertex(&vtx);
+
         // Initialize the work list and iter list. They can't get bigger than
         // m_dfg.size(), but new vertices are created in the loop, so over alloacte
         m_workList.reserve(m_dfg.size() * 2);
@@ -3012,11 +3207,14 @@ class V3DfgPeephole final : public DfgVisitor {
                 // Unsued vertices should have been removed immediately
                 UASSERT_OBJ(m_vtxp->hasSinks(), m_vtxp, "Operation vertex should have sinks");
 
-                // Check if an equivalent vertex exists, if so replace this vertex with it
-                if (DfgVertex* const sampep = m_cache.cache(m_vtxp)) {
-                    APPLYING(REPLACE_WITH_EQUIVALENT) {
-                        replace(sampep);
-                        continue;
+                // Check if an equivalent vertex exists, if so replace this vertex with it.
+                // Can skip the lookup if the vertex is known to be the cached one
+                if (!m_vInfo[m_vtxp].m_isCachedVertex) {
+                    if (DfgVertex* const sampep = cacheVertex(m_vtxp)) {
+                        APPLYING(REPLACE_WITH_EQUIVALENT) {
+                            replace(sampep);
+                            continue;
+                        }
                     }
                 }
 

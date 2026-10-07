@@ -538,35 +538,25 @@ public:
 
         of.puts("\n### Switches...\n");
         of.puts("# C11 constructs required?  0/1 (always on now)\n");
-        of.puts("VM_C11 = 1\n");
+        of.putSet("VM_C11", "1");
         of.puts("# Timing enabled?  0/1\n");
-        of.puts("VM_TIMING = ");
-        of.puts(v3Global.usesTiming() ? "1" : "0");
-        of.puts("\n");
+        of.putSet("VM_TIMING", v3Global.usesTiming() ? "1" : "0");
         of.puts("# Coverage output mode?  0/1 (from --coverage)\n");
-        of.puts("VM_COVERAGE = ");
-        of.puts(v3Global.opt.coverage() ? "1" : "0");
-        of.puts("\n");
+        of.putSet("VM_COVERAGE", v3Global.opt.coverage() ? "1" : "0");
         of.puts("# Parallel builds?  0/1 (from --output-split)\n");
-        of.puts("VM_PARALLEL_BUILDS = ");
-        of.puts(v3Global.useParallelBuild() ? "1" : "0");
-        of.puts("\n");
+        of.putSet("VM_PARALLEL_BUILDS", v3Global.useParallelBuild() ? "1" : "0");
         of.puts("# Tracing output mode?  0/1 (from --trace-fst/--trace-saif/--trace-vcd)\n");
-        of.puts("VM_TRACE = ");
-        of.puts(v3Global.opt.trace() ? "1" : "0");
-        of.puts("\n");
+        of.putSet("VM_TRACE", v3Global.opt.trace() ? "1" : "0");
         of.puts("# Tracing output mode in FST format?  0/1 (from --trace-fst)\n");
-        of.puts("VM_TRACE_FST = ");
-        of.puts(v3Global.opt.traceEnabledFst() ? "1" : "0");
-        of.puts("\n");
+        of.putSet("VM_TRACE_FST", v3Global.opt.traceEnabledFst() ? "1" : "0");
         of.puts("# Tracing output mode in SAIF format?  0/1 (from --trace-saif)\n");
-        of.puts("VM_TRACE_SAIF = ");
-        of.puts(v3Global.opt.traceEnabledSaif() ? "1" : "0");
-        of.puts("\n");
+        of.putSet("VM_TRACE_SAIF", v3Global.opt.traceEnabledSaif() ? "1" : "0");
         of.puts("# Tracing output mode in VCD format?  0/1 (from --trace-vcd)\n");
-        of.puts("VM_TRACE_VCD = ");
-        of.puts(v3Global.opt.traceEnabledVcd() ? "1" : "0");
-        of.puts("\n");
+        of.putSet("VM_TRACE_VCD", v3Global.opt.traceEnabledVcd() ? "1" : "0");
+        of.puts("# VPI enabled?  0/1 (from --vpi)\n");
+        of.putSet("VM_VPI", v3Global.opt.vpi() ? "1" : "0");
+        // Link flags for runtime VPI library loading are emitted by emitOverallMake() after
+        // verilated.mk is included (so $(CFG_LDFLAGS_DYNAMIC)/$(CFG_LDLIBS_DYNAMIC) are defined).
 
         of.puts("\n### Object file lists...\n");
         for (int support = 0; support < 3; ++support) {
@@ -671,7 +661,7 @@ public:
         of.putSet("VM_PCLI", (v3Global.opt.systemC() ? "0" : "1"));
         of.puts(
             "# Deprecated: SystemC architecture to find link library path (from $SYSTEMC_ARCH)\n");
-        of.puts("VM_SC_TARGET_ARCH = "s + V3Options::getenvSYSTEMC_ARCH() + "\n");
+        of.putSet("VM_SC_TARGET_ARCH", V3Options::getenvSYSTEMC_ARCH());
 
         of.puts("\n### Vars...\n");
         of.puts("# Design prefix (from --prefix)\n");
@@ -729,6 +719,17 @@ public:
             of.puts("\n### Executable rules... (from --exe)\n");
             of.puts("VPATH += $(VM_USER_DIR)\n");
             of.puts("\n");
+
+            if (v3Global.opt.vpi()) {
+                // Runtime VPI library loading (+verilator+vpi+<lib>) needs the executable to
+                // export its VPI symbols so the dlopen'd library can resolve them, plus the
+                // dl library for dlopen/dlsym.  The exact flags are probed at configure time
+                // (CFG_LDFLAGS_DYNAMIC / CFG_LDLIBS_DYNAMIC in verilated.mk).
+                of.puts("# Runtime VPI library loading (+verilator+vpi+) link requirements\n");
+                of.puts("LDFLAGS += $(CFG_LDFLAGS_DYNAMIC)\n");
+                of.puts("LDLIBS += $(CFG_LDLIBS_DYNAMIC)\n");
+                of.puts("\n");
+            }
         }
 
         const string compilerIncludePch

@@ -18,7 +18,8 @@
 // Each module:
 //      For each expression, if it requires a clean operand,
 //      and the operand is dirty, insert a CLEAN node.
-//      Resize operands (but not variables or variable selects) to C++ 32/64/wide types.
+//      Resize operands (but not variables, variable selects, or formatting metadata)
+//      to C++ 32/64/wide types.
 //      Copy all width() values to widthMin() so RANGE, etc can still see orig widths
 //
 //*************************************************************************
@@ -35,7 +36,7 @@ VL_DEFINE_DEBUG_FUNCTIONS;
 class CleanVisitor final : public VNVisitor {
     // NODE STATE
     // Entire netlist:
-    //  AstNode::user()         -> CleanState.  For this node, 0==UNKNOWN
+    //  AstNode::user1()        -> CleanState.  For this node, 0==UNKNOWN
     //  AstNode::user2()        -> bool.  True indicates widthMin has been propagated
     //  AstNodeDType::user3()   -> AstNodeDType*.  Alternative node with C size
     const VNUser1InUse m_inuser1;
@@ -84,6 +85,7 @@ class CleanVisitor final : public VNVisitor {
                 || VN_IS(nodep, ConsPackMember)  //
                 || VN_IS(nodep, NodeDType)  // Don't want to change variable widths!
                 || VN_IS(nodep, NodeSel)  // Array selects should reflect variable widths
+                || VN_IS(nodep, SFormatArg)  // Retain the logical argument type, not storage width
                 || VN_IS(nodep->dtypep()->skipRefp(), AssocArrayDType)  // Or arrays
                 || VN_IS(nodep->dtypep()->skipRefp(), WildcardArrayDType)
                 || VN_IS(nodep->dtypep()->skipRefp(), DynArrayDType)
@@ -91,6 +93,8 @@ class CleanVisitor final : public VNVisitor {
                 || VN_IS(nodep->dtypep()->skipRefp(), QueueDType)
                 || VN_IS(nodep->dtypep()->skipRefp(), StreamDType)
                 || VN_IS(nodep->dtypep()->skipRefp(), UnpackArrayDType)
+                || VN_IS(nodep->dtypep()->skipRefp(), CoverCrossDType)
+                || VN_IS(nodep->dtypep()->skipRefp(), CoverpointDType)
                 || VN_IS(nodep->dtypep()->skipRefp(), VoidDType)) {
             } else {
                 const AstNodeUOrStructDType* const dtypep
@@ -138,12 +142,12 @@ class CleanVisitor final : public VNVisitor {
         computeCppWidth(nodep);
         if (!isClean(nodep)) insertClean(nodep);
     }
-    void ensureCleanAndNext(AstNodeExpr* nodep) {
+    void ensureCleanAndNext(AstNode* nodep) {
         // Editing list, careful looping!
-        for (AstNodeExpr* exprp = nodep; exprp;) {
-            AstNodeExpr* const nextp = VN_AS(exprp->nextp(), NodeExpr);
-            ensureClean(exprp);
-            exprp = nextp;
+        for (AstNode* argp = nodep; argp;) {
+            AstNode* const nextp = argp->nextp();
+            if (AstNodeExpr* const exprp = VN_CAST(argp, NodeExpr)) ensureClean(exprp);
+            argp = nextp;
         }
     }
 
@@ -232,6 +236,11 @@ class CleanVisitor final : public VNVisitor {
         ensureClean(nodep->rhsp());
         setClean(nodep, true);
     }
+    void visit(AstMatchMasked* nodep) override {
+        iterateChildren(nodep);
+        ensureClean(nodep->lhsp());
+        setClean(nodep, true);
+    }
     void visit(AstSel* nodep) override {
         operandBiop(nodep);
         setClean(nodep, nodep->cleanOut());
@@ -242,9 +251,7 @@ class CleanVisitor final : public VNVisitor {
         setClean(nodep, false);
         // We always clean, as we don't trust those pesky users.
         if (!VN_IS(nodep->backp(), And)) insertClean(nodep);
-        for (AstNode* argp = nodep->nodesp(); argp; argp = argp->nextp()) {
-            if (AstNodeExpr* const exprp = VN_CAST(argp, NodeExpr)) ensureClean(exprp);
-        }
+        ensureCleanAndNext(nodep->nodesp());
     }
     void visit(AstTraceDecl* nodep) override {}  // Nothing to do here
     void visit(AstTraceInc* nodep) override {
@@ -275,16 +282,23 @@ class CleanVisitor final : public VNVisitor {
         iterateChildren(nodep);
         ensureClean(nodep->condp());
     }
+    void visit(AstSFormatArg* nodep) override {
+        iterateChildren(nodep);
+        ensureCleanAndNext(nodep->exprp());
+        setClean(nodep, true);
+    }
     void visit(AstSFormatF* nodep) override {
         iterateChildren(nodep);
         ensureCleanAndNext(nodep->exprsp());
         setClean(nodep, true);  // generates a string, so not relevant
     }
+    void visit(AstCStmt* nodep) override {
+        iterateChildren(nodep);
+        ensureCleanAndNext(nodep->nodesp());
+    }
     void visit(AstCStmtUser* nodep) override {
         iterateChildren(nodep);
-        for (AstNode* argp = nodep->nodesp(); argp; argp = argp->nextp()) {
-            if (AstNodeExpr* const exprp = VN_CAST(argp, NodeExpr)) ensureClean(exprp);
-        }
+        ensureCleanAndNext(nodep->nodesp());
     }
     void visit(AstNodeCCall* nodep) override {
         iterateChildren(nodep);

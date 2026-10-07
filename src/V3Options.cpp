@@ -542,7 +542,7 @@ bool V3Options::fileStatNormal(const string& filename) {
 }
 
 string V3Options::fileExists(const string& filename) {
-    // Surprisingly, for VCS and other simulators, this process
+    // Surprisingly, for some other simulators, this process
     // is quite slow; presumably because of re-reading each directory
     // many times.  So we read a whole dir at once and cache it
 
@@ -887,6 +887,8 @@ string V3Options::getSupported(const string& var) {
     // If update below, also update V3Options::showVersion()
     if (var == "COROUTINES" && coroutineSupport()) {
         return "1";
+    } else if (var == "TSAN" && tsanSupport()) {
+        return "1";
     } else if (var == "DEV_ASAN" && devAsan()) {
         return "1";
     } else if (var == "DEV_GCOV" && devGcov()) {
@@ -930,6 +932,14 @@ bool V3Options::devAsan() {
 
 bool V3Options::devGcov() {
 #ifdef HAVE_DEV_GCOV
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool V3Options::tsanSupport() {
+#ifdef HAVE_TSAN
     return true;
 #else
     return false;
@@ -1076,6 +1086,9 @@ void V3Options::notify() VL_MT_DISABLED {
 
     // Preprocessor defines based on options used
     if (timing().isSetTrue()) V3PreShell::defineCmdLine("VERILATOR_TIMING", "1");
+
+    // If VPI is used, and no explicit ico change detect option was passed, disable it by default
+    if (m_vpi.isTrue() && m_fIcoChangeDetect.isDefault()) m_fIcoChangeDetect.setTrueOrFalse(false);
 
     // === Leave last
     // Mark options as available
@@ -1290,7 +1303,9 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc,
         m_assertCase = flag;
     });
     DECL_OPTION("-assert-case", OnOff, &m_assertCase);
-    DECL_OPTION("-assert-unroll-limit", Set, &m_assertUnrollLimit);
+    DECL_OPTION("-assert-unroll-limit", CbVal, [fl](const char*) {
+        fl->v3warn(DEPRECATED, "Option '--assert-unroll-limit' is deprecated and has no effect.");
+    }).notForRerun();
     DECL_OPTION("-autoflush", OnOff, &m_autoflush);
 
     DECL_OPTION("-bbox-sys", OnOff, &m_bboxSys);
@@ -1446,7 +1461,15 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc,
 
     DECL_OPTION("-facyc-simp", FOnOff, &m_fAcycSimp);
     DECL_OPTION("-fassemble", FOnOff, &m_fAssemble);
-    DECL_OPTION("-fcase", FOnOff, &m_fCase);
+    DECL_OPTION("-fbit-scan-loops", FOnOff, &m_fBitScanLoops);
+    DECL_OPTION("-fcase", CbFOnOff, [this](bool flag) {
+        m_fCaseDecoder = flag;
+        m_fCaseTable = flag;
+        m_fCaseTree = flag;
+    });
+    DECL_OPTION("-fcase-decoder", FOnOff, &m_fCaseDecoder);
+    DECL_OPTION("-fcase-table", FOnOff, &m_fCaseTable);
+    DECL_OPTION("-fcase-tree", FOnOff, &m_fCaseTree);
     DECL_OPTION("-fcombine", FOnOff, &m_fCombine);
     DECL_OPTION("-fconst", FOnOff, &m_fConst);
     DECL_OPTION("-fconst-before-dfg", FOnOff, &m_fConstBeforeDfg);
@@ -1454,9 +1477,12 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc,
     DECL_OPTION("-fconst-eager", FOnOff, &m_fConstEager);
     DECL_OPTION("-fdead-assigns", FOnOff, &m_fDeadAssigns);
     DECL_OPTION("-fdead-cells", FOnOff, &m_fDeadCells);
+    DECL_OPTION("-fdead-methods", FOnOff, &m_fDeadMethods);
     DECL_OPTION("-fdedup", FOnOff, &m_fDedupe);
     DECL_OPTION("-fdfg", CbFOnOff, [this](bool flag) { m_fDfg = flag; });
-    DECL_OPTION("-fdfg-break-cycles", FOnOff, &m_fDfgBreakCycles);
+    DECL_OPTION("-fdfg-break-cycles", CbFOnOff, [fl](bool) {
+        fl->v3warn(DEPRECATED, "Option '-fno-dfg-break-cycles' is deprecated and has no effect");
+    });
     DECL_OPTION("-fdfg-peephole", FOnOff, &m_fDfgPeephole);
     DECL_OPTION("-fdfg-peephole-", CbPartialMatch, [this](const char* optp) {  //
         m_fDfgPeepholeDisabled.erase(optp);
@@ -1484,12 +1510,18 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc,
     DECL_OPTION("-ffunc-opt-balance-cat", FOnOff, &m_fFuncBalanceCat);
     DECL_OPTION("-ffunc-opt-split-cat", FOnOff, &m_fFuncSplitCat);
     DECL_OPTION("-fgate", FOnOff, &m_fGate);
+    DECL_OPTION("-fico-change-detect", CbFOnOff, [this](bool flag) {  //
+        m_fIcoChangeDetect.setTrueOrFalse(flag);
+    });
     DECL_OPTION("-finline", FOnOff, &m_fInline);
+    DECL_OPTION("-finline-cfuncs", FOnOff, &m_fInlineCFuncs);
     DECL_OPTION("-finline-funcs", FOnOff, &m_fInlineFuncs);
     DECL_OPTION("-finline-funcs-eager", FOnOff, &m_fInlineFuncsEager);
     DECL_OPTION("-flife", FOnOff, &m_fLife);
     DECL_OPTION("-flife-post", FOnOff, &m_fLifePost);
-    DECL_OPTION("-flift-expr", FOnOff, &m_fLiftExpr);
+    DECL_OPTION("-flift-expr", CbFOnOff, [fl](bool) {
+        fl->v3warn(DEPRECATED, "Option '-fno-lift-expr' is deprecated and has no effect");
+    });
     DECL_OPTION("-flocalize", FOnOff, &m_fLocalize);
     DECL_OPTION("-fmerge-cond", FOnOff, &m_fMergeCond);
     DECL_OPTION("-fmerge-cond-motion", FOnOff, &m_fMergeCondMotion);
@@ -1745,10 +1777,6 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc,
     DECL_OPTION("-std-package", OnOff, &m_stdPackage);
     DECL_OPTION("-std-waiver", OnOff, &m_stdWaiver);
     DECL_OPTION("-stop-fail", OnOff, &m_stopFail);
-    DECL_OPTION("-structs-packed", CbOnOff, [this, fl](bool flag) {
-        m_structsPacked = flag;
-        fl->v3warn(DEPRECATED, "Option --structs-packed is deprecated, avoid use");
-    }).undocumented();
     DECL_OPTION("-sv", CbCall, [this]() { m_defaultLanguage = V3LangCode::L1800_2023; });
 
     DECL_OPTION("-no-threads", CbCall, [this, fl]() {
@@ -2271,6 +2299,7 @@ void V3Options::showVersion(bool verbose) {
     cout << "Supported features (compiled-in or forced by environment):\n";
     cout << "    COROUTINES         = " << getSupported("COROUTINES") << "\n";
     cout << "    SYSTEMC            = " << getSupported("SYSTEMC") << "\n";
+    cout << "    TSAN               = " << getSupported("TSAN") << "\n";
 }
 
 //======================================================================
@@ -2346,7 +2375,10 @@ void V3Options::optimize(int level) {
     const bool flag = level > 0;
     m_fAcycSimp = flag;
     m_fAssemble = flag;
-    m_fCase = flag;
+    m_fBitScanLoops = flag;
+    m_fCaseDecoder = flag;
+    m_fCaseTable = flag;
+    m_fCaseTree = flag;
     m_fCombine = flag;
     m_fConst = flag;
     m_fConstBitOpTree = flag;
@@ -2354,9 +2386,11 @@ void V3Options::optimize(int level) {
     m_fDfg = flag;
     m_fDeadAssigns = flag;
     m_fDeadCells = flag;
+    m_fDeadMethods = flag;
     m_fExpand = flag;
     m_fGate = flag;
     m_fInline = flag;
+    m_fInlineCFuncs = flag;
     m_fLife = flag;
     m_fLifePost = flag;
     m_fLocalize = flag;

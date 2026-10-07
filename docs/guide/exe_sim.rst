@@ -1,5 +1,6 @@
-.. SPDX-FileCopyrightText: 2003-2026 Wilson Snyder
-.. SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+..
+   SPDX-FileCopyrightText: 2003-2026 Wilson Snyder
+   SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
 .. _simulation runtime arguments:
 
@@ -19,6 +20,13 @@ Summary:
    .. include:: ../_build/gen/args_verilated.rst
 
 Options:
+
+.. option:: +verilator+assert+lock
+
+   Only allow command line options to disable / enable assertions.
+   Disables RTL from changing assertion handling via ``$asserton``,
+   ``$assertoff``, and ``$assertcontrol``. Also prevents ``VerilatedContext*``
+   assertion control functions from updating assertion handling.
 
 .. option:: +verilator+coverage+file+<filename>
 
@@ -50,8 +58,8 @@ Options:
 
 .. option:: +verilator+log+file+<filename>
 
-    Log all stdout and stderr to the specified output filename. If not specified
-    the normal stdout/stderr streams are used.
+   Log all stdout and stderr to the specified output filename. If not specified
+   the normal stdout/stderr streams are used.
 
 .. option:: +verilator+noassert
 
@@ -113,7 +121,7 @@ Options:
    When a model was Verilated using :vlopt:`--x-initial unique
    <--x-initial>`, sets the simulation runtime initialization technique. 0
    = Reset to zeros. 1 = Reset to all-ones. 2 = Randomize. See
-   :ref:`Unknown States`.
+   :ref:`Unknown States`.  Default is 0.
 
 .. option:: +verilator+seed+<value>
 
@@ -137,6 +145,20 @@ Options:
 .. option:: +verilator+version
 
    Displays program version and exits.
+
+.. option:: +verilator+vpi+<library>[:<bootstrap>]
+
+   Load a VPI shared library before simulation starts. Only available when the
+   model was Verilated with :vlopt:`--vpi` and :vlopt:`--main` (or
+   :vlopt:`--binary`). ``<library>`` is the path to the shared library. If
+   ``:<bootstrap>`` is given, that named no-argument function is called;
+   otherwise the library's ``vlog_startup_routines`` array (IEEE 1800 38.37.2) is
+   invoked. May be repeated to load multiple libraries.
+
+   Runtime loading is supported on POSIX platforms only (it relies on the
+   executable exporting its VPI symbols to the loaded library); on Windows the
+   argument is rejected and the VPI code must instead be statically linked
+   into the model.
 
 .. option:: +verilator+wno+unsatconstr+<value>
 

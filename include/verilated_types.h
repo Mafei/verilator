@@ -97,6 +97,28 @@ struct VlWide final {
     bool operator!=(const VlWide<N_Words>& that) const VL_PURE { return !(*this == that); }
     EData& operator[](size_t index) VL_MT_SAFE { return m_storage[index]; }
     const EData& operator[](size_t index) const VL_MT_SAFE { return m_storage[index]; }
+    VlWide<N_Words>& operator&=(const VlWide& rhs) {
+        VL_AND_W(N_Words, *this, *this, rhs);
+        return *this;
+    }
+    VlWide<N_Words>& operator|=(const VlWide& rhs) {
+        VL_OR_W(N_Words, *this, *this, rhs);
+        return *this;
+    }
+    VlWide<N_Words>& operator^=(const VlWide& rhs) {
+        VL_XOR_W(N_Words, *this, *this, rhs);
+        return *this;
+    }
+    VlWide<N_Words>& operator+=(const VlWide& rhs) {
+        VL_ADD_W(N_Words, *this, *this, rhs);
+        return *this;
+    }
+    VlWide<N_Words>& operator*=(const VlWide& rhs) {
+        VlWide<N_Words> out{};
+        VL_MUL_W(N_Words, out, *this, rhs);
+        for (size_t i = 0; i < N_Words; ++i) m_storage[i] = out.m_storage[i];
+        return *this;
+    }
 
     // METHODS
     EData& at(size_t index) VL_MT_SAFE { return m_storage[index]; }
@@ -192,7 +214,7 @@ public:
 };
 static_assert(sizeof(WDataInP) == sizeof(EData*), "WDataInP should be a single pointer");
 
-static int _vl_cmp_w(int words, WDataInP const lwp, WDataInP const rwp) VL_PURE;
+inline int _vl_cmp_w(int words, WDataInP const lwp, WDataInP const rwp) VL_PURE;
 
 template <std::size_t N_Words>
 bool VlWide<N_Words>::operator<(const VlWide<N_Words>& rhs) const VL_PURE {
@@ -209,7 +231,7 @@ extern std::string VL_TO_STRING(SData lhs);
 extern std::string VL_TO_STRING(IData lhs);
 extern std::string VL_TO_STRING(QData lhs);
 extern std::string VL_TO_STRING(double lhs);
-inline std::string VL_TO_STRING(const std::string& obj) { return "\"" + obj + "\""; }
+extern std::string VL_TO_STRING(const std::string& obj) VL_PURE;
 template <std::size_t N_Words>
 inline std::string VL_TO_STRING(const VlWide<N_Words>& obj) {
     return VL_TO_STRING_W(N_Words, obj);
@@ -254,7 +276,7 @@ constexpr IData VL_CLOG2_CE_Q(QData lhs) VL_PURE {
 // Random
 
 // Random Number Generator with internal state
-class VlRNG final {
+class VlRNG VL_NOT_FINAL {
     std::array<uint64_t, 2> m_state;
 
 public:
@@ -273,6 +295,22 @@ public:
     static VlRNG& vl_thread_rng() VL_MT_SAFE;
 };
 
+// VlRNG that also counts how often it was reseeded, for randomize() to notice.
+class VlRNGReseeds final : public VlRNG {
+    uint64_t m_reseeds = 0;  // Times the state was set from outside
+
+public:
+    void srandom(uint64_t n) VL_MT_UNSAFE {
+        VlRNG::srandom(n);
+        ++m_reseeds;
+    }
+    void set_randstate(const std::string& state) VL_MT_UNSAFE {
+        VlRNG::set_randstate(state);
+        ++m_reseeds;
+    }
+    uint64_t reseeds() const VL_MT_UNSAFE { return m_reseeds; }
+};
+
 //===================================================================
 // Metadata of processes
 using VlProcessRef = std::shared_ptr<VlProcess>;
@@ -284,7 +322,7 @@ class VlProcess final {
     int m_state;  // Current state of the process
     VlProcessRef m_parentp = nullptr;  // Parent process, if exists
     std::set<VlProcess*> m_children;  // Active child processes
-    VlForkSyncState* m_forkSyncOnKillp
+    std::shared_ptr<VlForkSyncState> m_forkSyncOnKillp
         = nullptr;  // Optional fork..join counter to decrement on kill
     bool m_forkSyncOnKillDone = false;  // Ensure on-kill callback fires only once
     VlRNG m_rng;  // Per-process RNG (IEEE 1800-2023 18.14)
@@ -315,6 +353,7 @@ public:
 
     ~VlProcess() {
         if (m_parentp) m_parentp->detach(this);
+        if (t_currentp == this) t_currentp = m_parentp.get();
     }
 
     void attach(VlProcess* childp) { m_children.insert(childp); }
@@ -325,13 +364,14 @@ public:
     void disable() {
         state(KILLED);
         disableFork();
+        m_forkSyncOnKillp = nullptr;
     }
     void disableFork() {
         // childp->disable() may resume coroutines and mutate m_children
         const std::set<VlProcess*> children = m_children;
         for (VlProcess* childp : children) childp->disable();
     }
-    void forkSyncOnKill(VlForkSyncState* forkSyncp);
+    void forkSyncOnKill(std::shared_ptr<VlForkSyncState> forkSyncp);
     void forkSyncOnKillClear(VlForkSyncState* forkSyncp);
     bool completed() const { return state() == FINISHED || state() == KILLED; }
     bool completedFork() const {
@@ -909,7 +949,7 @@ public:
     VlQueue min(T_Func with_func) const {
         if (m_deque.empty()) return VlQueue{};
         const auto it = std::min_element(m_deque.cbegin(), m_deque.cend(),
-                                         [&with_func](const IData& a, const IData& b) {
+                                         [&with_func](const T_Value& a, const T_Value& b) {
                                              return with_func(0, a) < with_func(0, b);
                                          });
         return VlQueue::consV(*it);
@@ -923,7 +963,7 @@ public:
     VlQueue max(T_Func with_func) const {
         if (m_deque.empty()) return VlQueue{};
         const auto it = std::max_element(m_deque.cbegin(), m_deque.cend(),
-                                         [&with_func](const IData& a, const IData& b) {
+                                         [&with_func](const T_Value& a, const T_Value& b) {
                                              return with_func(0, a) < with_func(0, b);
                                          });
         return VlQueue::consV(*it);
@@ -1097,9 +1137,7 @@ public:
         return 1;
     }
     // Setting. Verilog: assoc[index] = v
-    // Can't just overload operator[] or provide a "at" reference to set,
-    // because we need to be able to insert only when the value is set
-    T_Value& at(const T_Key& index) {
+    T_Value& atWrite(const T_Key& index) {
         const auto it = m_map.find(index);
         if (it == m_map.end()) {
             std::pair<typename Map::iterator, bool> pit = m_map.emplace(index, m_defaultValue);
@@ -1115,7 +1153,7 @@ public:
     }
     // Setting as a chained operation
     VlAssocArray& set(const T_Key& index, const T_Value& value) {
-        at(index) = value;
+        atWrite(index) = value;
         return *this;
     }
     VlAssocArray& setDefault(const T_Value& value) {
@@ -1280,7 +1318,7 @@ public:
     }
 
     T_Value r_sum() const {
-        T_Value out(0);  // Type must have assignment operator
+        T_Value out = T_Value{};
         for (const auto& i : m_map) out += i.second;
         return out;
     }
@@ -1291,8 +1329,9 @@ public:
         return out;
     }
     T_Value r_product() const {
-        if (m_map.empty()) return T_Value(0);  // The big three do it this way
-        T_Value out = T_Value(1);
+        // The big three return 0 when assoc array is empty
+        if (m_map.empty()) return T_Value{};
+        T_Value out = T_Value{1};
         for (const auto& i : m_map) out *= i.second;
         return out;
     }
@@ -1304,8 +1343,9 @@ public:
         return out;
     }
     T_Value r_and() const {
-        if (m_map.empty()) return T_Value(0);  // The big three do it this way
-        T_Value out = ~T_Value(0);
+        // The big three return 0 when assoc array is empty
+        if (m_map.empty()) return T_Value{};
+        T_Value out = m_map.cbegin()->second;
         for (const auto& i : m_map) out &= i.second;
         return out;
     }
@@ -1317,7 +1357,7 @@ public:
         return out;
     }
     T_Value r_or() const {
-        T_Value out = T_Value(0);
+        T_Value out = T_Value{};
         for (const auto& i : m_map) out |= i.second;
         return out;
     }
@@ -1328,7 +1368,7 @@ public:
         return out;
     }
     T_Value r_xor() const {
-        T_Value out = T_Value(0);
+        T_Value out = T_Value{};
         for (const auto& i : m_map) out ^= i.second;
         return out;
     }
@@ -1370,7 +1410,7 @@ void VL_READMEM_N(bool hex, int bits, const std::string& filename,
         QData addr;
         std::string data;
         if (rmem.get(addr /*ref*/, data /*ref*/)) {
-            rmem.setData(&(obj.at(addr)), data);
+            rmem.setData(&(obj.atWrite(addr)), data);
         } else {
             break;
         }
@@ -1427,6 +1467,14 @@ public:
     const T_Value* data() const { return &m_storage[0]; }
 
     constexpr std::size_t size() const { return N_Depth; }
+
+    // Runtime slice v[loIdx +: N_Out], loIdx being an index into m_storage
+    template <std::size_t N_Out>
+    VlUnpacked<T_Value, N_Out> slice(int32_t loIdx) const {
+        VlUnpacked<T_Value, N_Out> out;
+        for (std::size_t i = 0; i < N_Out; ++i) out.m_storage[i] = m_storage[loIdx + i];
+        return out;
+    }
 
     void fill(const T_Value& value) {
         std::fill(std::begin(m_storage), std::end(m_storage), value);
@@ -2045,8 +2093,24 @@ struct VlNull final {
     operator T*() const {
         return nullptr;
     }
+    template <class T>
+    bool operator==(T* rhs) const {
+        return !rhs;
+    }
+    template <class T>
+    bool operator==(const T* rhs) const {
+        return !rhs;
+    }
 };
-inline bool operator==(const void* ptr, VlNull) { return !ptr; }
+
+template <class T>
+inline bool operator==(T* lhs, VlNull) {
+    return !lhs;
+}
+template <class T>
+inline bool operator==(const T* lhs, VlNull) {
+    return !lhs;
+}
 
 //===================================================================
 // Verilog class reference container
@@ -2199,7 +2263,7 @@ public:
 };
 
 template <typename T_Lhs, typename T_Out>
-static inline bool VL_CAST_DYNAMIC(VlClassRef<T_Lhs> in, VlClassRef<T_Out>& outr) {
+inline bool VL_CAST_DYNAMIC(VlClassRef<T_Lhs> in, VlClassRef<T_Out>& outr) {
     if (!in) {
         outr = VlNull{};
         return true;
@@ -2213,7 +2277,7 @@ static inline bool VL_CAST_DYNAMIC(VlClassRef<T_Lhs> in, VlClassRef<T_Out>& outr
 }
 
 template <typename T_Lhs>
-static inline bool VL_CAST_DYNAMIC(VlNull, VlClassRef<T_Lhs>& outr) {
+inline bool VL_CAST_DYNAMIC(VlNull, VlClassRef<T_Lhs>& outr) {
     outr = VlNull{};
     return true;
 }

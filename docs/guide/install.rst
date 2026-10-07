@@ -1,5 +1,6 @@
-.. SPDX-FileCopyrightText: 2003-2026 Wilson Snyder
-.. SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+..
+   SPDX-FileCopyrightText: 2003-2026 Wilson Snyder
+   SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
 .. _installation:
 
@@ -173,7 +174,7 @@ once, after ``configure``:
    # Install dependencies
    sudo apt install python3-pip
 
-   # Create Python virutal environment in .venv:
+   # Create Python virtual environment in .venv:
    make venv
 
    # Or alternatively, to put it somewhere else:
@@ -384,11 +385,9 @@ the files:
 
    make install
 
-
 .. Docker Build Environment
 
 .. include:: ../../ci/docker/buildenv/README.rst
-
 
 .. Docker Run Environment
 

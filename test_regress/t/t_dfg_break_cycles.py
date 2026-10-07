@@ -17,13 +17,15 @@ test.sim_time = 2000000
 if not os.path.exists(test.root + "/.git"):
     test.skip("Not in a git repository")
 
+test.top_filename = "t/t_dfg_break_cycles.v"
+
 # Read expected source lines hit
 expectedLines = set()
 
 with open(test.root + "/src/V3DfgBreakCycles.cpp", 'r', encoding="utf8") as fd:
     for lineno, line in enumerate(fd, 1):
         line = line.split("//")[0]
-        if re.match(r'^[^#]*SET_RESULT', line):
+        if re.match(r'^[^#]*RETURN_RESULT', line):
             expectedLines.add(lineno)
         if re.match(r'^[^#]*MASK', line):
             expectedLines.add(lineno)
@@ -65,7 +67,8 @@ with open(rdFile, 'r', encoding="utf8") as rdFh, \
 test.compile(verilator_flags2=[
     "--stats",
     "--build",
-    "-fno-dfg-break-cycles",
+    "-fno-dfg",
+    "-fno-gate",
     "+incdir+" + test.obj_dir,
     "-Mdir", test.obj_dir + "/obj_ref",
     "--prefix", "Vref",
@@ -82,15 +85,17 @@ test.compile(verilator_flags2=[
     "--build",
     "--exe",
     "-fno-const-before-dfg",
+    "-fno-gate",
     "+incdir+" + test.obj_dir,
     "-Mdir", test.obj_dir + "/obj_opt",
     "--prefix", "Vopt",
     "-Werror-UNOPTFLAT",
     "--dumpi-V3DfgBreakCycles", "9",  # To fill code coverage
+    "--debugi-V3DfgBreakCycles", "9",  # To fill code coverage
     "--debug", "--debugi", "0", "--dumpi-tree", "0",
     "-CFLAGS \"-I .. -I ../obj_ref\"",
     "../obj_ref/Vref__ALL.a",
-    "../../t/" + test.name + ".cpp"
+    "../../t/t_dfg_break_cycles.cpp"
 ])  # yapf:disable
 
 # Execute test to check equivalence

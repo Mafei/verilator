@@ -1,0 +1,72 @@
+name: Original four-state baselines
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: original-baselines
+  cancel-in-progress: true
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: dev
+            ref: dbb8aedaa478389639295e40f16dbc7183d10b48
+          - name: feature
+            ref: 5e132f32db577b3d596b66ce6378ac224ffa38d3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: fourstate-portable
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: antmicro/verilator
+          ref: ${{ matrix.ref }}
+          path: baseline
+          persist-credentials: false
+      - name: Add the public test harness and matching GNU Flex header adjustment
+        run: |
+          cp -R harness/ci/portable baseline/ci/
+          cp harness/test_regress/t/t_fourstate_portable.v baseline/test_regress/t/
+          cd baseline
+          python3 - <<'PY'
+          import pathlib
+          p = pathlib.Path('src/flexfix')
+          source = p.read_text()
+          marker = '    # Change int to size_t on LexerInput/LexerOutput when using macOS Tahoe\n'
+          if marker in source:
+              begin = source.index(marker)
+              end = source.index("    print(line, end='')", begin)
+              source = source[:begin] + '    # Use GNU Flex 2.6.4 and its matching header.\n\n' + source[end:]
+          p.write_text(source)
+          PY
+      - name: Build and compare the original implementation on Rocky 8.10
+        env:
+          PORTABLE_BASELINE: ${{ matrix.name }}
+        run: |
+          cd baseline
+          docker run --rm -e GITHUB_ACTIONS=true -e CC=gcc -e CXX=g++ -e PORTABLE_BASELINE \
+            -v "$PWD:/work" -w /work rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e bash -c '
+              set -e
+              dnf -y install dnf-plugins-core
+              dnf config-manager --set-enabled powertools
+              dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
+                autoconf automake make perl git curl tar gzip xz findutils diffutils \
+                python3.11 python3.11-pip zlib-devel help2man
+              ln -s /usr/bin/python3.11 /usr/local/bin/python3
+              bash ci/portable/build.bash rocky8-x86_64
+            '
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: original-${{ matrix.name }}-${{ matrix.ref }}
+          path: |
+            baseline/out/
+            baseline/logs/
+          if-no-files-found: error

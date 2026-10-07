@@ -43,8 +43,12 @@ The main flow of Verilator can be followed by reading the Verilator.cpp
 #. Parameters are resolved, and the design is elaborated.
 
 #. Verilator then performs additional edits and optimizations on the
-   hierarchical design. This includes coverage, assertions, X elimination,
-   inlining, constant propagation, and dead code elimination.
+   hierarchical design. This includes coverage, assertions, inlining,
+   constant propagation, and dead code elimination.
+
+#. Unknown values (x/z) are handled - in two-state mode their are
+   eliminated, in four-state mode they are split into two two-state values
+   which together encodes a four-state value.
 
 #. References in the design are then pseudo-flattened. Each module's
    variables and functions get "Scope" references. A scope reference is an
@@ -113,9 +117,9 @@ pointer to the ``AstNode`` currently being processed.
 
 There are notable sub-hierarchies of the ``AstNode`` sub-types, namely:
 
-1. All AST nodes representing data types derive from ``AstNodeDType``.
+#. All AST nodes representing data types derive from ``AstNodeDType``.
 
-2. All AST nodes representing expressions (i.e.: anything that stands for,
+#. All AST nodes representing expressions (i.e.: anything that stands for,
    or evaluates to a value) derive from ``AstNodeExpr``.
 
 
@@ -425,8 +429,9 @@ logic.
 
 To achieve this, we invoke ``V3Order::order`` on all of the combinational
 and hybrid logic, and iterate the resulting evaluation function until no
-more hybrid logic is triggered. This yields the `_eval_settle` function,
-which is invoked at the beginning of simulation after the `_eval_initial`.
+more hybrid logic is triggered. This yields the `_eval_stl` function, which
+the runtime event loop iterates at the beginning of simulation, after the
+`_eval_initial`.
 
 
 Partitioning logic for correct NBA updates
@@ -500,51 +505,66 @@ and clock signals on separate evaluations, as was necessary with earlier
 versions of Verilator).
 
 
-Constructing the top level `_eval` function
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Constructing the region evaluation functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To construct the top level `_eval` function, which updates the state of the
-circuit to the end of the current time step, we invoke ``V3Order::order``
-separately on the 'ico', 'act' and 'nba' logic, which yields the
-`_eval_ico`, `_eval_act`, and `_eval_nba` functions. We then put these all
-together with the corresponding functions that compute the respective
-trigger expressions into the top level `_eval` function, which on the high
-level has the form:
+To update the state of the circuit to the end of the current time step, we
+invoke ``V3Order::order`` separately on the 'ico', 'act' and 'nba' logic,
+which yields the `_eval_body__ico`, `_eval_body__act`, and
+`_eval_body__nba` functions. Each of these is then combined with the
+function computing the respective trigger expressions into a single entry
+point per region, `_eval_ico`, `_eval_act` and `_eval_nba`. A region entry
+point evaluates one iteration of its region, and returns whether it did any
+work, meaning the region has not converged yet and must be evaluated again.
+On the high level, `_eval_act` has the form:
 
 .. code-block:: C++
 
-   void _eval() {
-      // Update combinational logic dependent on top level inputs ('ico' region)
-      while (true) {
-        _eval__triggers__ico();
-        // If no 'ico' region trigger is active
-        if (!ico_triggers.any()) break;
-        _eval_ico();
-      }
-
-      // Iterate 'act' and 'nba' regions together
-      while (true) {
-
-        // Iterate 'act' region, this computes all derived clocks updaed in the
-        // Active scheduling region, but does not commit any NBAs that executed
-        // in 'act' region logic.
-        while (true) {
-          _eval__triggers__act();
-          // If no 'act' region trigger is active
-          if (!act_triggers.any()) break;
-          // Remember what 'act' triggers were active, 'nba' uses the same
-          latch_act_triggers_for_nba();
-          _eval_act();
-        }
-
-        // If no 'nba' region trigger is active
-        if (!nba_triggers.any()) break;
-
-        // Evaluate all other Active region logic, and commit NBAs
-        _eval_nba();
-      }
+   bool _eval_act() {
+      _eval_triggers_vec__act();
+      // Remember what 'act' triggers were active, 'nba' uses the same
+      latch_act_triggers_for_nba();
+      const bool execute = act_triggers.any();
+      // Compute all derived clocks updated in the Active scheduling region,
+      // but do not commit any NBAs that executed in 'act' region logic.
+      if (execute) _eval_body__act();
+      return execute;
    }
 
+The loops iterating these regions are not generated. They live in the
+runtime library, in ``VerilatedEvalLoop``, and the model exposes its region
+entry points to it as virtual methods of ``VerilatedModel``. The generated
+model holds a ``VerilatedEvalLoop`` as a member, which its ``eval_step``
+runs, and which on the high level has the form:
+
+.. code-block:: C++
+
+   void VerilatedEvalLoop::evalImpl() {
+      // Update combinational logic dependent on top level inputs ('ico' region)
+      uint32_t icoIterCount = 0;
+      do {
+        if (++icoIterCount > m_convergeLimit) didNotConverge("Input combinational");
+      } while (m_model.evalIco(icoIterCount == 1));
+
+      // Iterate 'act' and 'nba' regions together
+      uint32_t nbaIterCount = 0;
+      do {
+        if (++nbaIterCount > m_convergeLimit) didNotConverge("NBA");
+        // Iterate the 'act' region to convergence
+        uint32_t actIterCount = 0;
+        do {
+          if (++actIterCount > m_convergeLimit) didNotConverge("Active");
+        } while (m_model.evalAct());
+        // Evaluate all other Active region logic, and commit NBAs
+      } while (m_model.evalNba());
+   }
+
+The remaining regions ('inact', 'obs' and 'react') nest around these in the
+same manner, each iterating the loops of all regions that precede it in the
+SystemVerilog scheduling order. The runtime event loop calls every region
+unconditionally, so scheduling emits an entry point for each one even when
+the design has no logic in it. Such an entry point immediately returns
+false, ending its loop after a single iteration.
 
 Timing
 ------
@@ -666,23 +686,23 @@ The second visitor in ``V3Timing.cpp``, ``TimingControlVisitor``, uses the
 information provided by ``TimingSuspendableVisitor`` and transforms each
 timing control into a ``co_await``.
 
-* event controls are turned into ``co_await`` on a trigger scheduler's
+- event controls are turned into ``co_await`` on a trigger scheduler's
   ``trigger`` method. The awaited trigger scheduler is the one
   corresponding to the sentree referenced by the event control. This
   sentree is also referenced by the ``AstCAwait`` node, to be used later by
   the static scheduling code.
 
-* if an event control waits on a local variable or class member, it uses a
+- if an event control waits on a local variable or class member, it uses a
   local trigger which it evaluates inline. It awaits a dynamic trigger
   scheduler multiple times: for trigger evaluation, updates, and
   resumption. The dynamic trigger scheduler is responsible for resuming the
   coroutine at the correct point of evaluation.
 
-* delays are turned into ``co_await`` on a delay scheduler's ``delay``
+- delays are turned into ``co_await`` on a delay scheduler's ``delay``
   method. The created ``AstCAwait`` nodes also reference a special sentree
   related to delays, to be used later by the static scheduling code.
 
-* ``join`` and ``join_any`` are turned into ``co_await`` on a
+- ``join`` and ``join_any`` are turned into ``co_await`` on a
   ``VlForkSync``'s ``join`` method. Each forked process gets a
   ``VlForkSync::done`` call at the end.
 
@@ -730,57 +750,49 @@ they wouldn't be evaluated and next coroutine after resumption would fire
 the event `a` then it is impossible to get to know whether await or fire on
 event `a` was called first - which is necessary to know.
 
-There are two functions for managing timing logic called by ``_eval()``:
+There are two functions for managing timing logic called by the 'act'
+region:
 
-* ``_timing_ready()``, which commits all coroutines whose triggers were
-  not set in the current iteration,
-* ``_timing_resume()``, which calls `resume()` on all trigger and delay
+- ``_timing_ready()``, which commits all coroutines whose triggers were not
+  set in the current iteration,
+- ``_timing_resume()``, which calls `resume()` on all trigger and delay
   schedulers whose triggers were set in the current iteration.
 
 Thanks to this separation a coroutine:
 
-* awaiting a trigger cannot be suspended and resumed in the same iteration
+- awaiting a trigger cannot be suspended and resumed in the same iteration
   (``test_regress/t/t_timing_eval_act.v``) - which is necessary to make
   Verilator more predictable; this is the reason for introduction of 3rd
   stage in `VlTriggerScheduler` and thanks to this it is guaranteed that
   downstream logic will be evaluated before resumption (assuming that the
   coroutine wasn't already triggered in previous iteration);
-* cannot be resumed before it is suspended -
+- cannot be resumed before it is suspended -
   ``test_regress/t/t_event_control_double_excessive.v``;
-* firing cannot cannot be lost
-  (``test_regress/t/t_event_control_double_lost.v``) - which is possible when
-  triggers are not evaluated right before awaiting.
+- firing cannot cannot be lost
+  (``test_regress/t/t_event_control_double_lost.v``) - which is possible
+  when triggers are not evaluated right before awaiting.
 
-All coroutines are committed and resumed in the 'act' eval loop. With
-timing features enabled, the ``_eval()`` function takes this form:
+All coroutines are committed and resumed in the 'act' region. With timing
+features enabled, the 'act' region entry point takes this form:
 
 ::
 
-   void _eval() {
-     while (true) {
-       _eval__triggers__ico();
-       if (!ico_triggers.any()) break;
-       _eval_ico();
+   bool _eval_act() {
+     _eval_triggers_vec__act();
+
+     // Commit all non-triggered coroutines
+     _timing_commit();
+
+     const bool execute = act_triggers.any();
+     if (execute) {
+       latch_act_triggers_for_nba();
+
+       // Resume all triggered coroutines
+       _timing_resume();
+
+       _eval_body__act();
      }
-
-     while (true) {
-       while (true) {
-         _eval__triggers__act();
-
-         // Commit all non-triggered coroutines
-         _timing_commit();
-
-         if (!act_triggers.any()) break;
-         latch_act_triggers_for_nba();
-
-         // Resume all triggered coroutines
-         _timing_resume();
-
-         _eval_act();
-       }
-       if (!nba_triggers.any()) break;
-       _eval_nba();
-     }
+     return execute;
    }
 
 Forks
@@ -937,14 +949,15 @@ macro-task's dataset fits in one core's local caches.
 
 To achieve spatial locality, we tag each variable with the set of
 macro-tasks that access it. Let's call this set the "footprint" of that
-variable. The variables in a given module have a set of footprints. We group
-variables with identical non-empty footprints, emit those groups in deterministic
-footprint-key order, then emit variables with no footprint information last.
+variable. The variables in a given module have a set of footprints. We
+group variables with identical non-empty footprints, emit those groups in
+deterministic footprint-key order, then emit variables with no footprint
+information last.
 
-The first emitted variable in each footprint group is aligned to a cache-line
-boundary. This avoids false sharing between different macro-task footprints
-without building a complete pairwise-distance graph over all footprints, which
-would use excessive memory on very large models.
+The first emitted variable in each footprint group is aligned to a
+cache-line boundary. This avoids false sharing between different macro-task
+footprints without building a complete pairwise-distance graph over all
+footprints, which would use excessive memory on very large models.
 
 This is an old idea. Simulators designed at DEC in the early 1990s used
 similar techniques to optimize both single-thread and multithread modes.
@@ -1081,9 +1094,17 @@ solver gets a setup query, then the definition of variables, then all the
 constraints (SMT assertions) about the variables. Since the solver has no
 information about the class' PRNG state, if the problem is satisfiable, the
 solution space is further constrained by adding extra random constraints,
-and querying the values satisfying the problem statement. The constraint is
-currently constructed as fixing a simple xor of randomly chosen bits of the
-variables being randomized.
+and querying the values satisfying the problem statement. The constraints
+are currently built by the UniGen2 algorithm ("On Parallel Scalable Uniform
+SAT Witness Generation", Chakraborty et al.). It first works out how many
+random xor equations are needed to split the solution space into cells of a
+size worth enumerating, then draws one cell and enumerates it, which gives
+a near-uniform sample of the whole space. Both the estimate and the
+leftover solutions are cached, so the following calls are answered without
+asking the solver again. Cases outside its assumptions, such as ``randc``
+variables or soft constraints, fall back to pinning every free bit to a
+random value, or, when arrays are involved, to asserting four random xor
+equations in a row.
 
 The runtime classes used for handling the randomization are defined in
 ``verilated_random.h`` and ``verilated_random.cpp``.
@@ -1152,6 +1173,157 @@ gets reset, so that it can be reused by subsequent randomization attempts:
    (get-value)
    ...
    (reset)
+
+
+Four-state values
+-----------------
+
+Verilator may work in two and four-state logic mode. First one works by
+changing `x`/`z` values into `0`/`1` - depending on a case and flags
+provided by user. The four-state mode works by splitting four-state values
+into two two-state values which encodes a four-state value. The rest of
+this section will describe how Verilator works in four-state mode.
+
+Four-state values splitting
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Four-state values requires two bits to encode them. These are kept on
+corresponding positions of split values. This is made for plenty of reasons
+among them it is worth to mention:
+
+   - easier casting,
+
+   - faster arithmetics operations,
+
+   - similarity to what VPI expects.
+
+Four-state values are split into two two-state values which may be referred
+as:
+
+   - value part/aval
+
+   - xz part/bval/value complement
+
+When a four-state value is stored in a four-state variable this variable is
+split as well (into two-state variables) and a value part variable keeps a
+pointer to its complement and a complement has a flag indicating that this
+variable is a complement.
+
+Four-state values encoding
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Values are encoded the same way as VPI does it:
+
+========= = =
+aval\bval 0 1
+0         0 z
+1         1 x
+========= = =
+
+Therefore, when `bval` is equal to zero, signal has no unknown values and
+`aval` keeps its value in the same way as a two-state signal would.
+
+In general to cast a four-state value into a two-state value (where all
+unknown values will become `0`) the following expression may be applied:
+`aval & ~bval`.
+
+Four-state values detection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In four-state mode not all expressions are treated as four-state ones.
+Whether an expression should be treated as a four-state is decided in a
+`FourstateLogicTypePropagator` in `V3Fourstate.cpp`. This is not decided by
+types propagated by `V3Width` because currently it does not differentiate
+between `bits` and `logics` correctly - which is a key difference in this
+context.
+
+Expressions become a four-state one when it is impossible to trivially
+prove that an expression can be made a two-state.
+
+Examples:
+
+.. code-block:: SystemVerilog
+
+   integer a;
+   int b;
+   int c;
+   integer result = a + b;
+   //   four-state--^   ^
+   //         two-state-|
+   //               a + b
+   //               ^~~~~
+   //    four-state-|
+
+   integer result2 = b / c;
+   //     two-state--^   ^
+   //          two-state-|
+   //                b / c
+   //                ^~~~~
+   //     four-state-| because dividing by `0` is an 'x' and `c` may be `0`
+
+   int result3 = b / 3;
+   // two-state--^   ^
+   //      two-state-|
+   //            b / c
+   //            ^~~~~
+   //  two-state-| because it is trivially proven that rhs is not `0`
+
+Generally it is preferred to make as much expressions as it is possible
+two-state because they are faster.
+
+Four-state expressions handling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Four-state expressions are handled at compile time by transforming it into
+a combination of two-state expressions e.g.:
+
+.. code-block:: SystemVerilog
+
+   integer a;
+   integer b;
+   integer c = a + b;
+
+Will be transformed into:
+
+.. code-block:: SystemVerilog
+
+   integer a;
+   integer a_xz;
+   integer b;
+   integer b_xz;
+   integer c = |(a_xz | b_xz) ? '1 : a + b;
+   integer c_xz = |(a_xz | b_xz) ? '1 : '0;
+
+
+`AstFourstateExpr`
+~~~~~~~~~~~~~~~~~~
+
+`AstFourstateExpr` node keeps two children `valuep` (aval) and `xzp` (bval)
+and has been introduced to be able to fit a four-state value as a child of
+a node that expects an expression and for some reason may not be split
+e.g.: `AstTraceDecl`. This node should be used rarely and only in justified
+cases.
+
+Handling values after split
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Generally, four-state values after being split should be treated normally
+(as two-state values) by the rest of Verilator. When `AstFourstateExpr` is
+occurred it should be just iterated into unless it is somehow meaningful
+for a particular phase.
+
+It is only important to handle variables created as a result of splitting
+carefully. They should be handled together - if one is moved, the other one
+shall be as well; if one is removed, the other one shall be as well. The
+recommended way to handle such cases is to:
+
+   #. Skip complement variables.
+
+   #. When value part variable is occurred make a check on both value and
+   xz part.
+
+   #. If both variables meet a condition then both should be altered and
+   none if any of them does not meet the condition.
 
 
 Coding Conventions
@@ -1299,15 +1471,15 @@ the ``<description>`` field is ``<identifier> : <type>``, where
 ``<identifier>`` will be used as the base name of the generated operand
 accessors, and ``<type>`` is one of:
 
-1. An ``AstNode`` sub-class, defining the operand to be of that type,
+#. An ``AstNode`` sub-class, defining the operand to be of that type,
    always no-null, and with an always null ``nextp()``. That is, the child
    node is always present, and is a single ``AstNode`` (as opposed to a
    list).
 
-2. ``Optional[<AstNode sub-class>]``. This is just like in point 1 above,
+#. ``Optional[<AstNode sub-class>]``. This is just like in point 1 above,
    but defines the child node to be optional, meaning it may be null.
 
-3. ``List[AstNode sub-class]`` describes a list operand, which means the
+#. ``List[AstNode sub-class]`` describes a list operand, which means the
    child node may have a non-null ``nextp()`` and in addition the child
    itself may be null, representing an empty list.
 
@@ -1394,7 +1566,7 @@ calling ``accept`` on ``AstIf`` will look in turn for:
 
 There are three ways data is passed between visitor functions.
 
-1. A visitor-class member variable. This is generally for passing "parent"
+#. A visitor-class member variable. This is generally for passing "parent"
    information down to children. ``m_modp`` is a common example. It's set
    to NULL in the constructor, where that node (``AstModule`` visitor) sets
    it, then the children are iterated, then it's cleared. Children under an
@@ -1404,7 +1576,7 @@ There are three ways data is passed between visitor functions.
    visitor; otherwise exiting the lower for will lose the upper for's
    setting.
 
-2. User attributes. Each ``AstNode`` (**Note.** The AST node, not the
+#. User attributes. Each ``AstNode`` (**Note.** The AST node, not the
    visitor) has five user attributes, which may be accessed as an integer
    using the ``user1()`` through ``user4()`` methods, or as a pointer (of
    type ``AstNUser``) using the ``user1p()`` through ``user4p()`` methods
@@ -1435,7 +1607,7 @@ There are three ways data is passed between visitor functions.
    so it's ok to call fairly often. For example, it's commonly called on
    every module.
 
-3. Parameters can be passed between the visitors in close to the "normal"
+#. Parameters can be passed between the visitors in close to the "normal"
    function caller to callee way. This is the second ``vup`` parameter of
    type ``AstNUser`` that is ignored on most of the visitor functions.
    V3Width does this, but it proved messier than the above and is
@@ -2125,19 +2297,19 @@ To print a node:
 ``src/.gdbinit`` and ``src/.gdbinit.py`` define handy utilities for working
 with JSON AST dumps. For example:
 
-* ``jstash nodep`` - Perform a JSON AST dump and save it into GDB value
+- ``jstash nodep`` - Perform a JSON AST dump and save it into GDB value
   history (e.g. ``$1``)
 
-* ``jtree nodep`` - Perform a JSON AST dump and pretty print it using
+- ``jtree nodep`` - Perform a JSON AST dump and pretty print it using
   ``astsee_verilator``.
-* ``jtree $1`` - Pretty print a dump that was previously saved by
+- ``jtree $1`` - Pretty print a dump that was previously saved by
   ``jstash``.
-* ``jtree nodep -d '.file, .timeunit'`` - Perform a JSON AST dump, filter
+- ``jtree nodep -d '.file, .timeunit'`` - Perform a JSON AST dump, filter
   out some fields and pretty print it.
 
-* ``jtree 0x55555613dca0`` - Pretty print using address literal (rather
+- ``jtree 0x55555613dca0`` - Pretty print using address literal (rather
   than actual pointer).
-* ``jtree $1 nodep`` - Diff ``nodep`` against an older dump.
+- ``jtree $1 nodep`` - Diff ``nodep`` against an older dump.
 
 A detailed description of ``jstash`` and ``jtree`` can be displayed using
 ``gdb``'s ``help`` command.
@@ -2243,25 +2415,25 @@ Adding a New Feature
 
 Generally, what would you do to add a new feature?
 
-1. File an issue (if there isn't already) so others know what you're
+#. File an issue (if there isn't already) so others know what you're
    working on.
 
-2. Make a testcase in the test_regress/t/t_EXAMPLE format, see `Testing`.
+#. Make a testcase in the test_regress/t/t_EXAMPLE format, see `Testing`.
 
-3. If grammar changes are needed, look at the IEEE 1800-2023 Appendix A, as
+#. If grammar changes are needed, look at the IEEE 1800-2023 Appendix A, as
    src/verilog.y generally follows the same rule layout.
 
-4. If a new Ast type is needed, add it to the appropriate V3AstNode*.h.
+#. If a new Ast type is needed, add it to the appropriate V3AstNode*.h.
    Follow the convention described above about the AstNode type hierarchy.
    Ordering of definitions is enforced by ``astgen``.
 
-5. Now you can run ``test_regress/t/t_<newtestcase>.py --debug`` and it'll
+#. Now you can run ``test_regress/t/t_<newtestcase>.py --debug`` and it'll
    probably fail, but you'll see a
    ``test_regress/obj_dir/t_<newtestcase>/*.tree`` file which you can
    examine to see if the parsing worked. See also the sections above on
    debugging.
 
-6. Modify the later visitor functions to process the new feature as needed.
+#. Modify the later visitor functions to process the new feature as needed.
 
 
 Adding a New Pass

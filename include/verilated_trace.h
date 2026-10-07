@@ -448,11 +448,14 @@ public:
     }
     VL_ATTR_ALWINLINE void chgFourstateQData(uint32_t* oldp, QData newval, QData newvalXZ,
                                              int bits) {
-        QData* oldcp = reinterpret_cast<QData*>(oldp);
-        const uint32_t diff = (oldcp[0] ^ newval) | (oldcp[1] ^ newvalXZ);
+        QData oldVal;
+        QData oldXZ;
+        std::memcpy(&oldVal, oldp, sizeof(QData));
+        std::memcpy(&oldXZ, oldp + (sizeof(QData) / sizeof(uint32_t)), sizeof(QData));
+        const uint64_t diff = (oldVal ^ newval) | (oldXZ ^ newvalXZ);
         if (VL_UNLIKELY(diff)) fullFourstateQData(oldp, newval, newvalXZ, bits);
     }
-    VL_ATTR_ALWINLINE void chgWData(uint32_t* oldp, WDataInP newval, int bits) {
+    VL_ATTR_ALWINLINE void chgWData(uint32_t* oldp, const WDataInP newval, int bits) {
         for (int i = 0; i < VL_WORDS_I(bits); ++i) {
             if (VL_UNLIKELY(oldp[i] ^ newval[i])) {
                 fullWData(oldp, newval, bits);
@@ -460,8 +463,8 @@ public:
             }
         }
     }
-    VL_ATTR_ALWINLINE void chgFourstateWData(uint32_t* oldp, WDataInP newval, WDataInP newvalXZ,
-                                             int bits) {
+    VL_ATTR_ALWINLINE void chgFourstateWData(uint32_t* oldp, const WDataInP newval,
+                                             const WDataInP newvalXZ, int bits) {
         for (int i = 0; i < VL_WORDS_I(bits); ++i) {
             const int oldIdx = i << 1;
             if (VL_UNLIKELY((oldp[oldIdx] ^ newval[i]) | (oldp[oldIdx | 1] ^ newvalXZ[i]))) {

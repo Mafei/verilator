@@ -18,8 +18,6 @@
 
 #include "V3EmitCFunc.h"
 
-#include "V3TSP.h"
-
 #include <map>
 #include <vector>
 
@@ -306,7 +304,11 @@ void EmitCFunc::displayNode(AstNode* nodep, AstSFormatF* fmtp,  // fmtp is nullp
     int argc = 0;
     if (needsScope) ++argc;
     if (needsTimescale) ++argc;
-    for (AstNode* argp = exprsp; argp; argp = argp->nextp()) ++argc;
+    for (AstNode* argp = exprsp; argp; argp = argp->nextp()) {
+        ++argc;
+        const AstSFormatArg* const fargp = VN_CAST(argp, SFormatArg);
+        if (fargp && fargp->formatAttr().isEnum()) ++argc;  // Additional name argument
+    }
     ofp()->puts("," + std::to_string(argc));
 
     if (needsScope) {
@@ -344,10 +346,13 @@ void EmitCFunc::displayNode(AstNode* nodep, AstSFormatF* fmtp,  // fmtp is nullp
         AstNode* const subargp = fargp ? fargp->exprp() : argp;
         const VFormatAttr formatAttr = AstSFormatArg::formatAttrDefauled(fargp, subargp->dtypep());
         puts(", '"s + formatAttr.ascii() + '\'');
-        if (formatAttr.isTwostate() || formatAttr.isFourstate())
+        if (formatAttr.isSigned() || formatAttr.isUnsigned() || formatAttr.isEnum()
+            || formatAttr.isFourstate())
             puts("," + cvtToStr(subargp->widthMin()));
         const bool addrof = isScan || formatAttr.isString() || formatAttr.isComplex();
+        const bool wideEnum = formatAttr.isEnum() && subargp->isWide();
         puts(",");
+        if (wideEnum) puts("static_cast<const EData*>(");
         if (addrof) puts("&(");
         if (VN_IS(subargp, StreamR))
             emitStreamR(
@@ -366,6 +371,12 @@ void EmitCFunc::displayNode(AstNode* nodep, AstSFormatF* fmtp,  // fmtp is nullp
         }
         if (addrof) puts(")");
         if (!addrof) emitDatap(argp);
+        if (wideEnum) puts(")");
+        if (formatAttr.isEnum()) {
+            puts(", '"s + VFormatAttr{VFormatAttr::STRING}.ascii() + "', &(");
+            iterateConst(fargp->namep());
+            puts(")");
+        }
         ofp()->indentDec();
     }
 
@@ -497,7 +508,7 @@ void EmitCFunc::emitVarReset(const string& prefix, AstVar* varp, bool constructi
             const auto& mapr = initarp->map();
             for (const auto& itr : mapr) {
                 AstNode* const valuep = itr.second->valuep();
-                emitSetVarConstant(newPrefix + ".at(" + cvtToStr(itr.first) + ")",
+                emitSetVarConstant(newPrefix + ".atWrite(" + cvtToStr(itr.first) + ")",
                                    VN_AS(valuep, Const));
             }
         } else if (VN_IS(dtypep, WildcardArrayDType)) {
@@ -508,7 +519,7 @@ void EmitCFunc::emitVarReset(const string& prefix, AstVar* varp, bool constructi
             const auto& mapr = initarp->map();
             for (const auto& itr : mapr) {
                 AstNode* const valuep = itr.second->valuep();
-                emitSetVarConstant(newPrefix + ".at(" + cvtToStr(itr.first) + ")",
+                emitSetVarConstant(newPrefix + ".atWrite(" + cvtToStr(itr.first) + ")",
                                    VN_AS(valuep, Const));
             }
         } else if (AstUnpackArrayDType* const adtypep = VN_CAST(dtypep, UnpackArrayDType)) {
@@ -553,8 +564,10 @@ string EmitCFunc::emitVarResetRecurse(const AstVar* varp, bool constructing,
                                      depth + 1, suffix + ".atDefault()", nullptr);
     } else if (VN_IS(dtypep, CDType)) {
         return "";  // Constructor does it
-    } else if (VN_IS(dtypep, ClassRefDType)) {
-        return "";  // Constructor does it
+    } else if (VN_IS(dtypep, CoverCrossDType) || VN_IS(dtypep, CoverpointDType)) {
+        return "";  // Covergroup constructor creates the runtime and assigns the pointer
+    } else if (const AstClassRefDType* const adtypep = VN_CAST(dtypep, ClassRefDType)) {
+        return adtypep->rawPointer() ? varNameProtected + suffix + " = nullptr;\n" : "";
     } else if (VN_IS(dtypep, IfaceRefDType)) {
         return varNameProtected + suffix + " = nullptr;\n";
     } else if (const AstDynArrayDType* const adtypep = VN_CAST(dtypep, DynArrayDType)) {
@@ -606,6 +619,9 @@ string EmitCFunc::emitVarResetRecurse(const AstVar* varp, bool constructing,
         return "";
     } else if (basicp && (basicp->isRandomGenerator() || basicp->isStdRandomGenerator())) {
         return "";
+    } else if (basicp && basicp->isCovergroupInstHandle()) {
+        // The handle's own constructor deals with it.
+        return "";
     } else if (basicp && (basicp->isEvent())) {
         return "VlAssignableEvent{};\n";
     } else if (basicp) {
@@ -629,6 +645,19 @@ string EmitCFunc::emitVarResetRecurse(const AstVar* varp, bool constructing,
                     out += varNameProtected + suffix + "[" + cvtToStr(w) + "] = ";
                     out += cvtToStr(constp->num().edataWord(w)) + "U;\n";
                 }
+            } else if (v3Global.opt.fourstate()
+                       && (varp->isFourstateComplement() || varp->fourstateComplementp())) {
+                if (!varp->isTopLevelPort()
+                    && (varp->isFourstateComplement() || !varp->varType().isNet())) {
+                    out += "VL_ALLONES_W(";  // This is a temporary solution - interleaved signals
+                                             // will change this
+                } else {
+                    out += (slow ? "VL_ZERO_RESET_W(" : "VL_ZERO_W(");
+                }
+                out += cvtToStr(dtypep->widthMin());
+                out += ", " + varNameProtected + suffix;
+                out += ");\n";
+                return out;
             } else {
                 out += zeroit ? (slow ? "VL_ZERO_RESET_W(" : "VL_ZERO_W(")
                               : (varp->isXTemp() ? "VL_SCOPED_RAND_RESET_ASSIGN_W("
@@ -660,14 +689,13 @@ string EmitCFunc::emitVarResetRecurse(const AstVar* varp, bool constructing,
             } else if (v3Global.opt.fourstate()
                        && (varp->fourstateComplementp() || varp->isFourstateComplement())) {
                 V3Number xNum{varp->fileline(), varp->width(), 0};
-                bool isTop = false;
+                const bool isTop = varp->isTopLevelPort();
                 bool moduleLevel = false;
                 if (varp->varType() == VVarType::PORT) {
                     const AstNode* iter = varp;
                     while (!iter->firstAbovep()) iter = iter->backp();
                     if (AstModule* const modep = VN_CAST(iter->firstAbovep(), Module)) {
                         moduleLevel = true;
-                        isTop = modep->isTop();
                     }
                 }
                 if ((!v3Global.opt.fourstateApi() || !isTop)

@@ -1,5 +1,6 @@
-.. SPDX-FileCopyrightText: 2003-2026 Wilson Snyder
-.. SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+..
+   SPDX-FileCopyrightText: 2003-2026 Wilson Snyder
+   SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
 ===================
 Errors and Warnings
@@ -442,6 +443,25 @@ List Of Warnings
    in decreased performance.
 
 
+.. option:: CASTFOURSTATE
+
+   Warns on an implicit conversion from four-state logic to two-state logic.
+   This warning is due to an unsupported :vlopt:`--fourstate` language construct.
+
+   The warning may be worked around by explicitly casting logic into two-state variant
+   (e.g.: `integer` into `int`, `logic` into `bit`).
+
+   Ignoring this warning may cause an unexpected behavior if value while
+   being casted has an unknown value (`x` or `z`) - it will become `0`;
+   in other cases (for known values) simulation will work correctly.
+
+   In this experimental branch, four-state formatting preserves both the value
+   and X/Z components and does not trigger this warning. Passing a four-state
+   argument to embedded C code or using a four-state file descriptor still
+   requires a conversion. The earlier name ``LOGICCAST`` remains an alias for
+   compatibility with existing warning controls.
+
+
 .. option:: CDCRSTLOGIC
 
    Historical, never issued since version 5.008.
@@ -590,6 +610,10 @@ List Of Warnings
    Warns that Verilator does not support certain forms of
    ``covergroup``, ``coverpoint``, and coverage options, and the
    construct was ignored.
+
+   This includes crosses whose normal-bin Cartesian product exceeds
+   ``2**32 - 1`` tuples.  The limit is checked during Verilation for both
+   automatic and explicit cross bins.
 
    Disabling the :option:`UNSUPPORTED` error also disables this warning.
 
@@ -881,6 +905,22 @@ List Of Warnings
    Other tools with similar warnings: Verible's posix-eof, "File must end
    with a newline."
 
+
+.. option:: FINALDLY
+
+   Error issued when a non-blocking assignment `<=` is used in a
+   `final` block.
+
+   This error can be disabled. If disabled, the assignment will be
+   executed as a `=` blocking assignment.
+
+   Faulty example:
+
+   .. include:: ../../docs/gen/ex_FINALDLY_faulty.rst
+
+   Results in:
+
+   .. include:: ../../docs/gen/ex_FINALDLY_msg.rst
 
 .. option:: FSMMULTI
 
@@ -1178,7 +1218,7 @@ List Of Warnings
 
 .. option:: INITIALDLY
 
-   .. TODO better example
+   Historical, never issued since version 5.050.
 
    Warns that the code has a delayed assignment inside of an ``initial`` or
    ``final`` block. If this message is suppressed, Verilator will convert
@@ -1457,9 +1497,52 @@ List Of Warnings
         q <= d;
       end
 
+   A further case is when a signal named as a clocking block ``output`` is
+   also driven by a continuous assignment, or is named as an ``output`` of a
+   second clocking block. The clocking block drives the signal, so the design
+   and the testbench contend for it and the synchronous drive may be silently
+   lost. Declare the clocking block ``input`` if the intent is only to
+   observe the signal.
+
    Ignoring this warning may hide clock domain crossing, timing, or
    portability bugs. It may also cause longer simulation runtimes due to
    reduced optimizations.
+
+
+.. option:: MULTIDRIVENPROC
+
+   Warns that the whole of a variable is driven by more than one plain
+   ``always`` block. Unlike the :option:`MULTIDRIVEN` cases, plain
+   ``always`` blocks carry no ``always_comb``/``always_ff`` intent, so this
+   is legal SystemVerilog rather than an IEEE 1800 violation. It is,
+   however, typically a synthesis error: hardware cannot have a signal
+   driven by two separate sequential blocks, so the design usually will not
+   behave as the RTL simulation suggests.
+
+   Disabled by default as this is a code-style warning; it will simulate
+   correctly.
+
+   Faulty example:
+
+   .. include:: ../../docs/gen/ex_MULTIDRIVENPROC_faulty.rst
+
+   Results in:
+
+   .. include:: ../../docs/gen/ex_MULTIDRIVENPROC_msg.rst
+
+   Also warns when a signal named as a clocking block ``output`` is driven
+   by a plain ``always`` block. Driving a signal from both a clocking block
+   and a plain ``always`` block is a deliberate idiom in some testbenches,
+   so it is reported as MULTIDRIVENPROC rather than under the on-by-default
+   :option:`MULTIDRIVEN`.
+
+   To fix, drive the signal from a single ``always`` block, or use
+   ``always_ff``/``always_comb`` if the intent is a single specialized
+   process.
+
+   Does not warn for static variables used as loop induction variables:
+
+   .. include:: ../../docs/gen/ex_MULTIDRIVENPROC_loopidx.rst
 
 
 .. option:: MULTITOP
@@ -1503,6 +1586,19 @@ List Of Warnings
    Error when a timing-related construct, such as an event control or delay,
    has been encountered, without specifying how Verilator should handle it
    (neither :vlopt:`--timing` nor :vlopt:`--no-timing` option was provided).
+
+
+.. option:: NEVERMATCH
+
+   Warns that an SVA sequence is statically known to never match. Such a
+   sequence is legal SystemVerilog and is fully supported, the warning
+   only highlights a potential problem. For example, using the sequence as
+   the antecedent of an implication causes the implication to pass
+   vacuously. For an intersect sequence, ensure its operands can match
+   over a common length (IEEE 1800-2023 16.9.6).
+
+   Ignoring this warning will only suppress the lint check; it will
+   simulate correctly.
 
 
 .. option:: NEWERSTD
@@ -2077,6 +2173,32 @@ List Of Warnings
    simulators.
 
 
+.. option:: SIMILARNAME
+
+   Warns that an entity name only differs from another in lexical case.
+
+   Faulty example:
+
+   .. include:: ../../docs/gen/ex_SIMILARNAME_faulty.rst
+
+   Results in:
+
+   .. include:: ../../docs/gen/ex_SIMILARNAME_msg.rst
+
+   Only declarations that can reach a downstream VLSI tool as a name are
+   checked, that is nets, variables, instances, named blocks (``begin``,
+   ``fork``, and generate blocks), functions and tasks. All of these can form
+   part of a flattened signal or scope name.  Other declarations, such as
+   parameters, localparams, genvars and typedefs, are elaborated away, and so
+   are not checked.
+
+   Disabled by default as this is a code-style warning; it will simulate
+   correctly.
+
+   This is a warning as some downstream VLSI tools do
+   not distinguish net and gate names with the same case.
+
+
 .. option:: SPECIFYIGN
 
    Warns that Verilator does not support certain constructs in
@@ -2371,11 +2493,6 @@ List Of Warnings
    the conflict. If you run with :vlopt:`--report-unoptflat`, Verilator will
    suggest possible candidates for :option:`/*verilator&32;split_var*/`.
 
-   The UNOPTFLAT warning may also occur where outputs from a block of logic
-   are independent, but occur in the same always block. To fix this, use
-   the :option:`/*verilator&32;isolate_assignments*/` metacomment described
-   above.
-
    Before version 5.000, the UNOPTFLAT warning may also have been due to
    clock enables, identified from the reported path going through a clock
    gating instance. To fix these, the clock_enable meta comment was used.
@@ -2410,14 +2527,10 @@ List Of Warnings
 
 .. option:: UNPACKED
 
-   Warns that unpacked structs and unions are not supported because
-   :vlopt:`--structs-packed` was used, or by up through version 5.004.
+   Historical, never issued since version 5.004.
 
-   Ignoring this warning will make Verilator treat the structure as packed,
-   which may make Verilator simulations differ from other simulators. This
-   downgrading may also result in what would typically be a legal unpacked
-   struct/array inside an unpacked struct/array becoming an illegal
-   unpacked struct/array inside a packed struct/array.
+   Warned that unpacked structs and unions were not supported, or disabled
+   by the since-removed `--structs-packed` option.
 
 
 .. option:: UNSATCONSTR

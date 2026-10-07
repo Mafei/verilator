@@ -62,8 +62,8 @@ protected:
                     *DfgDataType::fromAst(vscp->varp()->dtypep())}
         , m_vscp{vscp} {
         // Increment reference count
-        m_vscp->user1(m_vscp->user1() + 0x20);
-        UASSERT_OBJ((m_vscp->user1() >> 5) > 0, m_vscp, "Reference count overflow");
+        m_vscp->user1(m_vscp->user1() + 0x40);
+        UASSERT_OBJ((m_vscp->user1() >> 6) > 0, m_vscp, "Reference count overflow");
         // Allocate sources
         newInput();
         newInput();
@@ -72,8 +72,8 @@ protected:
 public:
     ~DfgVertexVar() {
         // Decrement reference count
-        m_vscp->user1(m_vscp->user1() - 0x20);
-        UASSERT_OBJ((m_vscp->user1() >> 5) >= 0, m_vscp, "Reference count underflow");
+        UASSERT_OBJ(m_vscp->user1() >= 0x40, m_vscp, "Reference count underflow");
+        m_vscp->user1(m_vscp->user1() - 0x40);
     }
     ASTGEN_MEMBERS_DfgVertexVar;
 
@@ -84,10 +84,14 @@ public:
     DfgVertex* defaultp() const { return inputp(1); }
     void defaultp(DfgVertex* vtxp) { inputp(1, vtxp); }
 
+    // Return the vertex and the offset into the vertex driving the given range [lo, lo + size - 1]
+    // of this variable, iff it is driven by a single vertex. Returns nullptr if undriven, or the
+    // range is driven by multiple vertices in parts.
+    std::pair<DfgVertex*, uint32_t> driverOfRange(uint32_t lo, uint32_t size);
+
     std::string srcName(size_t idx) const override final { return idx ? "defaultp" : "srcp"; }
 
     // The Ast variable this vertex representess
-    // AstVar* varp() const { return m_varp; }
     AstVarScope* vscp() const { return m_vscp; }
 
     // If this is a temporary, the Ast variable it stands for,  or same as
@@ -100,7 +104,7 @@ public:
     void driverFileLine(FileLine* flp) { m_driverFileLine = flp; }
 
     // Variable referenced from other DFG in the same module/netlist
-    bool hasDfgRefs() const { return m_vscp->user1() >> 6; }  // I.e.: (nodep()->user1() >> 5) > 1
+    bool hasDfgRefs() const { return m_vscp->user1() >> 7; }  // I.e.: (nodep()->user1() >> 6) > 1
 
     // Variable referenced from Ast code in the same module/netlist
     static bool hasModWrRefs(const AstVarScope* nodep) { return nodep->user1() & 0x08; }
@@ -121,8 +125,15 @@ public:
     static bool hasRWRefs(const AstVarScope* nodep) { return nodep->user1() & 0x10; }
     static void setHasRWRefs(AstVarScope* nodep) { nodep->user1(nodep->user1() | 0x10); }
 
-    // True iff the value of this variable is read outside this DfgGraph
+    // There exists a DfgPrev vertex for this variable
+    static bool hasPrev(const AstVarScope* nodep) { return nodep->user1() & 0x20; }
+    bool hasPrev() const { return hasPrev(m_vscp); }
+
+    // True iff this variable is consumed without an explicit sink: its value is read outside
+    // this DfgGraph, or a DfgPrev reads it within this graph.
     bool isObserved() const {
+        // A DfgPrev reads this variable
+        if (hasPrev()) return true;
         // A DfgVarVertex is written in exactly one DfgGraph, and might be read in an arbitrary
         // number of other DfgGraphs. If it's driven in this DfgGraph, it's read in others.
         if (hasDfgRefs()) return srcp() || defaultp();
@@ -160,6 +171,33 @@ public:
         UASSERT_OBJ(isPacked(), vscp, "Non-packed DfgVarPacked");
     }
     ASTGEN_MEMBERS_DfgVarPacked;
+};
+
+class DfgPrev final : public DfgVertex {
+    // Previous value of variable, before any updates made in this graph.
+    // Used to break combinational cycles.
+    friend class DfgVertex;
+    friend class DfgVisitor;
+
+    AstVarScope* const m_vscp;  // The AstVarScope associated with this vertex (not owned)
+
+public:
+    DfgPrev(DfgGraph& dfg, AstVarScope* vscp)
+        : DfgVertex{dfg, dfgType(), vscp->varp()->fileline(),
+                    *DfgDataType::fromAst(vscp->varp()->dtypep())}
+        , m_vscp{vscp} {
+        UASSERT_OBJ(!DfgVertexVar::hasPrev(vscp), vscp, "Variable already has a DfgPrev");
+        m_vscp->user1(m_vscp->user1() | 0x20);  // Mark having a DfgPrev
+    }
+    ~DfgPrev() {
+        m_vscp->user1(m_vscp->user1() & ~0x20);  // Unmark having a DfgPrev
+    }
+    ASTGEN_MEMBERS_DfgPrev;
+
+    // The Ast variable this vertex representess
+    AstVarScope* vscp() const { return m_vscp; }
+
+    std::string srcName(size_t) const override final { return ""; }
 };
 
 //------------------------------------------------------------------------------
@@ -248,6 +286,14 @@ public:
     }
 };
 
+class DfgCReset final : public DfgVertexNullary {
+public:
+    DfgCReset(DfgGraph& dfg, FileLine* flp, const DfgDataType& dtype)
+        : DfgVertexNullary{dfg, dfgType(), flp, dtype} {}
+
+    ASTGEN_MEMBERS_DfgCReset;
+};
+
 //------------------------------------------------------------------------------
 // Unary vertices - 1 inputs
 
@@ -291,6 +337,7 @@ public:
     void fromp(DfgVertex* vtxp) { srcp(vtxp); }
     uint32_t lsb() const { return m_lsb; }
     void lsb(uint32_t value) { m_lsb = value; }
+    uint32_t msb() const { return m_lsb + width() - 1; }
 };
 
 class DfgUnitArray final : public DfgVertexUnary {
@@ -318,6 +365,21 @@ protected:
 
 public:
     ASTGEN_MEMBERS_DfgVertexBinary;
+};
+
+class DfgMatchMasked final : public DfgVertexBinary {
+    // Dfg equivalent of AstMatchMasked
+public:
+    DfgMatchMasked(DfgGraph& dfg, FileLine* flp, const DfgDataType& dtype)
+        : DfgVertexBinary{dfg, dfgType(), flp, dtype} {}
+    ASTGEN_MEMBERS_DfgMatchMasked;
+
+    DfgVertex* lhsp() const { return inputp(0); }
+    void lhsp(DfgVertex* vtxp) { inputp(0, vtxp); }
+    DfgVertex* matchp() const { return inputp(1); }
+    void matchp(DfgVertex* vtxp) { inputp(1, vtxp); }
+
+    std::string srcName(size_t idx) const override { return idx ? "matchp" : "lhsp"; }
 };
 
 class DfgMux final : public DfgVertexBinary {
@@ -428,28 +490,47 @@ public:
         return vtxp;
     }
 
-    bool foreachDriver(std::function<bool(DfgVertex&, uint32_t, FileLine*)> f) {
+    template <typename T_Callable,
+              std::enable_if_t<vlstd::is_invocable_r<bool, T_Callable, DfgVertex&, uint32_t,
+                                                     FileLine*>::value,  //
+                               int>
+              = 0>
+    bool foreachDriver(T_Callable&& f) {
         const size_t n = nInputs();
         for (size_t i = 0; i < n; ++i) {
             if (f(*inputp(i), m_driverData[i].m_lo, m_driverData[i].m_flp)) return true;
         }
         return false;
     }
-    bool foreachDriver(std::function<bool(const DfgVertex&, uint32_t, FileLine*)> f) const {
+    template <typename T_Callable,
+              std::enable_if_t<vlstd::is_invocable_r<bool, T_Callable, const DfgVertex&, uint32_t,
+                                                     FileLine*>::value,
+                               int>
+              = 0>
+    bool foreachDriver(T_Callable&& f) const {
         const size_t n = nInputs();
         for (size_t i = 0; i < n; ++i) {
             if (f(*inputp(i), m_driverData[i].m_lo, m_driverData[i].m_flp)) return true;
         }
         return false;
     }
-    bool foreachDriver(std::function<bool(DfgVertex&, uint32_t)> f) {
+    template <
+        typename T_Callable,
+        std::enable_if_t<vlstd::is_invocable_r<bool, T_Callable, DfgVertex&, uint32_t>::value,  //
+                         int>
+        = 0>
+    bool foreachDriver(T_Callable&& f) {
         const size_t n = nInputs();
         for (size_t i = 0; i < n; ++i) {
             if (f(*inputp(i), m_driverData[i].m_lo)) return true;
         }
         return false;
     }
-    bool foreachDriver(std::function<bool(const DfgVertex&, uint32_t)> f) const {
+    template <typename T_Callable,
+              std::enable_if_t<
+                  vlstd::is_invocable_r<bool, T_Callable, const DfgVertex&, uint32_t>::value, int>
+              = 0>
+    bool foreachDriver(T_Callable&& f) const {
         const size_t n = nInputs();
         for (size_t i = 0; i < n; ++i) {
             if (f(*inputp(i), m_driverData[i].m_lo)) return true;
@@ -488,6 +569,7 @@ class DfgLogic final : public DfgVertexVariadic {
     AstScope* const m_scopep;  // The AstScope m_nodep is under, iff scoped
     const std::unique_ptr<CfgGraph> m_cfgp;
     std::vector<DfgVertex*> m_synth;  // Vertices this logic was synthesized into
+    bool m_drivesUnusedVars = false;  // Logic drives unused variables
     bool m_selectedForSynthesis = false;  // Logic selected for synthesis
     bool m_nonSynthesizable = false;  // Logic is not synthesizeable (by DfgSynthesis)
     bool m_reverted = false;  // Logic was synthesized (in part if non-synthesizable) then reverted
@@ -514,6 +596,8 @@ public:
     const CfgGraph& cfg() const { return *m_cfgp; }
     std::vector<DfgVertex*>& synth() { return m_synth; }
     const std::vector<DfgVertex*>& synth() const { return m_synth; }
+    bool drivesUnusedVars() const { return m_drivesUnusedVars; }
+    void setDrivesUnusedVars() { m_drivesUnusedVars = true; }
     bool selectedForSynthesis() const { return m_selectedForSynthesis; }
     void setSelectedForSynthesis() { m_selectedForSynthesis = true; }
     bool nonSynthesizable() const { return m_nonSynthesizable; }

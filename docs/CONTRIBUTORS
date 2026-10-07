@@ -7,12 +7,16 @@ contribution terms including the AI policy in ``docs/CONTRIBUTING.rst``.
 
 Please see the Verilator manual for 200+ additional contributors. Thanks to all.
 
+24bit-xjkp
 404allen404
 Adam Bagley
+Adam Kostrzewski
+Aditya Shevade
 Adrian Sampson
 Adrien Le Masle
 أحمد المحمودي (Ahmed El-Mahmoudy)
 Aidan McNay
+Aisha Salimgereyeva
 Aleksander Kiryk
 Alex Chadwick
 Alex Solomatnikov
@@ -25,19 +29,24 @@ Andrei Kostovski
 Andrew Miloradovsky
 Andrew Nolte
 Andrew Voznytsa
+Andrii Andrieiev
 anonkey
 Anthony Donlon
 Anthony Moore
+apocelipes
 Arkadiusz Kozdra
 Arthur Rosa
 Artur Bieniek
 AUDIY
 Aylon Chaim Porat
+Bartosz Skorowski
 Bartłomiej Chmiel
 Benjamin Collier
+BRDR LIFE
 Brian Li
 Cameron Kirk
 Cameron Waite
+CatalpaEel
 Chih-Mao Chen
 Chris Bachhuber
 Chris Randall
@@ -52,27 +61,38 @@ Dan Ruelas-Petrisko
 Daniel Bates
 Danny Oler
 Dave Sargeant
+David Garau
 David Horton
 David Ledger
 David Metz
 David Stanford
 David Turner
+dependabot[bot]
 Dercury
+Demin Han
 Diego Roux
 Dominick Grochowina
 Don Williamson
+Dragon-Git
 Drew Ranck
+Drew Risinger
 Drew Taussig
 Driss Hafdi
 Edgar E. Iglesias
+Edmund Lam
+Eddie Rydell
+em2machine
+emmettifelts
 Eric Mejdrich
 Eric Müller
 Eric Rippey
-Eunseo Song
+Eryk Szpotański
 Ethan Sifferman
+Eunseo Song
 Eyck Jentzsch
 Fabian Keßler-Schulz
 Fan Shupei
+february cozzocrea
 Felix Neumärker
 Felix Yan
 Frans Skarman
@@ -107,6 +127,8 @@ Ilya Barkov
 Iru Cai
 Ivan Vnučec
 Iztok Jeras
+JAEUK LEE
+Jaeuk Lee (이재욱)
 Jake Merdich
 Jakub Michalski
 Jakub Wasilewski
@@ -121,6 +143,8 @@ Jamie Iles
 Jan Van Winkel
 Jean Berniolles
 Jean-Nicolas Strauss
+Jeffrey Song
+jeffrey.song
 Jens Yuechao Liu
 Jeremy Bennett
 Jesse Taube
@@ -145,6 +169,8 @@ Jose Loyola
 Josep Sans
 Joseph Nwabueze
 Josh Redford
+Joshua Leahy
+JOTEGO (Jose Tejada)
 Julian Carrier
 Julian Daube
 Julie Schwartz
@@ -158,6 +184,8 @@ Kefa Chen
 Keith Colbert
 Kevin Kiningham
 Kevin Nygaard
+Kornel Uriasz
+Kristof Marien
 Kritik Bhimani
 Krzysztof Bieganski
 Krzysztof Boronski
@@ -180,11 +208,14 @@ Maarten De Braekeleer
 Maciej Sobkowski
 Marcel Chang
 Marco Bartoli
+Marco Brambilla
+Marco Frank
 Marco Widmer
 Mariusz Glebocki
 Markus Krause
 Marlon James
 Marshal Qiao
+Martijn Wobbes
 Martin Schmidt
 Martin Stadler
 Mateusz Gancarz
@@ -199,12 +230,14 @@ Michael Rogenmoser
 Michal Czyz
 Michaël Lefebvre
 Miguel Perez Andrade
+Mike Murunov
 Mike Popoloski
 Miodrag Milanović
 Mladen Slijepcevic
 Morten Borup Petersen
 Mostafa Gamal
 Moubarak Jeje
+Muzaffer Kal
 Nandu Raj
 Natan Kreimer
 Nathan Graybeal
@@ -215,8 +248,11 @@ Nikolai Kumar
 Nikolay Puzanov
 Nolan Poe
 Oleh Maksymenko
+Patrick Creighton
 Patrick Stewart
 Paul Bowen-Huggett
+Paul Campbell
+Paul Rigge
 Paul Swirhun
 Paul Wright
 Pawel Jewstafjew
@@ -250,32 +286,40 @@ Rowan Goemans
 Rupert Swarbrick
 Ryan Ziegler
 Ryszard Rozak
+Saksham Gupta
 Samuel Riedel
 Sean Cross
 Sebastien Van Cauwenberghe
 Secturion
+Sergey Chusov
 Sergey Fedorov
 Sergi Granell
 Seth Pellegrino
+Shashvat Prabhu
 Shogo Yamazaki
 Shou-Li Hsu
+spomatasmd
 Srinivasan Venkataramanan
 Stefan Wallentowitz
 Stephen Henry
 Steven Hugg
 Stuart Morris
+sumpster
 Szymon Gizler
 Sören Tempel
+Sumanth Kadiyala
 Teng Huang
 Thomas Aldrian
 Thomas Brown
 Thomas Dybdahl Ahle
+Thomas Santerre
 Tim Hutt
 Tim Snyder
 Tobias Jensen
 Tobias Rosenkranz
 Tobias Wölfel
 Todd Strader
+Tom Jackson
 Tom Manner
 Tomasz Gorochowik
 Topa Topino
@@ -284,8 +328,10 @@ Tracy Narine
 Trung Nguyen
 Tudor Timi
 Tymoteusz Blazejczyk
+Tyrone Marhguy
 Udaya Raj Subedi
 Udi Finkelstein
+UnsignedByte
 Unai Martinez-Corral
 Valentin Atepalikhin
 Varun Koyyalagunta
@@ -297,12 +343,15 @@ Vito Gamberini
 Wei-Lun Chiu
 William D. Jones
 Wilson Snyder
+Wolfgang Mayerwieser
 Xi Zhang
 Yan Xu
 Yangyu Chen
+Yilin Li
 Yilou Wang
 Yinan Xu
 Yoda Lee
+Yogish Sekhar
 Yossi Nivin
 Yu-Sheng Lin
 Yuri Victorovich
@@ -313,15 +362,7 @@ Zhen Yan
 Zhou Shen
 Zhouyi Shen
 Zixi Li
-apocelipes
-dependabot[bot]
-february cozzocrea
-sumpster
-em2machine
-emmettifelts
+Zubin Jain
 Àlex Torregrosa
 Ícaro Lima
-Yogish Sekhar
-24bit-xjkp
-Zubin Jain
-Muzaffer Kal
+Sunimali Rathnayake

@@ -34,167 +34,6 @@ DfgGraph::~DfgGraph() {
     forEachVertex([&](DfgVertex& vtx) { vtx.unlinkDelete(*this); });
 }
 
-std::unique_ptr<DfgGraph> DfgGraph::clone() const {
-    // Create the new graph
-    DfgGraph* const clonep = new DfgGraph{name()};
-
-    // Map from original vertex to clone
-    std::unordered_map<const DfgVertex*, DfgVertex*> vtxp2clonep(size() * 2);
-
-    // Clone constVertices
-    for (const DfgConst& vtx : m_constVertices) {
-        DfgConst* const cp = new DfgConst{*clonep, vtx.fileline(), vtx.num()};
-        vtxp2clonep.emplace(&vtx, cp);
-    }
-    // Clone variable vertices
-    for (const DfgVertexVar& vtx : m_varVertices) {
-        const DfgVertexVar* const vp = vtx.as<DfgVertexVar>();
-        DfgVertexVar* cp = nullptr;
-
-        switch (vtx.type()) {
-        case VDfgType::VarArray: {
-            cp = new DfgVarArray{*clonep, vp->vscp()};
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        case VDfgType::VarPacked: {
-            cp = new DfgVarPacked{*clonep, vp->vscp()};
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        default: {
-            vtx.v3fatalSrc("Unhandled variable vertex type: " + vtx.typeName());
-            VL_UNREACHABLE;
-            break;
-        }
-        }
-
-        if (AstVarScope* const tmpForp = vp->tmpForp()) cp->tmpForp(tmpForp);
-    }
-    // Clone ast reference vertices
-    for (const DfgVertexAst& vtx : m_astVertices) {  // LCOV_EXCL_START
-        switch (vtx.type()) {
-        case VDfgType::AstRd: {
-            const DfgAstRd* const vp = vtx.as<DfgAstRd>();
-            DfgAstRd* const cp = new DfgAstRd{*clonep, vp->exprp(), vp->inSenItem(), vp->inLoop()};
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        default: {
-            vtx.v3fatalSrc("Unhandled ast reference vertex type: " + vtx.typeName());
-            VL_UNREACHABLE;
-            break;
-        }
-        }
-    }  // LCOV_EXCL_STOP
-    // Clone operation vertices
-    for (const DfgVertex& vtx : m_opVertices) {
-        switch (vtx.type()) {
-#include "V3Dfg__gen_clone_cases.h"  // From ./astgen
-        case VDfgType::Sel: {
-            DfgSel* const cp = new DfgSel{*clonep, vtx.fileline(), vtx.dtype()};
-            cp->lsb(vtx.as<DfgSel>()->lsb());
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        case VDfgType::Rep: {
-            DfgRep* const cp = new DfgRep{*clonep, vtx.fileline(), vtx.dtype()};
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        case VDfgType::UnitArray: {
-            DfgUnitArray* const cp = new DfgUnitArray{*clonep, vtx.fileline(), vtx.dtype()};
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        case VDfgType::Mux: {
-            DfgMux* const cp = new DfgMux{*clonep, vtx.fileline(), vtx.dtype()};
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        case VDfgType::SpliceArray: {
-            DfgSpliceArray* const cp = new DfgSpliceArray{*clonep, vtx.fileline(), vtx.dtype()};
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        case VDfgType::SplicePacked: {
-            DfgSplicePacked* const cp = new DfgSplicePacked{*clonep, vtx.fileline(), vtx.dtype()};
-            vtxp2clonep.emplace(&vtx, cp);
-            break;
-        }
-        case VDfgType::Logic: {
-            vtx.v3fatalSrc("DfgLogic cannot be cloned");
-            VL_UNREACHABLE;
-            break;
-        }
-        case VDfgType::Unresolved: {
-            vtx.v3fatalSrc("DfgUnresolved cannot be cloned");
-            VL_UNREACHABLE;
-            break;
-        }
-        default: {
-            vtx.v3fatalSrc("Unhandled operation vertex type: " + vtx.typeName());
-            VL_UNREACHABLE;
-            break;
-        }
-        }
-    }
-    UASSERT(size() == clonep->size(), "Size of clone should be the same");
-
-    // Constants have no inputs
-    // Hook up inputs of cloned variables
-    for (const DfgVertexVar& vtx : m_varVertices) {
-        DfgVertexVar* const cp = vtxp2clonep.at(&vtx)->as<DfgVertexVar>();
-        if (const DfgVertex* const srcp = vtx.srcp()) cp->srcp(vtxp2clonep.at(srcp));
-        if (const DfgVertex* const defp = vtx.defaultp()) cp->defaultp(vtxp2clonep.at(defp));
-    }
-    // Hook up inputs of cloned ast references
-    for (const DfgVertexAst& vtx : m_astVertices) {  // LCOV_EXCL_START
-        switch (vtx.type()) {
-        case VDfgType::AstRd: {
-            const DfgAstRd* const vp = vtx.as<DfgAstRd>();
-            DfgAstRd* const cp = vtxp2clonep.at(&vtx)->as<DfgAstRd>();
-            if (const DfgVertex* const srcp = vp->srcp()) cp->srcp(vtxp2clonep.at(srcp));
-            break;
-        }
-        default: {
-            vtx.v3fatalSrc("Unhandled DfgVertexAst sub type: " + vtx.typeName());
-            VL_UNREACHABLE;
-            break;
-        }
-        }
-    }  // LCOV_EXCL_STOP
-    // Hook up inputs of cloned operation vertices
-    for (const DfgVertex& vtx : m_opVertices) {
-        if (vtx.is<DfgVertexVariadic>()) {
-            switch (vtx.type()) {
-            case VDfgType::SpliceArray:
-            case VDfgType::SplicePacked: {
-                const DfgVertexSplice* const vp = vtx.as<DfgVertexSplice>();
-                DfgVertexSplice* const cp = vtxp2clonep.at(vp)->as<DfgVertexSplice>();
-                vp->foreachDriver([&](const DfgVertex& src, uint32_t lo, FileLine* flp) {
-                    cp->addDriver(vtxp2clonep.at(&src), lo, flp);
-                    return false;
-                });
-                break;
-            }
-            default: {
-                vtx.v3fatalSrc("Unhandled DfgVertexVariadic sub type: " + vtx.typeName());
-                VL_UNREACHABLE;
-                break;
-            }
-            }
-        } else {
-            DfgVertex* const cp = vtxp2clonep.at(&vtx);
-            for (size_t i = 0; i < vtx.nInputs(); ++i) {
-                cp->inputp(i, vtxp2clonep.at(vtx.inputp(i)));
-            }
-        }
-    }
-
-    return std::unique_ptr<DfgGraph>{clonep};
-}
-
 void DfgGraph::mergeGraphs(std::vector<std::unique_ptr<DfgGraph>>&& otherps) {
     if (otherps.empty()) return;
 
@@ -333,6 +172,40 @@ static void dumpDotVertex(std::ostream& os, const DfgVertex& vtx) {
                                    : varVtxp->hasDfgRefs()   ? "gold2"  // Yellow
                                    : varVtxp->tmpForp()      ? "gray95"  // Gray
                                                              : "white";
+        os << ", style=filled";
+        os << ", fillcolor=\"" << colorp << "\"";
+        // End attributes
+        os << "]\n";
+        return;
+    }
+
+    if (const DfgPrev* const prevVtxp = vtx.cast<DfgPrev>()) {
+        const AstVarScope* const vscp = prevVtxp->vscp();
+        os << toDotId(vtx);
+        // Begin attributes
+        os << " [";
+        // Begin 'label'
+        os << "label=\"";
+        // Name
+        os << vscp->prettyName();
+        // Address
+        os << '\n' << cvtToHex(prevVtxp);
+        // Type and fanout
+        os << '\n';
+        prevVtxp->dtype().astDtypep()->dumpSmall(os);
+        os << " / F" << prevVtxp->fanout();
+        // End 'label'
+        os << '"';
+        // Shape
+        if (prevVtxp->isPacked()) {
+            os << ", shape=box";
+        } else if (prevVtxp->isArray()) {
+            os << ", shape=box3d";
+        } else {
+            prevVtxp->v3fatalSrc("Unhandled variable type");
+        }
+        // Color
+        const char* const colorp = "mediumorchid1";  // Purple
         os << ", style=filled";
         os << ", fillcolor=\"" << colorp << "\"";
         // End attributes
@@ -607,6 +480,12 @@ DfgVertex::DfgVertex(DfgGraph& dfg, VDfgType type, FileLine* flp, const DfgDataT
     dfg.addVertex(*this);
 }
 
+bool DfgVertex::unsafe() const {
+    if (is<DfgMux>()) return true;
+    if (is<DfgArraySel>()) return !as<DfgArraySel>()->bitp()->is<DfgConst>();
+    return false;
+}
+
 void DfgVertex::typeCheck(const DfgGraph& dfg) const {
 
 #define CHECK(cond, msg) \
@@ -616,6 +495,10 @@ void DfgVertex::typeCheck(const DfgGraph& dfg) const {
     switch (type()) {
     case VDfgType::Const: {
         CHECK(isPacked(), "Should be Packed type");
+        return;
+    }
+    case VDfgType::CReset: {
+        CHECK(isPacked() || isArray(), "Should be Packed or Array type");
         return;
     }
     case VDfgType::AstRd: {
@@ -628,6 +511,10 @@ void DfgVertex::typeCheck(const DfgGraph& dfg) const {
         const DfgVertexVar& v = *as<DfgVertexVar>();
         CHECK(!v.defaultp() || v.defaultp()->dtype() == v.dtype(), "'defaultp' should match");
         CHECK(!v.srcp() || v.srcp()->dtype() == v.dtype(), "'srcp' should match");
+        return;
+    }
+    case VDfgType::Prev: {
+        CHECK(isPacked() || isArray(), "Should be Packed or Array type");
         return;
     }
     case VDfgType::SpliceArray:
@@ -658,6 +545,15 @@ void DfgVertex::typeCheck(const DfgGraph& dfg) const {
         const DfgSel& v = *as<DfgSel>();
         CHECK(v.isPacked(), "Should be Packed type");
         CHECK(v.dtype() == DfgDataType::select(v.srcp()->dtype(), v.lsb(), v.size()), "sel");
+        return;
+    }
+    case VDfgType::MatchMasked: {
+        const DfgMatchMasked& v = *as<DfgMatchMasked>();
+        CHECK(v.isPacked(), "Should be Packed type");
+        CHECK(v.size() == 32U, "Should yield a 32-bit result");
+        CHECK(v.lhsp()->isPacked(), "Lhs should be packed");
+        CHECK(v.matchp()->isPacked(), "Match should be Packed type");
+        CHECK(v.matchp()->is<DfgVertexVar>(), "Match should be a variable");
         return;
     }
     case VDfgType::Mux: {
@@ -774,7 +670,9 @@ void DfgVertex::typeCheck(const DfgGraph& dfg) const {
     case VDfgType::LogNot:
     case VDfgType::RedAnd:
     case VDfgType::RedOr:
-    case VDfgType::RedXor: {
+    case VDfgType::RedXor:
+    case VDfgType::OneHot:
+    case VDfgType::OneHot0: {
         CHECK(dtype() == DfgDataType::packed(1), "Should be 1-bit");
         CHECK(inputp(0)->isPacked(), "Operand should be Packed type");
         return;
@@ -892,17 +790,20 @@ AstScope* DfgVertex::scopep(ScopeCache& cache, bool tryResultVar) VL_MT_DISABLED
         }
     }
 
+    AstScope* const rootp = v3Global.rootp()->topScopep()->scopep();
+    AstScope* const constPoolp = v3Global.rootp()->constPoolp()->scopep();
+
     // Note: the recursive invocation can cause a re-hash but that will not invalidate references
     AstScope*& resultr = cache[this];
     if (!resultr) {
         // Mark to prevent infinite recursion on circular graphs - should never be called on such
         resultr = reinterpret_cast<AstScope*>(1);
-        // Find scope based on sources, falling back on the root scope
-        AstScope* const rootp = v3Global.rootp()->topScopep()->scopep();
+        // Find scope based on sources, falling back on the root scope,
+        // also make sure it's not the constant pool scope, which is special.
         AstScope* foundp = nullptr;
         foreachSource([&](DfgVertex& src) {
             AstScope* const scp = src.scopep(cache, true);
-            if (scp != rootp) {
+            if (scp != rootp && scp != constPoolp) {
                 foundp = scp;
                 return true;
             }
@@ -927,6 +828,50 @@ void DfgVertex::unlinkDelete(DfgGraph& dfg) {
     // Delete - this will unlink sources
     delete this;
 }
+
+//------------------------------------------------------------------------------
+// DfgVertexVar
+
+std::pair<DfgVertex*, uint32_t> DfgVertexVar::driverOfRange(uint32_t lo, uint32_t size) {
+    DfgVertex* const srcp = this->srcp();
+    // Not driven at all
+    if (!srcp) return {nullptr, 0};
+    // If volatile, can have other drivers
+    if (isVolatile()) return {nullptr, 0};
+    // Don't inline CReset
+    if (srcp->is<DfgCReset>()) return {nullptr, 0};
+
+    // If not driven via a splice, then it is driven whole, at the same offsets
+    DfgVertexSplice* const splicep = srcp->cast<DfgVertexSplice>();
+    if (!splicep) return {srcp, lo};
+
+    // Find the driver that covers the whole searched range, if there is a single one
+    const uint32_t hi = lo + size - 1;
+    DfgVertex* driverp = nullptr;
+    uint32_t driverLo = 0;
+    bool useDefault = defaultp();
+    splicep->foreachDriver([&](DfgVertex& src, const uint32_t dLo) {
+        const uint32_t dHi = dLo + src.size() - 1;
+        // Note whether it overlaps the searched range, so the default cannot be used
+        if (dLo <= hi && lo <= dHi) useDefault = false;
+        // If it does not cover the whole searched range, move on
+        if (lo < dLo || dHi < hi) return false;
+        // Save the driver that covers the whole searched range
+        driverp = &src;
+        driverLo = dLo;
+        return true;
+    });
+
+    // If a single driver covers the searched range, it is the one
+    if (driverp) return {driverp, lo - driverLo};
+    // Otherwise the default driver is responsible for it, if nothing else overlaps it
+    if (useDefault) return {defaultp(), lo};
+    // Not driven by a single vertex
+    return {nullptr, 0};
+}
+
+//######################################################################
+// Renders the canonical pattern S-expression for a single DfgVertex
 
 class DfgPatternString final {
     std::ostream& m_os;

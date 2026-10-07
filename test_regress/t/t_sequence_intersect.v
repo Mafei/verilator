@@ -10,7 +10,7 @@
 // verilog_format: on
 
 module t (
-  input clk
+    input clk
 );
   integer cyc = 0;
   reg [63:0] crc = '0;
@@ -26,8 +26,7 @@ module t (
 
   always_ff @(posedge clk) begin
 `ifdef TEST_VERBOSE
-    $write("[%0t] cyc==%0d crc=%x a=%b b=%b c=%b d=%b\n",
-           $time, cyc, crc, a, b, c, d);
+    $write("[%0t] cyc==%0d crc=%x a=%b b=%b c=%b d=%b\n", $time, cyc, crc, a, b, c, d);
 `endif
     cyc <= cyc + 1;
     crc <= {crc[62:0], crc[63] ^ crc[2] ^ crc[0]};
@@ -36,9 +35,11 @@ module t (
     if (cyc == 0) begin
       crc <= 64'h5aef0c8d_d70a4497;
       sum <= '0;
-    end else if (cyc < 10) begin
+    end
+    else if (cyc < 10) begin
       sum <= '0;
-    end else if (cyc == 99) begin
+    end
+    else if (cyc == 99) begin
       `checkh(crc, 64'hc77bb9b3784ea091);
       `checkh(sum, 64'hdb7bc8bfe61f987e);
       $write("*-* All Finished *-*\n");
@@ -51,12 +52,10 @@ module t (
   // =========================================================================
 
   // Boolean intersect: when a & b, intersect succeeds (equivalent to AND)
-  assert property (@(posedge clk) disable iff (cyc < 2)
-      (a & b) |-> (a intersect b));
+  assert property (@(posedge clk) disable iff (cyc < 2) (a & b) |-> (a intersect b));
 
   // Boolean intersect with constant true -- reduces to just 'a'
-  assert property (@(posedge clk) disable iff (cyc < 2)
-      a |-> (a intersect 1'b1));
+  assert property (@(posedge clk) disable iff (cyc < 2) a |-> (a intersect 1'b1));
 
   // =========================================================================
   // Multi-cycle sequence intersect (IEEE 1800-2023 16.9.6)
@@ -64,29 +63,26 @@ module t (
   // =========================================================================
 
   // Both arms have length 1; 1'b1 guarantees completion on both sides
-  assert property (@(posedge clk)
-      (a & b) |-> (a ##1 1'b1) intersect (b ##1 1'b1));
+  assert property (@(posedge clk) (a & b) |-> (a ##1 1'b1) intersect (b ##1 1'b1));
 
   // Both arms have length 2
-  assert property (@(posedge clk)
-      (a & b) |-> (a ##2 1'b1) intersect (b ##2 1'b1));
+  assert property (@(posedge clk) (a & b) |-> (a ##2 1'b1) intersect (b ##2 1'b1));
 
   // Different internal structure, same total length (2 cycles each)
-  assert property (@(posedge clk)
-      (a & b) |-> (a ##1 1'b1 ##1 1'b1) intersect (b ##2 1'b1));
+  assert property (@(posedge clk) (a & b) |-> (a ##1 1'b1 ##1 1'b1) intersect (b ##2 1'b1));
 
   // Standalone constant intersect (always passes)
-  assert property (@(posedge clk)
-      (1'b1 ##1 1'b1) intersect (1'b1 ##1 1'b1));
+  assert property (@(posedge clk) (1'b1 ##1 1'b1) intersect (1'b1 ##1 1'b1));
+
+  // Leading-delay operands (no offset-0 check): conjoin first offset > 0.
+  assert property (@(posedge clk) (##2 1'b1) intersect (##2 1'b1));
 
   // Intersect with `throughout` on one side: exercises fixedLength's
   // SThroughout branch (recurses into rhs to compute the length).
-  cover property (@(posedge clk)
-      (a throughout (b ##1 c)) intersect (a ##1 c));
+  cover property (@(posedge clk) (a throughout (b ##1 c)) intersect (a ##1 c));
 
   // Intersect with equal-bound range delay (##[N:N]): exercises fixedLength's
   // isRangeDelay() branch where minD == maxD (else returns -1).
-  cover property (@(posedge clk)
-      (a ##[2:2] b) intersect (c ##2 d));
+  cover property (@(posedge clk) (a ##[2:2] b) intersect (c ##2 d));
 
 endmodule

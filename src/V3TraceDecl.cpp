@@ -106,8 +106,8 @@ public:
 
 class TraceDeclVisitor final : public VNVisitor {
     // NODE STATE
-    // AstCFunc::user1()                // code offset for current type
-    // AstCFunc::user2()                // VarScope for dtype functions
+    // AstCFunc::user1()                // uint32_t.  code offset for current type
+    // AstCFunc::user2()                // VarScope* for dtype functions
 
     // STATE
     AstTopScope* const m_topScopep;  // The singleton AstTopScope
@@ -502,7 +502,7 @@ class TraceDeclVisitor final : public VNVisitor {
         AstNodeDType* const skipTypep = nodep->skipRefp();
         // offset and direction args added in EmitCImp
         std::string callArgs{"tracep, \"" + VIdProtect::protect(m_traName) + "\""};
-        VL_RESTORER(m_traName);
+        VL_RESTORER_COPY(m_traName);
         FileLine* const flp = skipTypep->fileline();
 
         const DtypeFuncKey dtypeKey{skipTypep, m_traVscp->varp()->varType()};
@@ -547,7 +547,7 @@ class TraceDeclVisitor final : public VNVisitor {
     void declUnpackedArray(AstUnpackArrayDType* const nodep, bool newFunc) {
         string prefixName(newFunc ? "name" : m_traName);
 
-        VL_RESTORER(m_traName);
+        VL_RESTORER_COPY(m_traName);
         FileLine* const flp = nodep->fileline();
 
         addToSubFunc(new AstTracePushPrefix{flp, prefixName, VTracePrefixType::ARRAY_UNPACKED,
@@ -592,7 +592,7 @@ class TraceDeclVisitor final : public VNVisitor {
         string prefixName(newFunc ? "name" : m_traName);
         AstNodeDType* const subtypep = nodep->subDTypep()->skipRefToEnump();
 
-        VL_RESTORER(m_traName);
+        VL_RESTORER_COPY(m_traName);
         FileLine* const flp = nodep->fileline();
 
         addToSubFunc(new AstTracePushPrefix{flp, prefixName, VTracePrefixType::ARRAY_PACKED,
@@ -733,9 +733,11 @@ class TraceDeclVisitor final : public VNVisitor {
                             = new AstVarRef{m_traVscp->fileline(), m_traVscp, VAccess::READ};
                         if (AstVar* const complementp
                             = m_traVscp->varp()->fourstateComplementp()) {
+                            auto it = m_varxzToVscp.find(complementp);
+                            UASSERT_OBJ(it != m_varxzToVscp.end(), vscp,
+                                        "Variables var scopes shall be visited first");
                             m_traValueXZp
-                                = new AstVarRef{m_traVscp->fileline(),
-                                                m_varxzToVscp.at(complementp), VAccess::READ};
+                                = new AstVarRef{m_traVscp->fileline(), it->second, VAccess::READ};
                         }
                         // Recurse into data type of the signal. The visit methods will add
                         // AstTraceDecls.
@@ -829,9 +831,10 @@ class TraceDeclVisitor final : public VNVisitor {
                 // Save the mapping from the path of the reference to the scope
                 m_pathToScopep.emplace(refName, nodep);
 
-                // No more need for AstIntfRef
-                intfRefp->unlinkFrBack();
-                VL_DO_DANGLING(intfRefp->deleteTree(), intfRefp);
+                // No more need for AstIntfRef, unless V3EmitCSyms wants it for VPI
+                if (!v3Global.opt.vpi()) {
+                    VL_DO_DANGLING(intfRefp->unlinkFrBack()->deleteTree(), intfRefp);
+                }
             }
         }
     }
@@ -978,7 +981,7 @@ class TraceDeclVisitor final : public VNVisitor {
             return;
         }
 
-        VL_RESTORER(m_traName);
+        VL_RESTORER_COPY(m_traName);
         FileLine* const flp = nodep->fileline();
 
         int nMembers = 0;
@@ -1040,6 +1043,7 @@ public:
         AstCFunc* rootFuncp = nullptr;
         if (!v3Global.opt.libCreate().empty()) {
             rootFuncp = newCFunc(flp, "trace_init_root");
+            rootFuncp->entryPoint(true);
             for (size_t i = 0; i < m_topScopeRootFuncCount; ++i) {
                 AstCCall* const callp = new AstCCall{flp, topScopeFuncps.at(i)};
                 callp->dtypeSetVoid();
@@ -1077,6 +1081,7 @@ public:
         // Set name of top level function
         AstCFunc* const topFuncp = m_topFuncps.front();
         topFuncp->name("trace_init_top");
+        topFuncp->entryPoint(true);
 
         if (rootFuncp && v3Global.opt.debugCheck()) checkCallsRecurse(rootFuncp);
         checkCalls(topFuncp);
