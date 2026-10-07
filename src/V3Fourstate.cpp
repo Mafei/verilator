@@ -1067,7 +1067,7 @@ class FourstateVisitor final : public VNVisitor {
                 } else {
                     newp->lsbp(lsbp->cloneTree(false));
                 }
-                newp->fromp(valueExpr);
+                newp->fromp(valueExprp);
                 { FourstateLogicTypePropagator{newp}; }
                 return newp;
             }
@@ -1909,8 +1909,8 @@ class FourstateVisitor final : public VNVisitor {
         void visit(AstSampled* const sampledp) override {
             m_resultp = new AstSampled{
                 sampledp->fileline(),
-                getFourstateExpressionValue(VN_AS(sampledp->exprp(), NodeExpr), false)};
-            m_resultp->dtypeFrom(getTwoStateDtype(sampledp->dtypep()));
+                getFourstateExpressionValue(VN_AS(sampledp->exprp(), NodeExpr), false),
+                getTwoStateDtype(sampledp->dtypep()), sampledp->internal()};
         }
 
         void visit(AstExprStmt* exprStmtp) override {
@@ -2266,8 +2266,8 @@ class FourstateVisitor final : public VNVisitor {
         void visit(AstSampled* const sampledp) override {
             m_resultp = new AstSampled{
                 sampledp->fileline(),
-                getFourstateExpressionXZ(VN_AS(sampledp->exprp(), NodeExpr), false)};
-            m_resultp->dtypeFrom(getTwoStateDtype(sampledp->dtypep()));
+                getFourstateExpressionXZ(VN_AS(sampledp->exprp(), NodeExpr), false),
+                getTwoStateDtype(sampledp->dtypep()), sampledp->internal()};
         }
 
         void visit(AstLogNot* const logNotp) override {

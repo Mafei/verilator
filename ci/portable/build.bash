@@ -58,7 +58,10 @@ PY
 tar xf bison.tar.xz
 tar xf flex.tar.gz
 (cd bison-3.8.2 && ./configure --prefix="$root/.ci-tools" --disable-nls && make -j2 && make install)
-(cd flex-2.6.4 && ./configure --prefix="$root/.ci-tools" --disable-nls && make -j2 && make install)
+# glibc 2.28 exposes reallocarray only with _GNU_SOURCE. Flex 2.6.4's
+# configure detects the symbol without checking its declaration; an implicit
+# int return truncates the pointer and crashes the generator on Rocky 8.
+(cd flex-2.6.4 && CPPFLAGS=-D_GNU_SOURCE ./configure --prefix="$root/.ci-tools" --disable-nls && make -j2 && make install)
 cd "$root"
 export PATH="$root/.ci-tools/bin:$PATH"
 export CPLUS_INCLUDE_PATH="$root/.ci-tools/include"
