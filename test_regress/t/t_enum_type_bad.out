@@ -14,4 +14,9 @@
                                           : ... Suggest use enum's mnemonic, or static cast
    43 |     o = str.m_e;   
       |             ^~~
+%Error-ENUMVALUE: t/t_enum_type_bad.v:45:12: Implicit conversion to enum 'enum t.o_t' from 'enum t.e_t' (IEEE 1800-2023 6.19.3)
+                                           : ... note: In instance 't'
+                                          : ... Suggest use enum's mnemonic, or static cast
+   45 |     o = e_t'(1);   
+      |            ^
 %Error: Exiting due to

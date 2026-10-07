@@ -42,5 +42,6 @@ module t;
     o = str.m_o;
     o = str.m_e;  // Bad
 
+    o = e_t'(1);  // Bad
   end
 endmodule
