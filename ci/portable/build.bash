@@ -7,6 +7,7 @@ export TMPDIR=/tmp
 export LC_ALL=C
 unset VERILATOR_ROOT
 root=$(pwd)
+git config --global --add safe.directory "$root"
 platform=${1:?platform}
 mkdir -p out logs .ci-tools-src
 exec > >(tee logs/build.log) 2>&1
@@ -59,7 +60,8 @@ make -C src -j2 opt
 make installbin installredirect installdata DESTDIR="$root/stage" \
     VL_INST_PUBLIC_SCRIPT_FILES='verilator verilator_gantt verilator_profcfunc' \
     VL_INST_PUBLIC_BIN_FILES=verilator_bin
-cp COPYING COPYING.LESSER README.rst PORTABLE_BUILDS.md stage/opt/verilator-fourstate/
+cp LICENSE README.rst PORTABLE_BUILDS.md stage/opt/verilator-fourstate/
+cp -R LICENSES stage/opt/verilator-fourstate/
 cp out/provenance.txt stage/opt/verilator-fourstate/
 if [[ $platform == rocky8-x86_64 ]]; then
     python3 ci/portable/check_elf.py stage/opt/verilator-fourstate/bin/verilator_bin > out/dependencies.txt
