@@ -35,7 +35,9 @@ No private application models or project files are included.
 Builds run only in GitHub Actions on pushes, pull requests, or manual dispatch.
 The macOS target is ARM64 (`macos-26`, checked with `uname -m`). The Linux target
 is x86-64 Rocky Linux **8.10**, built inside its distribution container using
-GCC toolset 13. The compiler statically links libstdc++ and libgcc while keeping
+GCC toolset 13. The official container is pinned to x86-64 image digest
+`sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e`.
+The compiler statically links libstdc++ and libgcc while keeping
 the system glibc dynamic; CI checks that its GLIBC symbol requirements do not
 exceed 2.28 and that every shared library resolves. Generated timing models
 require a C++20-capable compiler (GCC 13 or a suitable Clang).
