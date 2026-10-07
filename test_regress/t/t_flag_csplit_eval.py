@@ -16,14 +16,14 @@ def check_evals():
     got = 0
     for filename in test.glob_some(test.obj_dir + "/*.cpp"):
         wholefile = test.file_contents(filename)
-        if re.search(r'__eval_nba__[0-9]+\(.*\)\s*{', wholefile):
+        if re.search(r'__eval_body__nba__[0-9]+\(.*\)\s*{', wholefile):
             got += 1
 
     if got < 2:
         test.error("Too few _eval functions found: " + str(got))
 
 
-test.compile(v_flags2=["--output-split 1 --output-split-cfuncs 20"],
+test.compile(v_flags2=["--output-split 1 --output-split-cfuncs 20 -fno-inline-cfuncs"],
              verilator_make_gmake=False)  # Slow to compile, so skip it)
 
 check_evals()

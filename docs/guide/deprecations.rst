@@ -1,5 +1,6 @@
-.. SPDX-FileCopyrightText: 2003-2026 Wilson Snyder
-.. SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+..
+   SPDX-FileCopyrightText: 2003-2026 Wilson Snyder
+   SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
 Deprecations
 ============
@@ -16,14 +17,6 @@ C++14 compiler support
    (Although this date has expired, this change is currently on hold until
    the Ubuntu LTS versions of GCC and clang use C++20 by default, estimated
    May 2028.)
-
-`--structs-packed` option
-   The :vlopt:`--structs-packed` option was introduced when Verilator was
-   first implementing unpacked structs. That feature has been stable now
-   for multiple years, so :vlopt:`--structs-packed` should no longer be
-   used. Thus :vlopt:`--structs-packed` will change to a no-operation flag
-   and the related :option:`UNPACKED` warning will never be issued no
-   sooner than September 2026.
 
 tcmalloc support
    Verilator currently supports the default malloc, tcmalloc, or jemalloc.

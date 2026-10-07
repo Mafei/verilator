@@ -55,6 +55,7 @@ public:
         // MEMBERS
         int m_forceId = 0;  // Unique (per signal) variable of this force assignment
         bool m_hasArraySel = false;  // If this has an array select on LHS
+        bool m_isExternal = false;  // Synthetic force for the public force controls
         AstVarScope* m_rhsVarVscp = nullptr;  // Scope of the var containing RHSID
         AstNodeExpr* m_rhsExprp = nullptr;  // Expression on RHS of this force assignment
 
@@ -122,6 +123,12 @@ public:
         }
     };
 
+    struct ForceHelperVars final {
+        AstVar* m_rdVarp = nullptr;
+        AstVar* m_enVarp = nullptr;
+        AstVar* m_valVarp = nullptr;
+    };
+
     struct ArraySelInfo final {
         std::vector<AstArraySel*> m_sels;
         bool m_hasBitSel = false;
@@ -136,25 +143,38 @@ private:
     using ScopeVarCache = std::unordered_map<const AstVar*, AstVarScope*>;
 
     // NODE STATE
-    //  AstVarRef::user1      -> Flag indicating not to replace reference
-    //  AstAssignForce::user2 -> true if force is synthetic (externally forceable)
-    //  AstVar::user3p()      -> AstVarScope*: Generated <name>__VforceRd helper
-    //  AstVar::user4p()      -> AstVarScope*: Generated <name>__VforceEn helper
-    //  AstVarScope::user3p() -> AstVarScope*: Generated <name>__VforceVal helper
+    //  AstVarRef::user1      -> bool.  Not to replace reference
+    //  AstAssignForce::user2 -> bool.  Force is synthetic (externally forceable)
+    //  AstVar::user3         -> ForceHelperVars via m_forceHelperVarsByVar
     const VNUser1InUse m_user1InUse;
     const VNUser2InUse m_user2InUse;
 
+public:
+    using ForceHelperVarsByVar = AstUser3Allocator<AstVar, ForceHelperVars>;
+    // Raw-variable reads never to replace, even in the other pass (see markPermanentlyProtected)
+    using ProtectedVarRefSet = std::unordered_set<const AstVarRef*>;
+    // AstVarScopes with force-rd-update logic already generated, by either pass
+    using BuiltVarScopeSet = std::unordered_set<const AstVarScope*>;
+
+private:
+    ForceHelperVarsByVar& m_forceHelperVarsByVar;
     std::vector<VarForceInfo> m_varInfos;  // Indexed by stable variable ID
-    std::unordered_map<AstVar*, int> m_varToId;
+    std::unordered_map<AstVarScope*, int> m_varToId;
     std::unordered_set<AstVar*> m_clockedWrites;
     std::unordered_map<AstVar*, std::vector<ForceInfo*>> m_rhsDepToForces;
     std::unordered_map<AstScope*, ScopeVarCache> m_scopeVarCaches;
     bool m_doingAssign = false;  // If true, we're processing procedural continuous assign
                                  // statements instead of force statements
+    ProtectedVarRefSet& m_permanentlyProtected;
+    BuiltVarScopeSet& m_forceRdUpdateBuilt;
 
 public:
-    ForceState(bool doingAssign)
-        : m_doingAssign{doingAssign} {}
+    ForceState(bool doingAssign, ForceHelperVarsByVar& forceHelperVarsByVar,
+               ProtectedVarRefSet& permanentlyProtected, BuiltVarScopeSet& forceRdUpdateBuilt)
+        : m_forceHelperVarsByVar{forceHelperVarsByVar}
+        , m_doingAssign{doingAssign}
+        , m_permanentlyProtected{permanentlyProtected}
+        , m_forceRdUpdateBuilt{forceRdUpdateBuilt} {}
     VL_UNCOPYABLE(ForceState);
 
     // STATIC METHODS
@@ -193,7 +213,7 @@ public:
         return VN_IS(dtypep->skipRefp(), UnpackArrayDType);
     }
 
-    static bool isBitwiseDType(AstNode* nodep) {
+    static bool isBitwiseDType(const AstNode* nodep) {
         const AstBasicDType* const basicp = nodep->dtypep()->skipRefp()->basicp();
         return basicp && !basicp->isDouble() && !basicp->isString() && !basicp->isOpaque();
     }
@@ -208,8 +228,15 @@ public:
         return new AstCCast{exprp->fileline(), exprp, dtypeFromp};
     }
 
-    static bool isNotReplaceable(const AstVarRef* const nodep) { return nodep->user1(); }
     static void markNonReplaceable(AstVarRef* const nodep) { nodep->user1SetOnce(); }
+    bool isNotReplaceable(const AstVarRef* const nodep) const {
+        return nodep->user1() || m_permanentlyProtected.count(nodep) > 0;
+    }
+    // Like markNonReplaceable(), but persists into the other of the force/assign pass too
+    void markPermanentlyProtected(AstVarRef* const nodep) const {
+        markNonReplaceable(nodep);
+        m_permanentlyProtected.insert(nodep);
+    }
 
     static std::vector<ForceInfo*> forceInfosInIdOrder(VarForceInfo& info) {
         std::vector<ForceInfo*> forceps;
@@ -242,13 +269,46 @@ public:
     }
 
     static AstVarRef* getOneVarRef(AstNodeExpr* forceStmtp) {
-        AstNode* const basep = AstArraySel::baseFromp(forceStmtp, true);
+        AstNode* const basep = forceStmtp->baseFromp(true);
         if (AstSampled* sampledp = VN_CAST(basep, Sampled))
             if (AstNodeExpr* exprp = VN_CAST(sampledp->exprp(), NodeExpr))
                 return getOneVarRef(exprp);
         AstVarRef* const varRefp = VN_CAST(basep, VarRef);
-        UASSERT_OBJ(varRefp, forceStmtp, "`force` assignment has no VarRef on LHS");
+        UASSERT_OBJ(varRefp, forceStmtp, "Force/release expression has no VarRef at its base");
         return varRefp;
+    }
+
+    static AstNodeExpr* buildNestedArraySel(FileLine* flp, AstNodeExpr* fromp,
+                                            const std::vector<int>& indicies) {
+        AstNodeExpr* curp = fromp;
+        for (const int idx : indicies) curp = new AstArraySel{flp, curp, idx};
+        return curp;
+    }
+
+    template <typename Fn>
+    static AstNodeStmt* foreachUnpackedLeaf(const std::vector<AstUnpackArrayDType*>& dims,
+                                            Fn buildLeaf) {
+        AstNodeStmt* headp = nullptr;
+        AstNodeStmt* tailp = nullptr;
+        if (dims.empty()) return nullptr;
+        int total = 1;
+        for (const AstUnpackArrayDType* const d : dims) total *= d->elementsConst();
+        if (total <= 0) return nullptr;
+        std::vector<int> idx(dims.size(), 0);
+        for (int flat = 0; flat < total; ++flat) {
+            AstNodeStmt* const stmtp = buildLeaf(idx, flat);
+            if (!headp) {
+                headp = stmtp;
+            } else {
+                tailp->addNext(stmtp);
+            }
+            tailp = stmtp;
+            for (int d = static_cast<int>(dims.size()) - 1; d >= 0; --d) {
+                if (++idx[d] < dims[d]->elementsConst()) break;
+                idx[d] = 0;
+            }
+        }
+        return headp;
     }
 
     ForceRangeInfo getForceRangeInfo(AstNodeExpr* lhsp, AstVar* varp,
@@ -296,7 +356,7 @@ public:
             // Non-bitwise member/struct paths cannot use a real bit range, so map each distinct
             // source path onto a synthetic index in VlForceVec and use that index consistently
             // for force, release, and readback.
-            VarForceInfo& varInfo = getOrCreateVarInfo(varp);
+            VarForceInfo& varInfo = getOrCreateVarInfo(getOneVarRef(lhsp)->varScopep());
             const int index = varInfo.getOrCreateForcePathIndex(lhsp);
             info.m_rangeLsb = index;
             info.m_rangeMsb = index;
@@ -333,8 +393,11 @@ public:
                                      AstNodeExpr* indexExprp) const {
         UASSERT(varInfo.m_forceVecVscp, "No forceVec for forced variable");
 
-        originalExprp->foreach(
-            [](AstVarRef* const refp) { ForceState::markNonReplaceable(refp); });
+        // Protect only the read this call replaces, which would otherwise be replaced
+        // again and recurse.  Everything else in the expression is an ordinary read and
+        // must still see its own force, including an index read of the same array as in
+        // 'mem[mem[0]]'.
+        markNonReplaceable(getOneVarRef(originalExprp));
         AstNodeExpr* const origValp
             = addRhsValueReads(varInfo, castToNodeDType(originalExprp, dtypeFromp));
 
@@ -345,35 +408,129 @@ public:
         return callp;
     }
 
-    AstNodeStmt* createForceRdUpdateStmt(const VarForceInfo& varInfo) const {
-        UASSERT(varInfo.m_forceRdVscp, "No forceRd for forced variable");
+    AstNodeExpr* createForceRdExpression(const VarForceInfo& varInfo, FileLine* flp) const {
         UASSERT(varInfo.m_varVscp, "No base var scope for forced variable");
-        FileLine* const flp = varInfo.m_varVscp->fileline();
-        AstNodeExpr* readExprp = nullptr;
+        AstVar* const varp = varInfo.m_varVscp->varp();
+        if (VN_IS(varp->dtypeSkipRefp(), UnpackArrayDType)) {
+            // Array element forces live in the force vector, including partial-element forces.
+            // The assign pass reuses the force-read shadow, as for an array element read.
+            if (doingAssign()) { return new AstVarRef{flp, varInfo.m_forceRdVscp, VAccess::READ}; }
+            // Whole-array force reads introduce artificial scheduling cycles.
+            varp->fileline()->modifyWarnOff(V3ErrorCode::UNOPTFLAT, true);
+            AstVarRef* const baseRefp = new AstVarRef{flp, varInfo.m_varVscp, VAccess::READ};
+            markPermanentlyProtected(baseRefp);
+            return createForceReadCall(varInfo, flp, VCMethod::FORCE_READ, baseRefp, varp,
+                                       nullptr);
+        }
         AstVarRef* const baseRefp = new AstVarRef{flp, varInfo.m_varVscp, VAccess::READ};
-        markNonReplaceable(baseRefp);
+        markPermanentlyProtected(baseRefp);
         AstNodeExpr* const enRefp = new AstVarRef{flp, varInfo.m_forceEnVscp, VAccess::READ};
         AstNodeExpr* const valRefp = new AstVarRef{flp, varInfo.m_forceValVscp, VAccess::READ};
-        if (isBitwiseDType(varInfo.m_varVscp->varp())) {
-            readExprp = new AstOr{
+        if (isBitwiseDType(varp)) {
+            return new AstOr{
                 flp, new AstAnd{flp, enRefp, valRefp},
                 new AstAnd{flp, new AstNot{flp, enRefp->cloneTreePure(false)}, baseRefp}};
-        } else {
-            readExprp = new AstCond{flp, enRefp, valRefp, baseRefp};
         }
-
-        return new AstAssign{flp, new AstVarRef{flp, varInfo.m_forceRdVscp, VAccess::WRITE},
-                             readExprp};
+        return new AstCond{flp, enRefp, valRefp, baseRefp};
     }
 
-    VarForceInfo& getOrCreateVarInfo(AstVar* varp) {
-        const auto it = m_varToId.find(varp);
+    AstNodeStmt* createForceRdUpdateStmt(const VarForceInfo& varInfo) const {
+        UASSERT(varInfo.m_forceRdVscp, "No forceRd for forced variable");
+        AstVar* const varp = varInfo.m_varVscp->varp();
+        if (VN_IS(varp->dtypeSkipRefp(), UnpackArrayDType)) {
+            return createForceRdUpdateStmtUnpacked(varInfo);
+        }
+        FileLine* const flp = varInfo.m_varVscp->fileline();
+        return new AstAssign{flp, new AstVarRef{flp, varInfo.m_forceRdVscp, VAccess::WRITE},
+                             createForceRdExpression(varInfo, flp)};
+    }
+
+    AstNodeStmt* createForceRdUpdateStmtUnpacked(const VarForceInfo& varInfo) const {
+        FileLine* const flp = varInfo.m_varVscp->fileline();
+        AstVar* const varp = varInfo.m_varVscp->varp();
+        AstUnpackArrayDType* const arrDtypep = VN_AS(varp->dtypep()->skipRefp(), UnpackArrayDType);
+        const std::vector<AstUnpackArrayDType*> dims = arrDtypep->unpackDimensions();
+        AstNodeStmt* const stmtsp = foreachUnpackedLeaf(
+            dims, [&](const std::vector<int>& idx, int /*flat*/) -> AstNodeStmt* {
+                AstVarRef* const baseRefp = new AstVarRef{flp, varInfo.m_varVscp, VAccess::READ};
+                markPermanentlyProtected(baseRefp);
+                AstNodeExpr* const baseSelp = buildNestedArraySel(flp, baseRefp, idx);
+                AstNodeExpr* const enSelp = buildNestedArraySel(
+                    flp, new AstVarRef{flp, varInfo.m_forceEnVscp, VAccess::READ}, idx);
+                AstNodeExpr* const valSelp = buildNestedArraySel(
+                    flp, new AstVarRef{flp, varInfo.m_forceValVscp, VAccess::READ}, idx);
+                AstNodeExpr* const readExprp = new AstOr{
+                    flp, new AstAnd{flp, enSelp, valSelp},
+                    new AstAnd{flp, new AstNot{flp, enSelp->cloneTreePure(false)}, baseSelp}};
+                AstNodeExpr* const rdLhsSelp = buildNestedArraySel(
+                    flp, new AstVarRef{flp, varInfo.m_forceRdVscp, VAccess::WRITE}, idx);
+                return new AstAssign{flp, rdLhsSelp, readExprp};
+            });
+        // Whole-array reads use the force vector, whose external-force entries point to
+        // RHS shadows. Refresh those alongside forceRd so blocking writes are visible
+        // before the next statement. Only synthetic expressions are safe to reevaluate here.
+        for (const ForceInfo* const finfop : forceInfosInIdOrder(varInfo)) {
+            if (!finfop->m_isExternal) continue;
+            stmtsp->addNext(new AstAssign{flp,
+                                          new AstVarRef{flp, finfop->m_rhsVarVscp, VAccess::WRITE},
+                                          finfop->m_rhsExprp->cloneTreePure(false)});
+        }
+        return stmtsp;
+    }
+
+    VarForceInfo& getOrCreateVarInfo(AstVarScope* vscp) {
+        const auto it = m_varToId.find(vscp);
         if (it != m_varToId.end()) return m_varInfos[it->second];
 
-        m_varToId.emplace(varp, m_varInfos.size());
+        m_varToId.emplace(vscp, m_varInfos.size());
         m_varInfos.emplace_back();
         VarForceInfo& info = m_varInfos.back();
-        info.m_varp = varp;
+        info.m_varVscp = vscp;
+        info.m_varp = vscp->varp();
+        info.m_scopep = vscp->scopep();
+
+        AstVar* const varp = info.m_varp;
+        if (!varp->isForceable()) return info;
+
+        FileLine* const flp = varp->fileline();
+        ForceHelperVars& helperVars = m_forceHelperVarsByVar(varp);
+        const bool helperVarsBuilt = helperVars.m_rdVarp != nullptr;
+        UASSERT_OBJ(helperVarsBuilt == (helperVars.m_enVarp != nullptr)
+                        && helperVarsBuilt == (helperVars.m_valVarp != nullptr),
+                    varp, "Incomplete force helper set");
+        if (!helperVarsBuilt) {
+            const bool unpacked = isUnpackedArrayDType(varp->dtypep());
+            const VVarType enValType = unpacked ? VVarType::WIRE : VVarType::VAR;
+            AstNodeDType* const enDtypep
+                = unpacked || isBitwiseDType(varp) ? varp->dtypep() : varp->findBitDType();
+            helperVars.m_rdVarp
+                = new AstVar{flp, VVarType::WIRE, varp->name() + "__VforceRd", varp->dtypep()};
+            helperVars.m_rdVarp->sigPublic(true);
+            helperVars.m_enVarp
+                = new AstVar{flp, enValType, varp->name() + "__VforceEn", enDtypep};
+            helperVars.m_enVarp->sigUserRWPublic(true);
+            helperVars.m_valVarp
+                = new AstVar{flp, enValType, varp->name() + "__VforceVal", varp->dtypep()};
+            helperVars.m_valVarp->sigUserRWPublic(true);
+            varp->addNextHere(helperVars.m_rdVarp);
+            varp->addNextHere(helperVars.m_enVarp);
+            varp->addNextHere(helperVars.m_valVarp);
+        }
+
+        info.m_forceRdVscp = findScopeVar(info.m_scopep, helperVars.m_rdVarp);
+        info.m_forceEnVscp = findScopeVar(info.m_scopep, helperVars.m_enVarp);
+        info.m_forceValVscp = findScopeVar(info.m_scopep, helperVars.m_valVarp);
+        if (info.m_forceRdVscp || info.m_forceEnVscp || info.m_forceValVscp) {
+            UASSERT_OBJ(info.m_forceRdVscp && info.m_forceEnVscp && info.m_forceValVscp, vscp,
+                        "Incomplete pre-existing force helper set");
+        } else {
+            info.m_forceRdVscp = new AstVarScope{flp, info.m_scopep, helperVars.m_rdVarp};
+            info.m_forceEnVscp = new AstVarScope{flp, info.m_scopep, helperVars.m_enVarp};
+            info.m_forceValVscp = new AstVarScope{flp, info.m_scopep, helperVars.m_valVarp};
+            info.m_scopep->addVarsp(info.m_forceRdVscp);
+            info.m_scopep->addVarsp(info.m_forceEnVscp);
+            info.m_scopep->addVarsp(info.m_forceValVscp);
+        }
         return info;
     }
 
@@ -382,8 +539,8 @@ public:
 
     bool doingAssign() const { return m_doingAssign; }
 
-    const VarForceInfo* getVarInfo(AstVar* varp) const {
-        const auto it = m_varToId.find(varp);
+    const VarForceInfo* getVarInfo(AstVarScope* vscp) const {
+        const auto it = m_varToId.find(vscp);
         return it != m_varToId.end() ? &m_varInfos[it->second] : nullptr;
     }
 
@@ -404,8 +561,7 @@ public:
         v3Global.setUsesForce();
         varp->setForcedByCode();
 
-        VarForceInfo& info = getOrCreateVarInfo(varp);
-        if (!info.m_scopep) info.m_scopep = vscp->scopep();
+        VarForceInfo& info = getOrCreateVarInfo(vscp);
         const int forceId = info.m_forces.size();
         FileLine* const flp = varp->fileline();
         AstScope* const scopep = vscp->scopep();
@@ -415,9 +571,11 @@ public:
             AstCDType* const forceVecDtypep = new AstCDType{flp, "VlForceVec"};
             v3Global.rootp()->typeTablep()->addTypesp(forceVecDtypep);
 
-            AstVar* const forceVecVarp = new AstVar{
-                flp, VVarType::MEMBER,
-                varp->name() + (m_doingAssign ? "_VassignVec" : "__VforceVec"), forceVecDtypep};
+            AstVar* const forceVecVarp
+                = new AstVar{flp, VVarType::MEMBER,
+                             varp->name() + (m_doingAssign ? "_VassignVec" : "__VforceVec") + "__"
+                                 + scopep->nameDotless(),
+                             forceVecDtypep};
             forceVecVarp->funcLocal(false);
             forceVecVarp->isInternal(true);
             varp->addNextHere(forceVecVarp);
@@ -429,6 +587,7 @@ public:
                                           ForceInfo{rangeLsb, rangeMsb, padLsb, padMsb, forceId,
                                                     hasArraySel, nullptr, rhsExprp});
         ForceInfo& finfo = pair.first->second;
+        finfo.m_isExternal = forceStmtp->user2();
         if (doingAssign()) {
             std::vector<AstVar*> depVarps;
             finfo.m_rhsExprp->foreach([&](AstVarRef* const refp) {
@@ -489,12 +648,36 @@ public:
 
     static AstNodeExpr* buildFlattenIndexExpr(FileLine* flp, const ArraySelInfo& info) {
         const std::vector<int> dimSizes = arraySelDimSizes(info);
-        std::vector<int> constIndices;
-        constIndices.reserve(info.m_sels.size());
+        bool allConst = true;
         for (AstArraySel* const selp : info.m_sels) {
-            constIndices.push_back(VN_AS(selp->bitp(), Const)->toSInt());
+            if (!VN_IS(selp->bitp(), Const)) {
+                allConst = false;
+                break;
+            }
         }
-        return makeConst32(flp, flattenIndex(constIndices, dimSizes));
+        if (allConst) {
+            std::vector<int> constIndices;
+            constIndices.reserve(info.m_sels.size());
+            for (AstArraySel* const selp : info.m_sels) {
+                constIndices.push_back(VN_AS(selp->bitp(), Const)->toSInt());
+            }
+            return makeConst32(flp, flattenIndex(constIndices, dimSizes));
+        }
+        // A read may select the element at run time, so compute the same flattened index
+        // as flattenIndex() does, but as an expression.  Only a force target has to be a
+        // constant element; 'array[i]' with a variable 'i' is an ordinary read.
+        AstNodeExpr* resultp = nullptr;
+        int stride = 1;
+        for (int i = static_cast<int>(info.m_sels.size()) - 1; i >= 0; --i) {
+            AstNodeExpr* termp = info.m_sels[i]->bitp()->cloneTreePure(false);
+            // V3Width sizes an array index to at most 32 bits, so widening is all that
+            // is needed to keep the arithmetic below width matched.
+            if (termp->width() < 32) termp = new AstExtend{flp, termp, 32};
+            if (stride != 1) termp = new AstMul{flp, termp, makeConst32(flp, stride)};
+            resultp = resultp ? new AstAdd{flp, resultp, termp} : termp;
+            stride *= dimSizes[i];
+        }
+        return resultp;
     }
 
     static AstNodeExpr* buildRhsDataExpr(FileLine* flp, const ForceInfo& finfo) {
@@ -518,11 +701,11 @@ public:
                 UASSERT_OBJ(finfo.m_rhsExprp, varp, "Missing RHS expression for ForceInfo");
 
                 // Create per-force temporary storage for the captured RHS value.
-                AstVar* const rhsVarp
-                    = new AstVar{flp, VVarType::VAR,
-                                 varp->name() + (doingAssign() ? "_VassignRHS" : "__VforceRHS")
-                                     + std::to_string(finfo.m_forceId),
-                                 finfo.m_rhsExprp->dtypep()};
+                AstVar* const rhsVarp = new AstVar{
+                    flp, VVarType::VAR,
+                    varp->name() + (doingAssign() ? "_VassignRHS" : "__VforceRHS")
+                        + std::to_string(finfo.m_forceId) + "__" + scopep->nameDotless(),
+                    finfo.m_rhsExprp->dtypep()};
                 rhsVarp->noSubst(true);
                 rhsVarp->sigPublic(true);
                 rhsVarp->setForcedByCode();
@@ -530,17 +713,16 @@ public:
                 finfo.m_rhsVarVscp = new AstVarScope{flp, scopep, rhsVarp};
                 scopep->addVarsp(finfo.m_rhsVarVscp);
 
-                // Build assignments for RHS capture. Public/forceable signals with __VforceRd
-                // already have an explicit force-read update path, so they do not need the
-                // forceVec.touch() ordering edge here.
+                // Array reads use the force vector even when a public read shadow exists.
+                // Keep their consumers ordered after RHS capture through forceVec.touch().
                 // always_comb begin
                 //   forceRHS[id] = rhsExpr;
-                //   forceVec.touch();  // Only without __VforceRd
+                //   forceVec.touch();  // When reads use the force vector
                 // end
                 AstAssign* const rhsAssignp = new AstAssign{
                     flp, new AstVarRef{flp, finfo.m_rhsVarVscp, VAccess::WRITE}, finfo.m_rhsExprp};
 
-                if (!info.m_forceRdVscp) {
+                if (!info.m_forceRdVscp || isUnpackedArrayDType(varp->dtypep())) {
                     // touch() is intentionally a semantic no-op at runtime: it creates an
                     // explicit use/ordering edge from the RHS-capture logic to the force vector
                     // so later optimization/scheduling passes keep this update path connected.
@@ -564,15 +746,29 @@ public:
             }
 
             if (info.m_forceRdVscp) {
+                if (!m_forceRdUpdateBuilt.insert(info.m_varVscp).second) continue;
                 AstActive* const activeInitp = new AstActive{
                     flp, "force-init",
                     new AstSenTree{flp, new AstSenItem{flp, AstSenItem::Static{}}}};
                 activeInitp->senTreeStorep(activeInitp->sentreep());
-                AstAssign* const initEnp
-                    = new AstAssign{flp, new AstVarRef{flp, info.m_forceEnVscp, VAccess::WRITE},
-                                    makeZeroConst(varp, info.m_forceEnVscp->width())};
-                initEnp->addNextHere(createForceRdUpdateStmt(info));
-                activeInitp->addStmtsp(new AstInitial{flp, initEnp});
+                AstNodeStmt* initStmtp = nullptr;
+                if (AstUnpackArrayDType* const arrDtypep
+                    = VN_CAST(varp->dtypeSkipRefp(), UnpackArrayDType)) {
+                    const std::vector<AstUnpackArrayDType*> dims = arrDtypep->unpackDimensions();
+                    const int innerWidth = dims.back()->subDTypep()->skipRefp()->width();
+                    initStmtp = foreachUnpackedLeaf(
+                        dims, [&](const std::vector<int>& idx, int /*flat*/) -> AstNodeStmt* {
+                            AstNodeExpr* const lhsp = buildNestedArraySel(
+                                flp, new AstVarRef{flp, info.m_forceEnVscp, VAccess::WRITE}, idx);
+                            return new AstAssign{flp, lhsp, makeZeroConst(varp, innerWidth)};
+                        });
+                } else {
+                    initStmtp = new AstAssign{
+                        flp, new AstVarRef{flp, info.m_forceEnVscp, VAccess::WRITE},
+                        makeZeroConst(varp, info.m_forceEnVscp->width())};
+                }
+                initStmtp->addNext(createForceRdUpdateStmt(info));
+                activeInitp->addStmtsp(new AstInitial{flp, initStmtp});
                 scopep->addBlocksp(activeInitp);
 
                 AstSenItem* itemsp = nullptr;
@@ -589,7 +785,7 @@ public:
                 addSenItem(info.m_forceEnVscp);
                 addSenItem(info.m_forceValVscp);
                 AstVarRef* const origSenRefp = new AstVarRef{flp, info.m_varVscp, VAccess::READ};
-                markNonReplaceable(origSenRefp);
+                markPermanentlyProtected(origSenRefp);
                 AstSenItem* const origItemp
                     = new AstSenItem{flp, VEdgeType::ET_CHANGED, origSenRefp};
                 if (!itemsp) varp->v3fatalSrc("force-rd-update missing force-enable sen item");
@@ -631,8 +827,8 @@ public:
     }
 
     const ForceInfo& getForceInfo(AstAssignForce* forceStmtp) const {
-        AstVar* varp = getOneVarRef(forceStmtp->lhsp())->varp();
-        const VarForceInfo* const varInfo = getVarInfo(varp);
+        AstVarScope* const vscp = getOneVarRef(forceStmtp->lhsp())->varScopep();
+        const VarForceInfo* const varInfo = getVarInfo(vscp);
         UASSERT(varInfo, "Force info not found for variable");
         auto it2 = varInfo->m_forces.find(forceStmtp);
         UASSERT(it2 != varInfo->m_forces.end(), "Force statement not found");
@@ -649,8 +845,9 @@ public:
     AstNodeExpr* createForceReadExpression(const VarForceInfo& varInfo,
                                            AstVarRef* originalRefp) const {
         FileLine* const flp = originalRefp->fileline();
-        return createForceReadCall(varInfo, flp, VCMethod::FORCE_READ,
-                                   originalRefp->cloneTreePure(false), originalRefp->varp(),
+        AstVarRef* const refp = originalRefp->cloneTreePure(false);
+        refp->access(VAccess::READ);
+        return createForceReadCall(varInfo, flp, VCMethod::FORCE_READ, refp, refp->varp(),
                                    nullptr);
     }
 
@@ -658,8 +855,11 @@ public:
                                                 AstNodeExpr* originalExprp,
                                                 AstNodeExpr* indexExprp) const {
         FileLine* const flp = originalExprp->fileline();
-        return createForceReadCall(varInfo, flp, VCMethod::FORCE_READ_INDEX,
-                                   originalExprp->cloneTreePure(false), originalExprp, indexExprp);
+        AstNodeExpr* const exprp = originalExprp->cloneTreePure(false);
+        // Must be an LValue to a static variable
+        VN_AS(exprp->getVAccessTargetRecurse(), VarRef)->access(VAccess::READ);
+        return createForceReadCall(varInfo, flp, VCMethod::FORCE_READ_INDEX, exprp, originalExprp,
+                                   indexExprp);
     }
 
     static AstNodeExpr* rebuildSelPath(AstNodeExpr* pathp, AstNodeExpr* baseExprp) {
@@ -699,6 +899,65 @@ class ForceDiscoveryVisitor final : public VNVisitorConst {
     ForceState& m_state;
     bool m_inClockedActive = false;
 
+    void buildForceableUnpackedArray(AstVarScope* const nodep,
+                                     AstUnpackArrayDType* const arrDtypep) {
+        AstVar* const varp = nodep->varp();
+        const std::vector<AstUnpackArrayDType*> dims = arrDtypep->unpackDimensions();
+        UASSERT_OBJ(!dims.empty(), varp,
+                    "buildForceableUnpackedArray called with non-unpacked dtype");
+        const AstNodeDType* const leafDtypep = dims.back()->subDTypep()->skipRefp();
+        const AstBasicDType* const innerBasicp = leafDtypep->basicp();
+        if (!ForceState::isBitwiseDType(innerBasicp)) {
+            varp->v3warn(E_UNSUPPORTED,
+                         "Unsupported: Forcing unpacked arrays of non-bitwise inner type: "
+                             << varp->name());  // (#4735)
+            return;
+        }
+
+        FileLine* const flp = varp->fileline();
+        const int innerWidth = leafDtypep->width();
+
+        ForceState::VarForceInfo& info = m_state.getOrCreateVarInfo(nodep);
+        AstVarScope* const enVscp = info.m_forceEnVscp;
+        AstVarScope* const valVscp = info.m_forceValVscp;
+
+        AstSenItem* const itemsp = new AstSenItem{flp, VEdgeType::ET_CHANGED,
+                                                  new AstVarRef{flp, enVscp, VAccess::READ}};
+        AstActive* const activep = new AstActive{flp, "force-update", new AstSenTree{flp, itemsp}};
+        activep->senTreeStorep(activep->sentreep());
+
+        AstNodeStmt* const alwaysBodyHeadp = ForceState::foreachUnpackedLeaf(
+            dims, [&](const std::vector<int>& idx, int flat) -> AstNodeStmt* {
+                AstVarRef* const origRefp = new AstVarRef{flp, nodep, VAccess::READ};
+                ForceState::markNonReplaceable(origRefp);
+                AstNodeExpr* const origSelp = ForceState::buildNestedArraySel(flp, origRefp, idx);
+                AstNodeExpr* const enSelp = ForceState::buildNestedArraySel(
+                    flp, new AstVarRef{flp, enVscp, VAccess::READ}, idx);
+                AstNodeExpr* const valSelp = ForceState::buildNestedArraySel(
+                    flp, new AstVarRef{flp, valVscp, VAccess::READ}, idx);
+                AstNodeExpr* const forceExprp = new AstOr{
+                    flp, new AstAnd{flp, enSelp, valSelp},
+                    new AstAnd{flp, new AstNot{flp, enSelp->cloneTreePure(false)}, origSelp}};
+                AstNodeExpr* const lhsSelp = ForceState::buildNestedArraySel(
+                    flp, new AstVarRef{flp, nodep, VAccess::WRITE}, idx);
+
+                AstAssignForce* const forceAssignp = new AstAssignForce{flp, lhsSelp, forceExprp};
+                forceAssignp->user2(true);
+
+                AstNodeExpr* const rhsClonep = forceExprp->cloneTreePure(false);
+                rhsClonep->foreach([varp](AstVarRef* const r) {
+                    if (r->varp() == varp) ForceState::markNonReplaceable(r);
+                });
+                m_state.addForceAssignment(varp, nodep, rhsClonep, forceAssignp,
+                                           /*rangeLsb=*/flat, /*rangeMsb=*/flat,
+                                           /*padLsb=*/0, /*padMsb=*/innerWidth - 1,
+                                           /*hasArraySel=*/true);
+                return forceAssignp;
+            });
+        activep->addStmtsp(new AstAlways{flp, VAlwaysKwd::ALWAYS, nullptr, alwaysBodyHeadp});
+        nodep->scopep()->addBlocksp(activep);
+    }
+
     void visit(AstAssignForce* nodep) override {
         if (nodep->user2()) return;  // External force statements are pre-registered.
         UINFO(2, "Discovering force statement: " << nodep << "\n");
@@ -711,30 +970,8 @@ class ForceDiscoveryVisitor final : public VNVisitorConst {
         ForceState::ForceRangeInfo rangeInfo
             = m_state.getForceRangeInfo(nodep->lhsp(), forcedVarp, true);
 
-        // Start from a cloned RHS expression; adjust below for partial bit selects.
-        const AstSel* const selLhsp = VN_CAST(nodep->lhsp(), Sel);
-        AstNodeExpr* rhsExprp = nodep->rhsp()->cloneTreePure(false);
-
-        // For bitwise selects inside arrays, merge updated bits with preserved base bits.
-        if (rangeInfo.m_hasArraySel && rangeInfo.m_arrayInfo.m_hasBitSel && selLhsp
-            && ForceState::isBitwiseDType(selLhsp->fromp())) {
-            AstNodeExpr* const baseExprp = selLhsp->fromp()->cloneTreePure(false);
-            baseExprp->foreach(
-                [](AstVarRef* const refp) { ForceState::markNonReplaceable(refp); });
-
-            // Pad the selected value back to full base width before masking/or-ing.
-            rhsExprp = ForceState::zeroPadToBaseWidth(rhsExprp, selLhsp->fromp()->width(),
-                                                      rangeInfo.m_padLsb, rangeInfo.m_padMsb);
-
-            // Keep untouched base bits and insert the newly forced bit range.
-            // rhsExpr = (baseExpr & ~mask(range)) | (zeroPad(force_rhs) & mask(range));
-            AstConst* const maskConstp = ForceState::makeRangeMaskConst(
-                nodep->lhsp(), selLhsp->fromp()->width(), rangeInfo.m_padLsb, rangeInfo.m_padMsb);
-            AstNodeExpr* const maskedOldp
-                = new AstAnd{nodep->lhsp()->fileline(), baseExprp,
-                             new AstNot{nodep->lhsp()->fileline(), maskConstp}};
-            rhsExprp = new AstOr{nodep->lhsp()->fileline(), maskedOldp, rhsExprp};
-        }
+        // Keep narrow rhs, VlForceVec blends unpacked-array bit-select forces at read time
+        AstNodeExpr* const rhsExprp = nodep->rhsp()->cloneTreePure(false);
 
         m_state.addForceAssignment(forcedVarp, lhsVarRefp->varScopep(), rhsExprp, nodep,
                                    rangeInfo.m_rangeLsb, rangeInfo.m_rangeMsb, rangeInfo.m_padLsb,
@@ -762,27 +999,15 @@ class ForceDiscoveryVisitor final : public VNVisitorConst {
             // ForceState. Reuse already-created public helper vars instead of regenerating
             // duplicate __Vforce* members for every forceable signal.
             if (m_state.doingAssign()) {
-                AstVar* const varp = nodep->varp();
-                AstVarScope* const rdVscp = VN_CAST(varp->user3p(), VarScope);
-                AstVarScope* const enVscp = VN_CAST(varp->user4p(), VarScope);
-                AstVarScope* const valVscp = VN_CAST(nodep->user3p(), VarScope);
-                if (rdVscp || enVscp || valVscp) {
-                    UASSERT_OBJ(rdVscp && enVscp && valVscp, nodep,
-                                "Incomplete pre-existing force helper set");
-                    ForceState::VarForceInfo& info = m_state.getOrCreateVarInfo(varp);
-                    info.m_forceRdVscp = rdVscp;
-                    info.m_forceEnVscp = enVscp;
-                    info.m_forceValVscp = valVscp;
-                    info.m_varVscp = nodep;
-                    iterateChildrenConst(nodep);
-                    return;
-                }
+                m_state.getOrCreateVarInfo(nodep);
+                iterateChildrenConst(nodep);
+                return;
             }
 
-            if (VN_IS(nodep->varp()->dtypeSkipRefp(), UnpackArrayDType)) {
-                nodep->varp()->v3warn(
-                    E_UNSUPPORTED,
-                    "Unsupported: Forcing unpacked arrays: " << nodep->varp()->name());  // (#4735)
+            if (AstUnpackArrayDType* const arrDtypep
+                = VN_CAST(nodep->varp()->dtypeSkipRefp(), UnpackArrayDType)) {
+                buildForceableUnpackedArray(nodep, arrDtypep);
+                iterateChildrenConst(nodep);
                 return;
             }
 
@@ -792,40 +1017,12 @@ class ForceDiscoveryVisitor final : public VNVisitorConst {
                     "Forcing strings is not permitted: " << nodep->varp()->name());
             }
 
-            // Create per-signal storage for force enable/value state.
+            // Build the per-signal force update logic.
             AstVar* const varp = nodep->varp();
             FileLine* const flp = varp->fileline();
-            AstVar* const rdVarp
-                = new AstVar{flp, VVarType::WIRE, varp->name() + "__VforceRd", varp->dtypep()};
-            rdVarp->noSubst(true);
-            rdVarp->sigPublic(true);
-            AstNodeDType* const enDtypep
-                = ForceState::isBitwiseDType(varp) ? varp->dtypep() : varp->findBitDType();
-            AstVar* const enVarp
-                = new AstVar{flp, VVarType::VAR, varp->name() + "__VforceEn", enDtypep};
-            enVarp->sigUserRWPublic(true);
-            AstVar* const valVarp
-                = new AstVar{flp, VVarType::VAR, varp->name() + "__VforceVal", varp->dtypep()};
-            valVarp->sigUserRWPublic(true);
-            varp->addNextHere(rdVarp);
-            varp->addNextHere(enVarp);
-            varp->addNextHere(valVarp);
-            AstVarScope* const rdVscp = new AstVarScope{flp, nodep->scopep(), rdVarp};
-            AstVarScope* const enVscp = new AstVarScope{flp, nodep->scopep(), enVarp};
-            AstVarScope* const valVscp = new AstVarScope{flp, nodep->scopep(), valVarp};
-            nodep->scopep()->addVarsp(rdVscp);
-            nodep->scopep()->addVarsp(enVscp);
-            nodep->scopep()->addVarsp(valVscp);
-            varp->user3p(rdVscp);
-            varp->user4p(enVscp);
-            nodep->user3p(valVscp);
-
-            // Register force metadata so later transforms can find these helper vars.
-            ForceState::VarForceInfo& info = m_state.getOrCreateVarInfo(varp);
-            info.m_forceRdVscp = rdVscp;
-            info.m_forceEnVscp = enVscp;
-            info.m_forceValVscp = valVscp;
-            info.m_varVscp = nodep;
+            ForceState::VarForceInfo& info = m_state.getOrCreateVarInfo(nodep);
+            AstVarScope* const enVscp = info.m_forceEnVscp;
+            AstVarScope* const valVscp = info.m_forceValVscp;
 
             // Build an update block triggered by force-enable changes.
             AstSenItem* const itemsp = new AstSenItem{flp, VEdgeType::ET_CHANGED,
@@ -896,7 +1093,8 @@ class ForceConvertVisitor final : public VNVisitor {
         AstVar* const forcedVarp = lhsVarRefp->varp();
 
         const ForceState::ForceInfo& info = m_state.getForceInfo(nodep);
-        const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(forcedVarp);
+        const ForceState::VarForceInfo* const varInfo
+            = m_state.getVarInfo(lhsVarRefp->varScopep());
         UASSERT_OBJ(varInfo && varInfo->m_forceVecVscp, nodep, "Force info not set up");
 
         FileLine* const flp = nodep->fileline();
@@ -955,6 +1153,11 @@ class ForceConvertVisitor final : public VNVisitor {
 
         // Verilog pseudocode:
         //   forceVec.addForce(range_lsb, range_msb, &forceRHS[id], rhs_lsb);
+        const AstSel* const selLhsp = VN_CAST(lhsp, Sel);
+        const bool arrayBitSel
+            = info.m_hasArraySel && selLhsp && ForceState::getArraySelInfo(lhsp).m_hasBitSel
+              && ForceState::isBitwiseDType(selLhsp->fromp())
+              && (info.m_padMsb - info.m_padLsb + 1) < selLhsp->fromp()->width();
         AstNodeExpr* const rhsDatap = ForceState::buildRhsDataExpr(flp, info);
         AstCExpr* const rhsAddrp = new AstCExpr{flp};
         rhsAddrp->add("&(");
@@ -965,7 +1168,13 @@ class ForceConvertVisitor final : public VNVisitor {
             ForceState::makeConst32(flp, info.m_rangeLsb)};
         addForceCallp->addPinsp(ForceState::makeConst32(flp, info.m_rangeMsb));
         addForceCallp->addPinsp(rhsAddrp);
-        addForceCallp->addPinsp(ForceState::makeConst32(flp, info.m_rangeLsb));
+        addForceCallp->addPinsp(
+            ForceState::makeConst32(flp, arrayBitSel ? info.m_padLsb : info.m_rangeLsb));
+        if (arrayBitSel) {
+            addForceCallp->addPinsp(ForceState::makeConst32(flp, info.m_padLsb));
+            addForceCallp->addPinsp(ForceState::makeConst32(flp, info.m_padMsb));
+            addForceCallp->addPinsp(ForceState::makeConst32(flp, selLhsp->fromp()->width()));
+        }
         addForceCallp->dtypeSetVoid();
         AstNodeStmt* const stmtp = addForceCallp->makeStmt();
 
@@ -993,7 +1202,8 @@ class ForceConvertVisitor final : public VNVisitor {
         AstVarRef* const lhsVarRefp = m_state.getOneVarRef(lhsp);
         AstVar* const releasedVarp = lhsVarRefp->varp();
 
-        const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(releasedVarp);
+        const ForceState::VarForceInfo* const varInfo
+            = m_state.getVarInfo(lhsVarRefp->varScopep());
         if (!varInfo) {
             VL_DO_DANGLING(pushDeletep(nodep->unlinkFrBack()), nodep);
             return;
@@ -1005,12 +1215,21 @@ class ForceConvertVisitor final : public VNVisitor {
         const ForceState::ForceRangeInfo rangeInfo
             = m_state.getForceRangeInfo(lhsp, releasedVarp, false);
 
+        const AstSel* const selLhsp = VN_CAST(lhsp, Sel);
+        const bool arrayBitSel
+            = rangeInfo.m_hasArraySel && selLhsp && rangeInfo.m_arrayInfo.m_hasBitSel
+              && ForceState::isBitwiseDType(selLhsp->fromp())
+              && (rangeInfo.m_padMsb - rangeInfo.m_padLsb + 1) < selLhsp->fromp()->width();
         AstCMethodHard* const releaseCallp = new AstCMethodHard{
             flp, new AstVarRef{flp, varInfo->m_forceVecVscp, VAccess::WRITE},
             VCMethod::FORCE_RELEASE, ForceState::makeConst32(flp, rangeInfo.m_rangeLsb)};
         releaseCallp->addPinsp(ForceState::makeConst32(flp, rangeInfo.m_rangeMsb));
+        if (arrayBitSel) {
+            releaseCallp->addPinsp(ForceState::makeConst32(flp, rangeInfo.m_padLsb));
+            releaseCallp->addPinsp(ForceState::makeConst32(flp, rangeInfo.m_padMsb));
+        }
         releaseCallp->dtypeSetVoid();
-        // forceVec.release(range_lsb, range_msb);
+        // forceVec.release(range_lsb, range_msb [, bit_lsb, bit_msb]);
         AstNodeStmt* const releasep = releaseCallp->makeStmt();
 
         AstAssign* clearEnp = nullptr;
@@ -1123,7 +1342,7 @@ class ForceReplaceVisitor final : public VNVisitor {
         m_stmtp = nodep;
         iterate(nodep->lhsp());
         iterate(nodep->rhsp());
-        if (AstVarRef* const lhsp = VN_CAST(AstArraySel::baseFromp(nodep->lhsp(), true), VarRef)) {
+        if (AstVarRef* const lhsp = VN_CAST(nodep->lhsp()->baseFromp(true), VarRef)) {
             if (AstNode* const updatep
                 = m_state.createRhsUpdatesForWrite(nodep->fileline(), lhsp->varp())) {
                 nodep->addNextHere(updatep);
@@ -1151,13 +1370,13 @@ class ForceReplaceVisitor final : public VNVisitor {
     void visit(AstSel* nodep) override {
         // Replace Sel on a wide with readSelI/Q/W to avoid materializing the full value
         AstVarRef* const refp = VN_CAST(nodep->fromp(), VarRef);
-        if (!refp || ForceState::isNotReplaceable(refp) || !refp->access().isReadOnly()) {
+        if (!refp || m_state.isNotReplaceable(refp) || !refp->access().isReadOnly()) {
             visit(static_cast<AstNode*>(nodep));
             return;
         }
 
         AstVar* const varp = refp->varp();
-        const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(varp);
+        const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(refp->varScopep());
         if (!varInfo || varInfo->m_forceRdVscp || varInfo->m_forces.empty()
             || !ForceState::isBitwiseDType(varp) || !varp->dtypep()->isWide()) {
             visit(static_cast<AstNode*>(nodep));
@@ -1191,24 +1410,28 @@ class ForceReplaceVisitor final : public VNVisitor {
         VL_DO_DANGLING(pushDeletep(nodep), nodep);
     }
     void visit(AstArraySel* nodep) override {
-        if (nodep->backp() && VN_IS(nodep->backp(), ArraySel)) {
-            // Only the outermost unpacked array selection should become a force-aware read;
-            // inner nested selections are folded into the final flattened index.
-            iterateChildren(nodep);
-            return;
+        if (const AstArraySel* const backSelp = VN_CAST(nodep->backp(), ArraySel)) {
+            // Only the outermost selection of the array path should become a force-aware
+            // read; inner selections along 'fromp' fold into the final flattened index.
+            // A selection used as the index is a read in its own right, as in
+            // 'mem[mem[0]]', so it must not be skipped here.
+            if (backSelp->fromp() == nodep) {
+                iterateChildren(nodep);
+                return;
+            }
         }
 
-        AstNode* const basep = AstArraySel::baseFromp(nodep, true);
+        AstNode* const basep = nodep->baseFromp(true);
         AstVarRef* const baseRefp = VN_CAST(basep, VarRef);
         if (!baseRefp) {
             iterateChildren(nodep);
             return;
         }
         AstVar* const varp = baseRefp->varp();
-        const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(varp);
+        const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(baseRefp->varScopep());
         // Skip non-forceable reads, reads we intentionally protected earlier, and intermediate
         // selections that still evaluate to an unpacked array rather than a scalar element.
-        if (ForceState::isNotReplaceable(baseRefp) || !varInfo
+        if (m_state.isNotReplaceable(baseRefp) || !varInfo
             || !ForceState::isUnpackedArrayDType(varp->dtypep())
             || VN_IS(nodep->dtypep()->skipRefp(), UnpackArrayDType)) {
             iterateChildren(nodep);
@@ -1219,7 +1442,18 @@ class ForceReplaceVisitor final : public VNVisitor {
             iterateChildren(nodep);
             return;
         }
+        if (m_state.doingAssign() && varInfo->m_forceRdVscp) {
+            baseRefp->varp(varInfo->m_forceRdVscp->varp());
+            baseRefp->varScopep(varInfo->m_forceRdVscp);
+            iterateChildren(nodep);
+            return;
+        }
         const ForceState::ArraySelInfo arrayInfo = ForceState::getArraySelInfo(nodep);
+        // Substitute forced reads inside the index expressions before anything is cloned,
+        // so the fallback value and the flattened index use the same, force-aware index.
+        // An index is an ordinary read, including when it reads the same array as in
+        // 'mem[mem[0]]'.
+        for (AstArraySel* const selp : arrayInfo.m_sels) iterateAndNextNull(selp->bitp());
         AstNodeExpr* const indexExprp
             = ForceState::buildFlattenIndexExpr(nodep->fileline(), arrayInfo);
         AstNodeExpr* const readExprp
@@ -1229,11 +1463,15 @@ class ForceReplaceVisitor final : public VNVisitor {
     }
 
     void visit(AstVarRef* nodep) override {
-        if (ForceState::isNotReplaceable(nodep)) return;
-        if (nodep->backp() && VN_IS(nodep->backp(), ArraySel)) return;
+        if (m_state.isNotReplaceable(nodep)) return;
+        // The array an ArraySel selects from is left to visit(AstArraySel), which builds
+        // the force-aware read for the whole select. The index is an ordinary read and
+        // must still be substituted here, so check which child this is.
+        if (const AstArraySel* const backSelp = VN_CAST(nodep->backp(), ArraySel)) {
+            if (backSelp->fromp() == nodep) return;
+        }
 
-        AstVar* const varp = nodep->varp();
-        const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(varp);
+        const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(nodep->varScopep());
         if (!varInfo) return;
 
         if (varInfo->m_forceRdVscp) {
@@ -1246,8 +1484,12 @@ class ForceReplaceVisitor final : public VNVisitor {
                 return;
             }
             if (nodep->access().isReadOnly()) {
-                nodep->varp(varInfo->m_forceRdVscp->varp());
-                nodep->varScopep(varInfo->m_forceRdVscp);
+                // Inline the effective value so a blocking update to a continuous driver is
+                // visible immediately. The __VforceRd shadow is updated only on the next event.
+                AstNodeExpr* const readp
+                    = m_state.createForceRdExpression(*varInfo, nodep->fileline());
+                nodep->replaceWith(readp);
+                VL_DO_DANGLING(pushDeletep(nodep), nodep);
                 return;
             }
             if (m_inLogic && m_stmtp) {
@@ -1281,14 +1523,15 @@ class ForceReplaceVisitor final : public VNVisitor {
             // Handle the whole opaque path at its outermost node so we can assign one stable
             // synthetic force-path index to the full selection/member chain.
             AstNodeExpr* const exprp = VN_AS(nodep, NodeExpr);
-            AstNode* const basep = AstArraySel::baseFromp(exprp, true);
+            AstNode* const basep = exprp->baseFromp(true);
             AstVarRef* const baseRefp = VN_CAST(basep, VarRef);
             if (baseRefp) {
                 AstVar* const varp = baseRefp->varp();
                 if (!ForceState::isBitwiseDType(varp)
                     && !ForceState::isUnpackedArrayDType(varp->dtypep())) {
-                    const ForceState::VarForceInfo* const varInfo = m_state.getVarInfo(varp);
-                    if (!ForceState::isNotReplaceable(baseRefp) && varInfo) {
+                    const ForceState::VarForceInfo* const varInfo
+                        = m_state.getVarInfo(baseRefp->varScopep());
+                    if (!m_state.isNotReplaceable(baseRefp) && varInfo) {
                         const int forcePathIndex = varInfo->findForcePathIndex(exprp);
                         if (forcePathIndex >= 0) {
                             if (!baseRefp->access().isReadOnly()) return;
@@ -1321,17 +1564,12 @@ public:
 //######################################################################
 // V3Force - Main entry point
 
-namespace {
-class ForceUserSlots final {
-    const VNUser3InUse m_user3InUse;
-    const VNUser4InUse m_user4InUse;
-};
-}  // namespace
-
-static void forceAllImpl(AstNetlist* nodep) {
+static void forceAllImpl(AstNetlist* nodep, ForceState::ForceHelperVarsByVar& helperVars,
+                         ForceState::ProtectedVarRefSet& permanentlyProtected,
+                         ForceState::BuiltVarScopeSet& forceRdUpdateBuilt) {
     UINFO(2, __FUNCTION__ << ":\n");
     if (!v3Global.hasForceableSignals()) return;
-    ForceState state{false};
+    ForceState state{false, helperVars, permanentlyProtected, forceRdUpdateBuilt};
     { ForceDiscoveryVisitor{nodep, state}; }
     state.finalizeRhsVars();
     { ForceConvertVisitor{nodep, state}; }
@@ -1339,7 +1577,9 @@ static void forceAllImpl(AstNetlist* nodep) {
     V3Global::dumpCheckGlobalTree("force", 0, dumpTreeEitherLevel() >= 3);
 }
 
-static void assignAllImpl(AstNetlist* nodep) {
+static void assignAllImpl(AstNetlist* nodep, ForceState::ForceHelperVarsByVar& helperVars,
+                          ForceState::ProtectedVarRefSet& permanentlyProtected,
+                          ForceState::BuiltVarScopeSet& forceRdUpdateBuilt) {
     UINFO(2, __FUNCTION__ << ":\n");
     if (!v3Global.hasAssignDeassign()) return;
 
@@ -1368,7 +1608,7 @@ static void assignAllImpl(AstNetlist* nodep) {
             new AstRelease{deassignp->fileline(), deassignp->lhsp()->cloneTreePure(true)});
         deassignp->deleteTree();
     }
-    ForceState state{true};
+    ForceState state{true, helperVars, permanentlyProtected, forceRdUpdateBuilt};
     { ForceDiscoveryVisitor{nodep, state}; }
     state.finalizeRhsVars();
     { ForceConvertVisitor{nodep, state}; }
@@ -1377,7 +1617,10 @@ static void assignAllImpl(AstNetlist* nodep) {
 }
 
 void V3Force::forceAndAssignAll(AstNetlist* nodep) {
-    ForceUserSlots userSlots;
-    forceAllImpl(nodep);
-    assignAllImpl(nodep);
+    const VNUser3InUse user3InUse;
+    ForceState::ForceHelperVarsByVar helperVars;
+    ForceState::ProtectedVarRefSet permanentlyProtected;
+    ForceState::BuiltVarScopeSet forceRdUpdateBuilt;
+    forceAllImpl(nodep, helperVars, permanentlyProtected, forceRdUpdateBuilt);
+    assignAllImpl(nodep, helperVars, permanentlyProtected, forceRdUpdateBuilt);
 }

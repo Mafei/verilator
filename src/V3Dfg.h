@@ -49,6 +49,7 @@
 #include <new>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #ifndef VL_NOT_FINAL
@@ -195,6 +196,8 @@ public:
         UASSERT_OBJ(m_dtype.isPacked(), this, "Non packed vertex has no 'width'");
         return m_dtype.size();
     }
+    // Has terminating side-effect
+    bool unsafe() const;
 
     // Type check vertex (for debugging)
     void typeCheck(const DfgGraph& dfg) const;
@@ -245,7 +248,10 @@ public:
     // Calls given function 'f' for each source vertex of this vertex. If 'f'
     // returns true, further sources are not iterated and this method returns
     // true itself. Unconnected source edges are not iterated.
-    bool foreachSource(std::function<bool(DfgVertex&)> f) {
+    template <typename T_Callable>
+    bool foreachSource(T_Callable&& f) {
+        static_assert(vlstd::is_invocable_r<bool, T_Callable, DfgVertex&>::value,
+                      "T_Callable 'f' must have a signature compatible with 'bool(DfgVertex&)'");
         for (const std::unique_ptr<DfgEdge>& edgep : m_inputps) {
             if (DfgVertex* const srcp = edgep->srcp()) {
                 if (f(*srcp)) return true;
@@ -257,9 +263,13 @@ public:
     // Calls given function 'f' for each source vertex of this vertex. If 'f'
     // returns true, further sources are not iterated and this method returns
     // true itself. Unconnected source edges are not iterated.
-    bool foreachSource(std::function<bool(const DfgVertex&)> f) const {
+    template <typename T_Callable>
+    bool foreachSource(T_Callable&& f) const {
+        static_assert(
+            vlstd::is_invocable_r<bool, T_Callable, const DfgVertex&>::value,
+            "T_Callable 'f' must have a signature compatible with 'bool(const DfgVertex&)'");
         for (const std::unique_ptr<DfgEdge>& edgep : m_inputps) {
-            if (DfgVertex* const srcp = edgep->srcp()) {
+            if (const DfgVertex* const srcp = edgep->srcp()) {
                 if (f(*srcp)) return true;
             }
         }
@@ -270,7 +280,10 @@ public:
     // returns true, further sinks are not iterated and this method returns
     // true itself. Unlinking/deleting the given sink during iteration is safe,
     // but not other sinks of this vertex.
-    bool foreachSink(std::function<bool(DfgVertex&)> f) {
+    template <typename T_Callable>
+    bool foreachSink(T_Callable&& f) {
+        static_assert(vlstd::is_invocable_r<bool, T_Callable, DfgVertex&>::value,
+                      "T_Callable 'f' must have a signature compatible with 'bool(DfgVertex&)'");
         for (const DfgEdge* const edgep : m_sinks.unlinkable()) {
             if (f(*edgep->dstp())) return true;
         }
@@ -280,7 +293,11 @@ public:
     // Calls given function 'f' for each sink vertex of this vertex. If 'f'
     // returns true, further sinks are not iterated and this method returns
     // true itself.
-    bool foreachSink(std::function<bool(const DfgVertex&)> f) const {
+    template <typename T_Callable>
+    bool foreachSink(T_Callable&& f) const {
+        static_assert(
+            vlstd::is_invocable_r<bool, T_Callable, const DfgVertex&>::value,
+            "T_Callable 'f' must have a signature compatible with 'bool(const DfgVertex&)'");
         for (const DfgEdge& edge : m_sinks) {
             if (f(*edge.dstp())) return true;
         }
@@ -484,9 +501,6 @@ public:
         for (const DfgConst& vtx : m_constVertices) f(vtx);
         for (const DfgVertex& vtx : m_opVertices) f(vtx);
     }
-
-    // Return an identical, independent copy of this graph. Vertex and edge order might differ.
-    std::unique_ptr<DfgGraph> clone() const VL_MT_DISABLED;
 
     // Merge contents of other graphs into this graph. Deletes the other graphs.
     // DfgVertexVar instances representing the same Ast variable are unified.
@@ -817,8 +831,12 @@ bool DfgVertex::isCheaperThanLoad() const {
     if (is<DfgConst>()) return true;
     // Variables
     if (is<DfgVertexVar>()) return true;
-    // Array sels are just address computation
-    if (is<DfgArraySel>()) return true;
+    if (is<DfgPrev>()) return true;
+    // Array sels are just address computation, but the address itself can be expensive
+    if (const DfgArraySel* aselp = cast<DfgArraySel>()) {
+        if (aselp->bitp()->is<DfgMatchMasked>()) return false;
+        return true;
+    }
     // Small select from variable
     if (const DfgSel* const selp = cast<DfgSel>()) {
         if (!selp->fromp()->is<DfgVarPacked>()) return false;
@@ -826,6 +844,13 @@ bool DfgVertex::isCheaperThanLoad() const {
         const uint32_t lsb = selp->lsb();
         const uint32_t msb = lsb + selp->width() - 1;
         return VL_BITWORD_E(msb) == VL_BITWORD_E(lsb);
+    }
+    // Replication of a single cheap bit. Each word of the result is the same
+    // mask computed by negating that bit, so recomputing it at each use costs
+    // no more than the load it replaces.
+    if (const DfgRep* const repp = cast<DfgRep>()) {
+        const DfgVertex* const srcp = repp->srcp();
+        return srcp->width() == 1 && srcp->isCheaperThanLoad();
     }
     // Zero extend of a cheap vertex - Extend(_) was converted to Concat(0, _)
     if (const DfgConcat* const catp = cast<DfgConcat>()) {

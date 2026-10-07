@@ -76,6 +76,7 @@ class VerilatedVarProps VL_NOT_FINAL {
     const uint32_t m_magic;  // Magic number
     const VerilatedVarType m_vltype;  // Data type
     const VerilatedVarFlags m_vlflags;  // Direction
+    const uint32_t m_entSize;  // Element size in bytes, or 0 to derive from type
     std::vector<VerilatedRange> m_unpacked;  // Unpacked array ranges
     std::vector<VerilatedRange> m_packed;  // Packed array ranges
     VerilatedRange m_packedDpi;  // Flattened packed array range
@@ -104,10 +105,12 @@ class VerilatedVarProps VL_NOT_FINAL {
     // CONSTRUCTORS
 protected:
     friend class VerilatedScope;
-    VerilatedVarProps(VerilatedVarType vltype, VerilatedVarFlags vlflags, int udims, int pdims)
+    VerilatedVarProps(VerilatedVarType vltype, VerilatedVarFlags vlflags, int udims, int pdims,
+                      uint32_t entSize = 0)
         : m_magic{MAGIC}
         , m_vltype{vltype}
-        , m_vlflags{vlflags} {
+        , m_vlflags{vlflags}
+        , m_entSize{entSize} {
         // Only preallocate the ranges
         initUnpacked(udims, nullptr);
         initPacked(pdims, nullptr);
@@ -119,12 +122,14 @@ public:
     VerilatedVarProps(VerilatedVarType vltype, int vlflags)
         : m_magic{MAGIC}
         , m_vltype{vltype}
-        , m_vlflags(VerilatedVarFlags(vlflags)) {}  // Need () or GCC 4.8 false warning
+        , m_vlflags(VerilatedVarFlags(vlflags))  // Need () or GCC 4.8 false warning
+        , m_entSize{0} {}
 
     VerilatedVarProps(VerilatedVarType vltype, int vlflags, Unpacked, int udims, const int* ulims)
         : m_magic{MAGIC}
         , m_vltype{vltype}
-        , m_vlflags(VerilatedVarFlags(vlflags)) {  // Need () or GCC 4.8 false warning
+        , m_vlflags(VerilatedVarFlags(vlflags))  // Need () or GCC 4.8 false warning
+        , m_entSize{0} {
         initUnpacked(udims, ulims);
     }
     // With packed
@@ -132,14 +137,16 @@ public:
     VerilatedVarProps(VerilatedVarType vltype, int vlflags, Packed, int pdims, const int* plims)
         : m_magic{MAGIC}
         , m_vltype{vltype}
-        , m_vlflags(VerilatedVarFlags(vlflags)) {  // Need () or GCC 4.8 false warning
+        , m_vlflags(VerilatedVarFlags(vlflags))  // Need () or GCC 4.8 false warning
+        , m_entSize{0} {
         initPacked(pdims, plims);
     }
     VerilatedVarProps(VerilatedVarType vltype, int vlflags, Unpacked, int udims, const int* ulims,
                       Packed, int pdims, const int* plims)
         : m_magic{MAGIC}
         , m_vltype{vltype}
-        , m_vlflags(VerilatedVarFlags(vlflags)) {  // Need () or GCC 4.8 false warning
+        , m_vlflags(VerilatedVarFlags(vlflags))  // Need () or GCC 4.8 false warning
+        , m_entSize{0} {
         initUnpacked(udims, ulims);
         initPacked(pdims, plims);
     }
@@ -151,7 +158,18 @@ public:
     VerilatedVarFlags vldir() const {
         return static_cast<VerilatedVarFlags>(static_cast<int>(m_vlflags) & VLVF_MASK_DIR);
     }
-    uint32_t entSize() const VL_MT_SAFE;
+    uint32_t entSize() const VL_MT_SAFE {
+        if (m_entSize) return m_entSize;
+        switch (vltype()) {
+        case VLVT_PTR: return sizeof(void*);
+        case VLVT_UINT8: return sizeof(CData);
+        case VLVT_UINT16: return sizeof(SData);
+        case VLVT_UINT32: return sizeof(IData);
+        case VLVT_UINT64: return sizeof(QData);
+        case VLVT_WDATA: return VL_WORDS_I(entBits()) * sizeof(IData);
+        default: return 0;  // LCOV_EXCL_LINE
+        }
+    }
     uint32_t entBits() const VL_MT_SAFE {
         uint32_t bits = 1;
         for (auto it : m_packed) bits *= it.elements();
@@ -164,6 +182,7 @@ public:
     bool isDpiCLayout() const { return ((m_vlflags & VLVF_DPI_CLAY) != 0); }
     bool isSigned() const { return ((m_vlflags & VLVF_SIGNED) != 0); }
     bool isBitVar() const { return ((m_vlflags & VLVF_BITVAR) != 0); }
+    bool isNet() const { return ((m_vlflags & VLVF_NET) != 0); }
     int udims() const VL_MT_SAFE { return m_unpacked.size(); }
     int pdims() const VL_MT_SAFE { return m_packed.size(); }
     int dims() const VL_MT_SAFE { return pdims() + udims(); }
@@ -206,7 +225,11 @@ public:
                                                        : 0;
     }
     // Total size in bytes (note DPI limited to 4GB)
-    size_t totalSize() const;
+    size_t totalSize() const {
+        size_t size = entSize();
+        for (int udim = 0; udim < udims(); ++udim) size *= m_unpacked[udim].elements();
+        return size;
+    }
     // Adjust a data pointer to access a given array element, NULL if something goes bad
     void* datapAdjustIndex(void* datap, int dim, int indx) const VL_MT_SAFE;
 };
@@ -271,6 +294,8 @@ protected:
     VerilatedVar(const char* namep, void* datap, void* dataxzp, VerilatedVarType vltype,
                  VerilatedVarFlags vlflags, int udims, int pdims, bool isParam);
     VerilatedVar(const char* namep, void* datap, void* dataxzp, VerilatedVarType vltype,
+                 VerilatedVarFlags vlflags, int udims, int pdims, bool isParam, uint32_t entSize);
+    VerilatedVar(const char* namep, void* datap, void* dataxzp, VerilatedVarType vltype,
                  VerilatedVarFlags vlflags, int udims, int pdims, bool isParam,
                  std::unique_ptr<const VerilatedForceControlSignals> forceControlSignals);
 
@@ -300,6 +325,14 @@ inline VerilatedVar::VerilatedVar(const char* namep, void* datap, void* dataxzp,
                                   VerilatedVarType vltype, VerilatedVarFlags vlflags, int udims,
                                   int pdims, bool isParam)
     : VerilatedVarProps{vltype, vlflags, udims, pdims}
+    , m_datap{datap}
+    , m_dataxzp{dataxzp}
+    , m_namep{namep}
+    , m_isParam{isParam} {}
+inline VerilatedVar::VerilatedVar(const char* namep, void* datap, void* dataxzp, VerilatedVarType vltype,
+                                  VerilatedVarFlags vlflags, int udims, int pdims, bool isParam,
+                                  uint32_t entSize)
+    : VerilatedVarProps{vltype, vlflags, udims, pdims, entSize}
     , m_datap{datap}
     , m_dataxzp{dataxzp}
     , m_namep{namep}

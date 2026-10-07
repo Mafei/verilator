@@ -182,7 +182,6 @@ class V3ControlFTask final {
     V3ControlVarResolver m_params;  // Parameters in function/task
     V3ControlVarResolver m_ports;  // Ports in function/task
     V3ControlVarResolver m_vars;  // Variables in function/task
-    bool m_isolate = false;  // Isolate function return
     bool m_noinline = false;  // Don't inline function/task
     bool m_public = false;  // Public function/task
 
@@ -190,7 +189,6 @@ public:
     V3ControlFTask() = default;
     void update(const V3ControlFTask& f) {
         // Don't overwrite true with false
-        if (f.m_isolate) m_isolate = true;
         if (f.m_noinline) m_noinline = true;
         if (f.m_public) m_public = true;
         m_params.update(f.m_params);
@@ -203,7 +201,6 @@ public:
     V3ControlVarResolver& ports() { return m_ports; }
     V3ControlVarResolver& vars() { return m_vars; }
 
-    void setIsolate(bool set) { m_isolate = set; }
     void setNoInline(bool set) { m_noinline = set; }
     void setPublic(bool set) { m_public = set; }
 
@@ -212,8 +209,6 @@ public:
             ftaskp->addStmtsp(new AstPragma{ftaskp->fileline(), VPragmaType::NO_INLINE_TASK});
         if (m_public)
             ftaskp->addStmtsp(new AstPragma{ftaskp->fileline(), VPragmaType::PUBLIC_TASK});
-        // Only functions can have isolate (return value)
-        if (VN_IS(ftaskp, Func)) ftaskp->attrIsolateAssign(m_isolate);
     }
 };
 
@@ -496,41 +491,41 @@ public:
         IgnIndices results;
         int nextChange = 0;
         tree.find(0, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 0);
-        UASSERT_SELFTEST(const int, nextChange, 10);
+        UASSERT_SELFTEST(results.size(), 0);
+        UASSERT_SELFTEST(nextChange, 10);
         tree.find(10, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 2);
-        UASSERT_SELFTEST(const int, results[0], 0);
-        UASSERT_SELFTEST(const int, results[1], 3);
-        UASSERT_SELFTEST(const int, nextChange, 11);
+        UASSERT_SELFTEST(results.size(), 2);
+        UASSERT_SELFTEST(results[0], 0);
+        UASSERT_SELFTEST(results[1], 3);
+        UASSERT_SELFTEST(nextChange, 11);
         tree.find(11, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 1);
-        UASSERT_SELFTEST(const int, results[0], 3);
-        UASSERT_SELFTEST(const int, nextChange, 15);  // Center, or would be 20
+        UASSERT_SELFTEST(results.size(), 1);
+        UASSERT_SELFTEST(results[0], 3);
+        UASSERT_SELFTEST(nextChange, 15);  // Center, or would be 20
         tree.find(20, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 3);
-        UASSERT_SELFTEST(const int, results[0], 1);
-        UASSERT_SELFTEST(const int, results[1], 3);
-        UASSERT_SELFTEST(const int, results[2], 4);
-        UASSERT_SELFTEST(const int, nextChange, 21);
+        UASSERT_SELFTEST(results.size(), 3);
+        UASSERT_SELFTEST(results[0], 1);
+        UASSERT_SELFTEST(results[1], 3);
+        UASSERT_SELFTEST(results[2], 4);
+        UASSERT_SELFTEST(nextChange, 21);
         tree.find(21, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 2);
-        UASSERT_SELFTEST(const int, results[0], 3);
-        UASSERT_SELFTEST(const int, results[1], 4);
-        UASSERT_SELFTEST(const int, nextChange, 25);  // Center, or would be 30
+        UASSERT_SELFTEST(results.size(), 2);
+        UASSERT_SELFTEST(results[0], 3);
+        UASSERT_SELFTEST(results[1], 4);
+        UASSERT_SELFTEST(nextChange, 25);  // Center, or would be 30
         tree.find(30, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 2);
-        UASSERT_SELFTEST(const int, results[0], 3);
-        UASSERT_SELFTEST(const int, results[1], 4);
-        UASSERT_SELFTEST(const int, nextChange, 31);
+        UASSERT_SELFTEST(results.size(), 2);
+        UASSERT_SELFTEST(results[0], 3);
+        UASSERT_SELFTEST(results[1], 4);
+        UASSERT_SELFTEST(nextChange, 31);
         tree.find(40, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 2);
-        UASSERT_SELFTEST(const int, results[0], 2);
-        UASSERT_SELFTEST(const int, results[1], 4);
-        UASSERT_SELFTEST(const int, nextChange, 41);
+        UASSERT_SELFTEST(results.size(), 2);
+        UASSERT_SELFTEST(results[0], 2);
+        UASSERT_SELFTEST(results[1], 4);
+        UASSERT_SELFTEST(nextChange, 41);
         tree.find(41, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 0);
-        UASSERT_SELFTEST(const int, nextChange, std::numeric_limits<int>::max());
+        UASSERT_SELFTEST(results.size(), 0);
+        UASSERT_SELFTEST(nextChange, std::numeric_limits<int>::max());
         //
         points = {{0, 0}};
         for (const auto& it : points) {
@@ -541,8 +536,8 @@ public:
         tree.build(data);
         //
         tree.find(50, results, nextChange);
-        UASSERT_SELFTEST(const size_t, results.size(), 1);
-        UASSERT_SELFTEST(const int, results[0], 5);
+        UASSERT_SELFTEST(results.size(), 1);
+        UASSERT_SELFTEST(results[0], 5);
     }
 };
 
@@ -864,11 +859,18 @@ public:
         if (uint64_t cost = V3Control::getProfileData(v3Global.opt.prefix())) {
             UINFO(9, "Fetching cost from profile info: " << cost);
             return cost;
-        } else {
-            cost = V3InstrCount::count(v3Global.rootp()->evalp(), false);
-            UINFO(9, "Evaluating cost: " << cost);
-            return cost;
         }
+
+        // Without profiling data, sum the regions evaluated on each time step
+        const AstNetlist* const netlistp = v3Global.rootp();
+        uint64_t cost = 0;
+        for (int i = 0; i < VEval::_ENUM_END; ++i) {
+            const VEval eval{i};
+            if (eval.slow()) continue;
+            cost += V3InstrCount::count(netlistp->evalFuncp(eval), false);
+        }
+        UINFO(9, "Evaluating cost: " << cost);
+        return cost;
     }
 };
 
@@ -981,13 +983,7 @@ void V3Control::addVarAttr(FileLine* fl, const string& module, const string& fta
 
     // Semantics: Most of the attributes operate on signals
     if (pattern.empty()) {
-        if (attr == VAttrType::VAR_ISOLATE_ASSIGNMENTS) {
-            if (ftask.empty()) {
-                fl->v3error("isolate_assignments only applies to signals or functions/tasks");
-            } else {
-                V3ControlResolver::s().modules().at(module).ftasks().at(ftask).setIsolate(true);
-            }
-        } else if (attr == VAttrType::VAR_PUBLIC) {
+        if (attr == VAttrType::VAR_PUBLIC) {
             if (ftask.empty()) {
                 // public module, this is the only exception from var here
                 V3ControlResolver::s().modules().at(module).addModulePragma(

@@ -268,7 +268,7 @@ class AstToDfgConverter final : public VNVisitor {
         };
 
         // Simplify the LHS, to get rid of things like SEL(CONCAT(_, _), _)
-        lhsp = VN_AS(V3Const::constifyExpensiveEdit(lhsp), NodeExpr);
+        if (!VN_IS(lhsp, VarRef)) lhsp = VN_AS(V3Const::constifyExpensiveEdit(lhsp), NodeExpr);
 
         // Assigning compound expressions to a concatenated LHS requires a temporary
         // to avoid multiple use of the expression
@@ -383,6 +383,47 @@ class AstToDfgConverter final : public VNVisitor {
             DfgVertex* const vtxp = make<DfgConst>(nodep->fileline(), nodep->num());
             nodep->user2p(vtxp);
         }
+    }
+    void visit(AstCReset* nodep) override {
+        UASSERT_OBJ(m_converting, nodep, "AstToDfg visit called without m_converting");
+        UASSERT_OBJ(!nodep->user2p(), nodep, "Already has Dfg vertex");
+        if (unhandled(nodep)) return;
+
+        const DfgDataType* const dtypep = DfgDataType::fromAst(nodep->dtypep());
+        if (!dtypep) {
+            m_foundUnhandled = true;
+            ++m_ctx.m_conv.nonRepDType;
+            return;
+        }
+
+        UASSERT_OBJ(!nodep->constructing(), nodep,
+                    "CReset should be non-constructing at this stage");
+
+        DfgVertex* const vtxp = make<DfgCReset>(nodep->fileline(), *dtypep);
+        nodep->user2p(vtxp);
+    }
+    void visit(AstMatchMasked* nodep) override {
+        UASSERT_OBJ(m_converting, nodep, "AstToDfg visit called without m_converting");
+        UASSERT_OBJ(!nodep->user2p(), nodep, "Already has Dfg vertex");
+        if (unhandled(nodep)) return;
+
+        const DfgDataType* const dtypep = DfgDataType::fromAst(nodep->dtypep());
+        if (!dtypep) {
+            m_foundUnhandled = true;
+            ++m_ctx.m_conv.nonRepDType;
+            return;
+        }
+
+        iterate(nodep->lhsp());
+        if (m_foundUnhandled) return;
+        iterate(nodep->matchp());
+        if (m_foundUnhandled) return;
+
+        FileLine* const flp = nodep->fileline();
+        DfgMatchMasked* const vtxp = make<DfgMatchMasked>(flp, *dtypep);
+        vtxp->lhsp(nodep->lhsp()->user2u().to<DfgVertex*>());
+        vtxp->matchp(nodep->matchp()->user2u().to<DfgVertex*>());
+        nodep->user2p(vtxp);
     }
     void visit(AstReplicate* nodep) override {
         UASSERT_OBJ(m_converting, nodep, "AstToDfg visit called without m_converting");
@@ -546,8 +587,11 @@ class AstToDfgSynthesize final {
 
     // SymTab must be ordered in order to yield stable results
     struct AstVarScopeComparator final {
-        bool operator()(const AstVarScope* lhs, const AstVarScope* rhs) const {
-            return lhs->name() < rhs->name();
+        static int s_vscpIdCounter;  // Counter for lazily allocating the unique AstVarScope IDs
+        bool operator()(AstVarScope* lhs, AstVarScope* rhs) const {
+            if (!lhs->user4()) lhs->user4(++s_vscpIdCounter);
+            if (!rhs->user4()) rhs->user4(++s_vscpIdCounter);
+            return lhs->user4() < rhs->user4();
         }
     };
     using SymTab = std::map<AstVarScope*, DfgVertexVar*, AstVarScopeComparator>;
@@ -1549,11 +1593,6 @@ class AstToDfgSynthesize final {
     bool synthesizeAssignW(AstAssignW* nodep) {
         ++m_ctx.m_synt.inputAssign;
 
-        // Construct an equivalent AstAssign
-        AstNodeExpr* const lhsp = nodep->lhsp()->cloneTree(false);
-        AstNodeExpr* const rhsp = nodep->rhsp()->cloneTree(false);
-        AstAssign* const assignp = new AstAssign{nodep->fileline(), lhsp, rhsp};
-
         // The input and output symbol tables
         SymTab iSymTab;
         SymTab oSymTab;
@@ -1563,10 +1602,8 @@ class AstToDfgSynthesize final {
 
         // Synthesize as if it was in a single CfgBlock CFG
         DfgVertex* condp = nullptr;
-        const bool success = synthesizeBasicBlock(oSymTab, condp, {assignp}, iSymTab);
+        const bool success = synthesizeBasicBlock(oSymTab, condp, {nodep}, iSymTab);
         UASSERT_OBJ(!condp, nodep, "Conditional AstAssignW ???");
-        // Delete auxiliary AstAssign
-        VL_DO_DANGLING(assignp->deleteTree(), assignp);
         if (!success) return false;
 
         // Check exernal writes are observed correctly
@@ -1749,28 +1786,32 @@ class AstToDfgSynthesize final {
 
         //-------------------------------------------------------------------
         UINFO(5, "Step 1: Attempting to synthesize each of the selected DfgLogic");
-        for (DfgVertex& vtx : m_dfg.opVertices()) {
-            DfgLogic* const logicp = vtx.cast<DfgLogic>();
-            if (!logicp) continue;
+        {
+            // AstVarScope::user4() -> int: unique ID for 'AstVarScopeComparator'
+            const VNUser4InUse user4InUse;
+            for (DfgVertex& vtx : m_dfg.opVertices()) {
+                DfgLogic* const logicp = vtx.cast<DfgLogic>();
+                if (!logicp) continue;
 
-            // We should only have DfgLogic remaining that was selected for synthesis
-            UASSERT_OBJ(logicp->selectedForSynthesis(), logicp, "Unselected DfgLogic remains");
+                // We should only have DfgLogic remaining that was selected for synthesis
+                UASSERT_OBJ(logicp->selectedForSynthesis(), logicp, "Unselected DfgLogic remains");
 
-            // Debug aid
-            const auto debugCallback = [&]() -> void {
-                // This is the breaking logic
-                m_debugLogicp = logicp;
-                // Dump it
-                UINFOTREE(0, logicp->nodep(), "Problematic DfgLogic: " << logicp, "  ");
-                V3EmitV::debugVerilogForTree(logicp->nodep(), std::cout);
-                debugDump("synth-lastok");
-            };
-            if (VL_UNLIKELY(s_dfgSynthDebugBisect.stop(debugCallback))) break;
+                // Debug aid
+                const auto debugCallback = [&]() -> void {
+                    // This is the breaking logic
+                    m_debugLogicp = logicp;
+                    // Dump it
+                    UINFOTREE(0, logicp->nodep(), "Problematic DfgLogic: " << logicp, "  ");
+                    V3EmitV::debugVerilogForTree(logicp->nodep(), std::cout);
+                    debugDump("synth-lastok");
+                };
+                if (VL_UNLIKELY(s_dfgSynthDebugBisect.stop(debugCallback))) break;
 
-            // Synthesize it, if failed, enqueue for reversion
-            if (!synthesize(*logicp)) {
-                logicp->setNonSynthesizable();
-                m_toRevert.push_front(*logicp);
+                // Synthesize it, if failed, enqueue for reversion
+                if (!synthesize(*logicp)) {
+                    logicp->setNonSynthesizable();
+                    m_toRevert.push_front(*logicp);
+                }
             }
         }
         debugDump("synth-converted");
@@ -1925,6 +1966,8 @@ public:
     }
 };
 
+int AstToDfgSynthesize::AstVarScopeComparator::s_vscpIdCounter = 0;
+
 // Decide which DfgLogic to attempt to synthesize
 static void dfgSelectLogicForSynthesis(DfgGraph& dfg) {
     // If we are told to synthesize everything, we will do so ...
@@ -1964,6 +2007,11 @@ static void dfgSelectLogicForSynthesis(DfgGraph& dfg) {
     for (DfgVertex& vtx : dfg.opVertices()) {
         DfgLogic* const logicp = vtx.cast<DfgLogic>();
         if (!logicp) continue;
+        // If drives an unused variable, synthesize it so the partial logic can be removed
+        if (logicp->drivesUnusedVars()) {
+            worklist.push_front(*logicp);
+            continue;
+        }
         // Blocks corresponding to continuous assignments
         if (logicp->nodep()->keyword() == VAlwaysKwd::CONT_ASSIGN) {
             worklist.push_front(*logicp);
@@ -1975,10 +2023,8 @@ static void dfgSelectLogicForSynthesis(DfgGraph& dfg) {
             worklist.push_front(*logicp);
             continue;
         }
-        // Simple blocks driving exactly 1 variable, e.g if (rst) a = b else a = c;
-        if (!logicp->hasMultipleSinks() && cfg.nBlocks() <= 4 && cfg.nEdges() <= 4) {
-            worklist.push_front(*logicp);
-        }
+        // Blocks driving exactly 1 variable
+        if (!logicp->hasMultipleSinks()) worklist.push_front(*logicp);
     }
 
     // Now expand to cover all logic driving the same set of variables and mark

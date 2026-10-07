@@ -1096,6 +1096,7 @@ def write_ast_macros(filename):
             #         kind=ptr['kind'])
 
             emitBlock('''\
+            using Super = Ast{s};
             Ast{t}* unlinkFrBack(VNRelinker* linkerp = nullptr) {{
                 return static_cast<Ast{t}*>(AstNode::unlinkFrBack(linkerp));
             }}
@@ -1116,7 +1117,8 @@ def write_ast_macros(filename):
             void dumpTreeJsonOpGen(std::ostream& str, const string& indent) const override;
             void dumpJsonGen(std::ostream& str) const;
             ''',
-                      t=node.name)
+                      t=node.name,
+                      s=(node.superClass.name if node.superClass else 'AstNode'))
             if node.ptrs:
                 emitBlock('''\
                 void cloneRelinkGen() override;
@@ -1273,29 +1275,6 @@ def write_dfg_auto_classes(filename):
                               : Dfg{s}{{dfg, dfgType(), flp, dtype}} {{}}
                           ASTGEN_MEMBERS_Dfg{t};
                       }};
-                      ''',
-                      t=node.name,
-                      s=node.superClass.name)
-        fh.write("\n")
-
-
-def write_dfg_clone_cases(filename):
-    with open_file(filename) as fh:
-
-        def emitBlock(pattern, **fmt):
-            fh.write(textwrap.dedent(pattern).format(**fmt))
-
-        for node in DfgVertexList:
-            # Only generate code for automatically derived leaf nodes
-            if (node.file is not None) or not node.isLeaf:
-                continue
-
-            emitBlock('''\
-                      case VDfgType::{t}: {{
-                        Dfg{t}* const cp = new Dfg{t}{{*clonep, vtx.fileline(), vtx.dtype()}};
-                        vtxp2clonep.emplace(&vtx, cp);
-                        break;
-                      }}
                       ''',
                       t=node.name,
                       s=node.superClass.name)
@@ -1499,7 +1478,6 @@ if Args.classes:
     write_type_tests("Dfg", DfgVertexList)
     write_dfg_macros("V3Dfg__gen_macros.h")
     write_dfg_auto_classes("V3Dfg__gen_auto_classes.h")
-    write_dfg_clone_cases("V3Dfg__gen_clone_cases.h")
     write_dfg_ast_to_dfg("V3Dfg__gen_ast_to_dfg.h")
     write_dfg_dfg_to_ast("V3Dfg__gen_dfg_to_ast.h")
 

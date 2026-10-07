@@ -48,6 +48,11 @@ public:
     explicit VOptionBool(int _e)
         : m_e(static_cast<en>(_e)) {}  // Need () or GCC 4.8 false warning
     constexpr operator en() const { return m_e; }
+    const char* ascii() const {
+        static const char* const names[]
+            = {"DEFAULT_FALSE", "DEFAULT_TRUE", "OPT_TRUE", "OPT_FALSE"};
+        return names[m_e];
+    }
     bool isDefault() const { return m_e == OPT_DEFAULT_FALSE || m_e == OPT_DEFAULT_TRUE; }
     bool isTrue() const { return m_e == OPT_TRUE || m_e == OPT_DEFAULT_TRUE; }
     bool isSetTrue() const { return m_e == OPT_TRUE; }
@@ -290,7 +295,6 @@ private:
     VOptionBool m_schedZeroDelay;  // main switch: --sched-zero-delay
     bool m_stdPackage = true;       // main switch: --std-package
     bool m_stdWaiver = true;        // main switch: --std-waiver
-    bool m_structsPacked = false;   // main switch: --structs-packed
     bool m_systemC = false;         // main switch: --sc: System C instead of simple C++
     bool m_stats = false;           // main switch: --stats
     bool m_statsVars = false;       // main switch: --stats-vars
@@ -309,11 +313,10 @@ private:
     bool m_traceUnderscore = false; // main switch: --trace-underscore
     bool m_underlineZero = false;   // main switch: --underline-zero; undocumented old Verilator 2
     bool m_verilate = true;         // main switch: --verilate
-    bool m_vpi = false;             // main switch: --vpi
+    VOptionBool m_vpi;              // main switch: --vpi
     bool m_waiverMultiline = false;  // main switch: --waiver-multiline
     bool m_xInitialEdge = false;    // main switch: --x-initial-edge
 
-    int         m_assertUnrollLimit = 1024;  // main switch: --assert-unroll-limit
     int         m_buildJobs = -1;    // main switch: --build-jobs, -j
     int         m_coverageExprMax = 32;    // main switch: --coverage-expr-max
     int         m_convergeLimit = 10000;  // main switch: --converge-limit
@@ -393,30 +396,35 @@ private:
     // MEMBERS (optimizations)
     bool m_fAcycSimp;    // main switch: -fno-acyc-simp: acyclic pre-optimizations
     bool m_fAssemble;    // main switch: -fno-assemble: assign assemble
-    bool m_fCase;        // main switch: -fno-case: case tree conversion
+    bool m_fBitScanLoops;  // main switch: -fno-bit-scan-loops: convert bit scan loops to builtins
+    bool m_fCaseDecoder; // main switch: -fno-case-decoder: case decoder conversion
+    bool m_fCaseTable;   // main switch: -fno-case-table: case table conversion
+    bool m_fCaseTree;    // main switch: -fno-case-tree: case tree conversion
     bool m_fCombine;     // main switch: -fno-combine: common icode packing
     bool m_fConst;       // main switch: -fno-const: constant folding
     bool m_fConstBeforeDfg = true;  // main switch: -fno-const-before-dfg for testing only!
     bool m_fConstBitOpTree;  // main switch: -fno-const-bit-op-tree constant bit op tree
     bool m_fConstEager = true;  // main switch: -fno-const-eagerly run V3Const during passes
     bool m_fDedupe;      // main switch: -fno-dedupe: logic deduplication
-    bool m_fDfgBreakCycles = true; // main switch: -fno-dfg-break-cycles
     bool m_fDfgPeephole = true; // main switch: -fno-dfg-peephole
     bool m_fDfgPushDownSels = true; // main switch: -fno-dfg-push-down-sels
     bool m_fDfg;         // main switch: -fno-dfg
     bool m_fDfgSynthesizeAll = false;  // main switch: -fdfg-synthesize-all
     bool m_fDeadAssigns;     // main switch: -fno-dead-assigns: remove dead assigns
     bool m_fDeadCells;   // main switch: -fno-dead-cells: remove dead cells
+    bool m_fDeadMethods;   // main switch: -fno-dead-methods: remove dead methods
     bool m_fExpand;      // main switch: -fno-expand: expansion of C macros
     bool m_fFuncBalanceCat = true;  // main switch: -fno-func-balance-cat: expansion of C macros
     bool m_fFuncSplitCat = true;  // main switch: -fno-func-split-cat: expansion of C macros
     bool m_fGate;        // main switch: -fno-gate: gate wire elimination
+    // main switch: -fno-ico-change-detect: input change detection optimization
+    VOptionBool m_fIcoChangeDetect{VOptionBool::OPT_DEFAULT_TRUE};
     bool m_fInline;      // main switch: -fno-inline: module inlining
+    bool m_fInlineCFuncs;  // main switch: -fno-inline-cfuncs: inline small C functions
     bool m_fInlineFuncs = true;  // main switch: -fno-inline-funcs: function inlining
     bool m_fInlineFuncsEager = true;  // main switch: -fno-inline-funcs-eager: don't inline eagerly
     bool m_fLife;        // main switch: -fno-life: variable lifetime
     bool m_fLifePost;    // main switch: -fno-life-post: delayed assignment elimination
-    bool m_fLiftExpr = true;   // main switch: -fno-lift-expr: lift expressions out of statements
     bool m_fLocalize;    // main switch: -fno-localize: convert temps to local variables
     bool m_fMergeCond;   // main switch: -fno-merge-cond: merge conditionals
     bool m_fMergeCondMotion = true; // main switch: -fno-merge-cond-motion: perform code motion
@@ -501,7 +509,6 @@ public:
     bool statsVars() const { return m_statsVars; }
     bool stdPackage() const { return m_stdPackage; }
     bool stdWaiver() const { return m_stdWaiver; }
-    bool structsPacked() const { return m_structsPacked; }
     bool assertOn() const { return m_assert; }  // assertOn as __FILE__ may be defined
     bool assertCase() const { return m_assertCase; }
     bool autoflush() const { return m_autoflush; }
@@ -548,6 +555,9 @@ public:
     bool decorationNodes() const VL_MT_SAFE { return m_decorationNodes; }
     bool diagnosticsSarif() const VL_MT_SAFE { return m_diagnosticsSarif; }
     bool dpiHdrOnly() const { return m_dpiHdrOnly; }
+    bool dumpAstPatterns() const {
+        return m_dumpLevel.count("ast-patterns") && m_dumpLevel.at("ast-patterns");
+    }
     bool dumpDefines() const { return m_dumpLevel.count("defines") && m_dumpLevel.at("defines"); }
     bool dumpDfgPatterns() const {
         return m_dumpLevel.count("dfg-patterns") && m_dumpLevel.at("dfg-patterns");
@@ -605,13 +615,12 @@ public:
     bool quietStats() const VL_MT_SAFE { return m_quietStats; }
     bool reportUnoptflat() const { return m_reportUnoptflat; }
     bool verilate() const { return m_verilate; }
-    bool vpi() const { return m_vpi; }
+    bool vpi() const { return m_vpi.isTrue(); }
     bool waiverMultiline() const { return m_waiverMultiline; }
     bool xInitialEdge() const { return m_xInitialEdge; }
     bool serializeOnly() const { return m_jsonOnly; }
     bool topIfacesSupported() const { return lintOnly() && !hierarchical(); }
 
-    int assertUnrollLimit() const { return m_assertUnrollLimit; }
     int buildJobs() const VL_MT_SAFE { return m_buildJobs; }
     int convergeLimit() const { return m_convergeLimit; }
     int coverageExprMax() const { return m_coverageExprMax; }
@@ -725,7 +734,10 @@ public:
     // ACCESSORS (optimization options)
     bool fAcycSimp() const { return m_fAcycSimp; }
     bool fAssemble() const { return m_fAssemble; }
-    bool fCase() const { return m_fCase; }
+    bool fBitScanLoops() const { return m_fBitScanLoops; }
+    bool fCaseDecoder() const { return m_fCaseDecoder; }
+    bool fCaseTable() const { return m_fCaseTable; }
+    bool fCaseTree() const { return m_fCaseTree; }
     bool fCombine() const { return m_fCombine; }
     bool fConst() const { return m_fConst; }
     bool fConstBeforeDfg() const { return m_fConstBeforeDfg; }
@@ -733,7 +745,6 @@ public:
     bool fConstEager() const { return m_fConstEager; }
     bool fDedupe() const { return m_fDedupe; }
     bool fDfg() const { return m_fDfg; }
-    bool fDfgBreakCycles() const { return m_fDfgBreakCycles; }
     bool fDfgPeephole() const { return m_fDfgPeephole; }
     bool fDfgPushDownSels() const { return m_fDfgPushDownSels; }
     bool fDfgSynthesizeAll() const { return m_fDfgSynthesizeAll; }
@@ -742,17 +753,19 @@ public:
     }
     bool fDeadAssigns() const { return m_fDeadAssigns; }
     bool fDeadCells() const { return m_fDeadCells; }
+    bool fDeadMethods() const { return m_fDeadMethods; }
     bool fExpand() const { return m_fExpand; }
     bool fFuncBalanceCat() const { return m_fFuncBalanceCat; }
     bool fFuncSplitCat() const { return m_fFuncSplitCat; }
     bool fFunc() const { return fFuncSplitCat() || fFuncBalanceCat(); }
     bool fGate() const { return m_fGate; }
+    VOptionBool fIcoChangeDetect() const { return m_fIcoChangeDetect; }
     bool fInline() const { return m_fInline; }
+    bool fInlineCFuncs() const { return m_fInlineCFuncs; }
     bool fInlineFuncs() const { return m_fInlineFuncs; }
     bool fInlineFuncsEager() const { return m_fInlineFuncsEager; }
     bool fLife() const { return m_fLife; }
     bool fLifePost() const { return m_fLifePost; }
-    bool fLiftExpr() const { return m_fLiftExpr; }
     bool fLocalize() const { return m_fLocalize; }
     bool fMergeCond() const { return m_fMergeCond; }
     bool fMergeCondMotion() const { return m_fMergeCondMotion; }
@@ -818,9 +831,10 @@ public:
     static string getSupported(const string& var);
     static bool systemCSystemWide();
     static bool systemCFound();  // SystemC installed, or environment points to it
-    static bool coroutineSupport();  // Compiler supports coroutines
-    static bool devAsan();  // Compiler built with AddressSanitizer
-    static bool devGcov();  // Compiler built with code coverage for gcov
+    static bool coroutineSupport();  // Configured C++ compiler supports coroutines
+    static bool devAsan();  // 'verilator_bin' built with AddressSanitizer
+    static bool devGcov();  // 'verilator_bin' built with code coverage for gcov
+    static bool tsanSupport();  // Configured C++ compiler supports ThreadSanitizer
 
     // METHODS (file utilities using these options)
     string fileExists(const string& filename);

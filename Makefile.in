@@ -94,6 +94,7 @@ CFG_WITH_DEFENV = @CFG_WITH_DEFENV@
 CFG_WITH_DEV_GCOV = @CFG_WITH_DEV_GCOV@
 CFG_WITH_LONGTESTS = @CFG_WITH_LONGTESTS@
 CFG_WITH_SOLVER = @CFG_WITH_SOLVER@
+GCOV = @GCOV@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 
 #### End of system configuration section. ####
@@ -292,15 +293,14 @@ installbin: | mkbindirs
 	done
 
 installredirect: installbin | mkbindirs
-	cp ${srcdir}/bin/redirect ${srcdir}/bin/redirect.tmp
-	perl -p -i -e 'use File::Spec;' \
-	           -e' $$path = File::Spec->abs2rel("$(realpath $(DESTDIR)$(bindir))", "$(realpath $(DESTDIR)$(pkgdatadir)/bin)");' \
-	           -e 's/RELPATH.*/"$$path";/g' -- "${srcdir}/bin/redirect.tmp"
-	cd $(srcdir)/bin; \
+	REDIR_SCRATCH=$$(mktemp redir_XXXXXX); \
+	perl -p -e 'use File::Spec;' \
+	        -e' $$path = File::Spec->abs2rel("$(realpath $(DESTDIR)$(bindir))", "$(realpath $(DESTDIR)$(pkgdatadir)/bin)");' \
+	        -e 's/RELPATH.*/"$$path";/g' -- "${srcdir}/bin/redirect" > $$REDIR_SCRATCH; \
 	for p in $(VL_INST_PUBLIC_SCRIPT_FILES) $(VL_INST_PUBLIC_BIN_FILES) ; do \
-		$(INSTALL_PROGRAM) redirect.tmp $(DESTDIR)$(pkgdatadir)/bin/$$p; \
-	done
-	rm ${srcdir}/bin/redirect.tmp
+		$(INSTALL_PROGRAM) $$REDIR_SCRATCH $(DESTDIR)$(pkgdatadir)/bin/$$p; \
+	done; \
+	rm $$REDIR_SCRATCH
 
 # Man files can either be part of the original kit, or built in current directory
 # So important we use $^ so VPATH is searched
@@ -467,9 +467,11 @@ analyzer-include:
 
 # Bash/sh files
 BASH_FILES = \
+  ci/ci-coverage-report.bash \
   ci/ci-install.bash \
   ci/ci-pages-notify.bash \
   ci/ci-pages.bash \
+  ci/ci-rtlmeter-report.bash \
   ci/ci-script.bash \
   ci/docker/run/hooks/post_push \
   ci/docker/run/verilator-docker \
@@ -495,6 +497,11 @@ MAKE_FILES = \
   examples/*/Makefile* \
   src/Makefile*.in \
   test_regress/Makefile* \
+
+# Markdown
+MD_FILES = \
+  *.md \
+  */*.md \
 
 # Perl programs
 PERL_PROGRAMS = \
@@ -532,14 +539,23 @@ PY_PROGRAMS = \
   src/vlcovgen \
   test_regress/*.py \
   test_regress/t/*.pf \
+  test_regress/t/randomize_solver_tamper.py \
 
 # Python files, subject to format but not lint
 PY_FILES = \
   $(PY_PROGRAMS) \
+  ci/*.py \
   test_regress/t/*.py \
 
 # Python files, test_regress tests
 PY_TEST_FILES = test_regress/t/*.py
+
+# reStructuredText Sphinx files
+RST_FILES = \
+  *.rst \
+  */*.rst \
+  ci/docker/*/*.rst \
+  docs/guide/*.rst \
 
 # YAML files
 YAML_FILES = \
@@ -553,7 +569,7 @@ YAML_FILES = \
 # Format
 
 format:
-	$(MAKE) -j 5 format-c format-cmake format-exec format-py format-yaml
+	$(MAKE) -j 5 format-c format-cmake format-exec format-md format-py format-rst format-yaml
 
 BEAUTYSH = beautysh
 BEAUTYSH_FLAGS = --indent-size 2
@@ -590,12 +606,26 @@ format-make mbake:
 	$(MBAKE) --version
 	$(MBAKE) $(MBAKE_FLAGS) $(MAKE_FILES)
 
+MDFORMAT = mdformat
+MDFORMAT_FLAGS =
+
+format-md:
+	$(MDFORMAT) --version
+	$(MDFORMAT) $(MDFORMAT_FLAGS) $(MD_FILES)
+
 YAPF = yapf
 YAPF_FLAGS = -i --parallel
 
 format-py yapf:
 	$(YAPF) --version
 	$(YAPF) $(YAPF_FLAGS) $(PY_FILES)
+
+DOCSTRFMT = docstrfmt
+DOCSTRFMT_FLAGS = --line-length 75 --indent-width 3 --keep-blanks --ordered-marker "\#" --preserve-adornments --no-center-section-titles
+
+format-rst:
+	$(DOCSTRFMT) --version
+	$(DOCSTRFMT) $(DOCSTRFMT_FLAGS) $(RST_FILES)
 
 YAMLFIX = YAMLFIX_WHITELINES=1 YAMLFIX_LINE_LENGTH=200 YAMLFIX_preserve_quotes=true yamlfix
 YAMLFIX_FLAGS =
@@ -669,20 +699,28 @@ COVERAGE_DIR := obj_coverage
 ifeq ($(CFG_WITH_DEV_GCOV),yes)
 
 # Figure out base and head refs for coverage report
-COVERAGE_REF_BASE := $(if $(COVERAGE_BASE),$(shell git rev-parse --short $(COVERAGE_BASE)))
+COVERAGE_REF_BASE := $(if $(COVERAGE_BASE),$(shell git rev-parse --short $(COVERAGE_BASE) 2>/dev/null))
+ifneq ($(COVERAGE_BASE),)
+ ifeq ($(COVERAGE_REF_BASE),)
+  $(error COVERAGE_BASE='$(COVERAGE_BASE)' is not a valid git revision)
+ endif
+endif
 COVERAGE_REF_HEAD := $(shell git rev-parse --short HEAD)
 override undefine COVERAGE_BASE # Use the above variabels instead
 
 # 'fastcov' setup
 FASTCOV := nodist/fastcov.py
 FASTCOV_OPT := -j $(shell nproc)
+FASTCOV_OPT += --gcov $(GCOV)
 FASTCOV_OPT += --lcov
 FASTCOV_OPT += --process-gcno
 FASTCOV_OPT += --branch-coverage
 FASTCOV_OPT += --dump-statistic
 # Files matching the following glob patterns will be excluded from coverage
 FASTCOV_OPT += --exclude-glob
-FASTCOV_OPT += '/usr/*'
+FASTCOV_OPT += '/usr/include/*'
+FASTCOV_OPT += '/usr/lib*/*'
+FASTCOV_OPT += '/usr/share/*'
 FASTCOV_OPT += '*examples/*'
 FASTCOV_OPT += '*include/fstcpp/*'
 FASTCOV_OPT += '*src/obj_dbg/*'
@@ -709,6 +747,7 @@ FASTCOV_OPT += BROKEN_RTN
 FASTCOV_OPT += NUM_ASSERT
 FASTCOV_OPT += SELF_CHECK
 FASTCOV_OPT += UASSERT
+FASTCOV_OPT += UDEBUGONLY
 FASTCOV_OPT += UINFO
 FASTCOV_OPT += assert
 FASTCOV_OPT += 'if (VL_UNCOVERABLE'
@@ -723,6 +762,7 @@ GENHTML_OPT += --missed
 GENHTML_OPT += --rc branch_coverage=1
 GENHTML_OPT += --rc genhtml_hi_limit=100
 GENHTML_OPT += --ignore-errors negative
+GENHTML_OPT += --ignore-errors inconsistent
 ifeq ($(COVERAGE_REF_BASE),)
 GENHTML_OPT += --header-title "Code coverage for Verilator $(shell git describe --dirty)"
 else
@@ -754,7 +794,7 @@ $(COVERAGE_DIR)/verilator-patch.info: $(COVERAGE_DIR)/verilator.info
 	@echo "####################################################################"
 	rm -f $(COVERAGE_DIR)/empty-patch
 	git diff $(COVERAGE_REF_BASE) -- include src > $(COVERAGE_DIR)/filter.patch
-	[ -s $(COVERAGE_DIR)/filter.patch ]] || touch $(COVERAGE_DIR)/empty-patch
+	[ -s $(COVERAGE_DIR)/filter.patch ] || touch $(COVERAGE_DIR)/empty-patch
 	$(FASTCOV) -C $^ --lcov -o $@ --diff-filter $(COVERAGE_DIR)/filter.patch
 
 # Build coverage report
@@ -763,7 +803,7 @@ $(COVERAGE_DIR)/report/index.html: $(COVERAGE_DIR)/verilator$(if $(COVERAGE_REF_
 	@echo "# genhtml: Generating coverage report"
 	@echo "####################################################################"
 	@rm -rf $(COVERAGE_DIR)/report
-	[ -f $(COVERAGE_DIR)/empty-patch ]] || /usr/bin/time -f "That took %E" \
+	[ -f $(COVERAGE_DIR)/empty-patch ] || /usr/bin/time -f "That took %E" \
 	$(GENHTML) $(GENHTML_OPT) --output-directory $(COVERAGE_DIR)/report $^ || true
 	@# Uncommitted changes not tracked, force rebuild on next run if patch coverage
 	@$(if $(COVERAGE_REF_BASE),mv $(COVERAGE_DIR)/verilator-patch.info $(COVERAGE_DIR)/verilator-patch-last.info)

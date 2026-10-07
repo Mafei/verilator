@@ -34,6 +34,7 @@
 #include "V3Graph.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 VL_DEFINE_DEBUG_FUNCTIONS;
 
@@ -351,7 +352,7 @@ public:
 
 class ActiveDlyVisitor final : public VNVisitor {
 public:
-    enum CheckType : uint8_t { CT_SEQ, CT_COMB, CT_INITIAL, CT_SUSPENDABLE };
+    enum CheckType : uint8_t { CT_COMB, CT_FINAL };
 
 private:
     // MEMBERS
@@ -359,15 +360,9 @@ private:
 
     // VISITORS
     void visit(AstAssignDly* nodep) override {
-        // Non-blocking assignments are OK in sequential processes
-        if (m_check == CT_SEQ || m_check == CT_SUSPENDABLE) return;
-
         // Issue appropriate warning
-        if (m_check == CT_INITIAL) {
-            nodep->v3warn(INITIALDLY,
-                          "Non-blocking assignment '<=' in initial/final block\n"
-                              << nodep->warnMore()
-                              << "... This will be executed as a blocking assignment '='!");
+        if (m_check == CT_FINAL) {
+            nodep->v3warn(FINALDLY, "Non-blocking assignment '<=' in final block");
         } else {
             nodep->v3warn(COMBDLY,
                           "Non-blocking assignment '<=' in combinational logic process\n"
@@ -465,11 +460,7 @@ class ActiveVisitor final : public VNVisitor {
         wantactivep->addStmtsp(nodep);
 
         // Warn and convert any delayed assignments
-        {
-            ActiveDlyVisitor{nodep, !m_clockedProcess ? ActiveDlyVisitor::CT_COMB
-                                    : oldsentreep     ? ActiveDlyVisitor::CT_SEQ
-                                                      : ActiveDlyVisitor::CT_SUSPENDABLE};
-        }
+        if (!m_clockedProcess) ActiveDlyVisitor{nodep, ActiveDlyVisitor::CT_COMB};
 
         // Delete sensitivity list
         if (oldsentreep) VL_DO_DANGLING(oldsentreep->deleteTree(), oldsentreep);
@@ -509,17 +500,11 @@ class ActiveVisitor final : public VNVisitor {
 
     void visit(AstInitialStatic* nodep) override { moveUnderSpecial<AstSenItem::Static>(nodep); }
     void visit(AstInitial* nodep) override {
-        const bool timedInitial
-            = v3Global.opt.timing().isSetTrue() && nodep->exists([](const AstNode* const subp) {
-                  return VN_IS(subp, Delay) || VN_IS(subp, EventControl);
-              });
-        const ActiveDlyVisitor dlyvisitor{nodep, timedInitial ? ActiveDlyVisitor::CT_SUSPENDABLE
-                                                              : ActiveDlyVisitor::CT_INITIAL};
         visitSenItems(nodep);
         moveUnderSpecial<AstSenItem::Initial>(nodep);
     }
     void visit(AstFinal* nodep) override {
-        const ActiveDlyVisitor dlyvisitor{nodep, ActiveDlyVisitor::CT_INITIAL};
+        const ActiveDlyVisitor dlyvisitor{nodep, ActiveDlyVisitor::CT_FINAL};
         moveUnderSpecial<AstSenItem::Final>(nodep);
     }
     void visit(AstCoverToggle* nodep) override { moveUnderSpecial<AstSenItem::Combo>(nodep); }
@@ -639,10 +624,176 @@ public:
 };
 
 //######################################################################
+// Pass 1: collect sample CFuncs and sampling events from covergroup class scopes
+
+class CovergroupCollectVisitor final : public VNVisitor {
+    // NODE STATE
+    // Netlist:
+    //  AstClass::user1p()  -> AstCFunc*.    The sample() CFunc for this covergroup class
+    //  AstClass::user2p()  -> AstSenTree*.  Owned sampling event template (if any)
+
+    // STATE
+    AstClass* m_classp = nullptr;  // Current covergroup class context, or nullptr
+
+    // VISITORS
+    void visit(AstClass* nodep) override {
+        if (!nodep->isCovergroup()) return;
+        VL_RESTORER(m_classp);
+        m_classp = nodep;
+        iterateChildren(nodep);
+    }
+
+    void visit(AstScope* nodep) override { iterateChildren(nodep); }
+
+    void visit(AstCFunc* nodep) override {
+        if (!m_classp) return;
+        if (nodep->isCovergroupSample()) m_classp->user1p(nodep);
+    }
+
+    void visit(AstCovergroup* nodep) override {
+        // V3Covergroup guarantees: only supported-event covergroups survive to V3Active,
+        // and they are always inside a covergroup class (so m_classp is set).
+        // Unlink eventp from cgp so it survives cgp's deletion,
+        // then store it in user2p for use during the second pass.
+        m_classp->user2p(nodep->eventp()->unlinkFrBack());
+        nodep->unlinkFrBack();
+        VL_DO_DANGLING(pushDeletep(nodep), nodep);
+    }
+
+    void visit(AstNode* nodep) override { iterateChildren(nodep); }
+
+public:
+    // CONSTRUCTORS
+    explicit CovergroupCollectVisitor(AstNetlist* nodep) { iterate(nodep); }
+    ~CovergroupCollectVisitor() override = default;
+};
+
+//######################################################################
+// Pass 2: inject automatic sample() calls for covergroup instances
+
+class CovergroupEventBindVisitor final : public VNVisitor {
+    AstVarScope* const m_instancep;  // Variable scope for the covergroup instance being sampled
+    std::unordered_set<const AstVar*> m_memberps;  // Non-static variables in the covergroup class
+
+    void visit(AstVarRef* nodep) override {
+        if (!m_memberps.count(nodep->varp())) return;
+        FileLine* const fl = nodep->fileline();
+        AstMemberSel* const selp
+            = new AstMemberSel{fl, new AstVarRef{fl, m_instancep, VAccess::READ}, nodep->varp()};
+        selp->access(nodep->access());
+        nodep->replaceWith(selp);
+        VL_DO_DANGLING(pushDeletep(nodep), nodep);
+    }
+    void visit(AstNode* nodep) override { iterateChildren(nodep); }
+
+public:
+    CovergroupEventBindVisitor(AstSenTree* eventp, AstClass* classp, AstVarScope* instancep)
+        : m_instancep{instancep} {
+        classp->foreachMember([&](AstClass* const, AstVar* const varp) {
+            if (!varp->isStatic()) m_memberps.emplace(varp);
+        });
+        iterate(eventp);
+    }
+    ~CovergroupEventBindVisitor() override = default;
+};
+
+class CovergroupInjectVisitor final : public VNVisitor {
+    // NODE STATE  (set by CovergroupCollectVisitor, consumed here)
+    //  AstClass::user1p()  -> AstCFunc*.    The sample() CFunc for this covergroup class
+    //  AstClass::user2p()  -> AstSenTree*.  Owned sampling event template (if any)
+
+    // STATE
+    ActiveNamer m_namer;  // Reuse active naming infrastructure
+
+    // VISITORS
+    void visit(AstScope* nodep) override {
+        m_namer.main(nodep);  // Initialize active naming for this scope
+        iterateChildren(nodep);
+    }
+
+    void visit(AstVarScope* nodep) override {
+        // Get the underlying var
+        AstVar* const varp = nodep->varp();
+        UASSERT_OBJ(varp, nodep, "AstVarScope must have non-null varp");
+
+        // Check if the variable is of covergroup class type
+        const AstNodeDType* const dtypep = varp->dtypep();
+        UASSERT_OBJ(dtypep, nodep, "AstVar must have non-null dtypep after V3Width");
+
+        const AstClassRefDType* const classRefp = VN_CAST(dtypep, ClassRefDType);
+        if (!classRefp) return;
+
+        AstClass* const classp = classRefp->classp();
+
+        // Check if this covergroup has an automatic sampling event
+        AstSenTree* const eventp = VN_CAST(classp->user2p(), SenTree);
+        if (!eventp) return;  // No automatic sampling for this covergroup
+
+        // V3Covergroup guarantees every supported-event covergroup has a registered sample CFunc
+        AstCFunc* const sampleCFuncp = VN_AS(classp->user1p(), CFunc);
+        UASSERT_OBJ(sampleCFuncp, nodep,
+                    "No sample() CFunc found for covergroup " << classp->name());
+
+        // Create a VarRef to the covergroup instance for the method call
+        FileLine* const fl = nodep->fileline();
+        AstVarRef* const varrefp = new AstVarRef{fl, nodep, VAccess::READ};
+
+        // Create the CMethodCall to sample()
+        // Note: We don't pass arguments in argsp since vlSymsp is passed via argTypes
+        AstCMethodCall* const cmethodCallp
+            = new AstCMethodCall{fl, varrefp, sampleCFuncp, nullptr};
+
+        cmethodCallp->dtypeSetVoid();
+        cmethodCallp->argTypes("vlSymsp");
+
+        // Clone the sensitivity for this active block. References to covergroup members need
+        // to select through this particular instance; all other VarRefs retain the VarScopes
+        // resolved by V3Scope.
+        AstSenTree* senTreep = eventp->cloneTree(false);
+        CovergroupEventBindVisitor{senTreep, classp, nodep};
+
+        // Get or create the AstActive node for this sensitivity
+        // senTreep is a template used by getActive() which clones it into the AstActive;
+        // delete it afterwards as it is not added to the AST directly.
+        AstActive* const activep = m_namer.getActive(fl, senTreep);
+        VL_DO_DANGLING(pushDeletep(senTreep), senTreep);
+
+        // Wrap the sample() call in an AstAlways so SchedPartition handles it
+        // via visit(AstNodeProcedure*) like any other clocked always block.
+        activep->addStmtsp(
+            new AstAlways{fl, VAlwaysKwd::ALWAYS_FF, nullptr, cmethodCallp->makeStmt()});
+    }
+
+    void visit(AstClass* nodep) override {
+        iterateChildren(nodep);
+        // Delete the owned sampling event template stored during collection
+        if (AstSenTree* const eventp = VN_CAST(nodep->user2p(), SenTree)) {
+            VL_DO_DANGLING(pushDeletep(eventp), eventp);
+        }
+    }
+
+    void visit(AstActive*) override {}  // Don't iterate into actives
+    void visit(AstNode* nodep) override { iterateChildren(nodep); }
+
+public:
+    // CONSTRUCTORS
+    explicit CovergroupInjectVisitor(AstNetlist* nodep) { iterate(nodep); }
+    ~CovergroupInjectVisitor() override = default;
+};
+
+//######################################################################
 // Active class functions
 
 void V3Active::activeAll(AstNetlist* nodep) {
     UINFO(2, __FUNCTION__ << ":");
     { ActiveVisitor{nodep}; }  // Destruct before checking
+    if (v3Global.useCovergroup()) {
+        // Add automatic covergroup sampling in two focused passes.
+        // user1p/user2p on AstClass span both passes; guards must outlive both visitors.
+        const VNUser1InUse user1InUse;
+        const VNUser2InUse user2InUse;
+        CovergroupCollectVisitor{nodep};  // Pass 1: collect CFuncs and events into user#p
+        CovergroupInjectVisitor{nodep};  // Pass 2: inject sample() calls, delete user2p events
+    }
     V3Global::dumpCheckGlobalTree("active", 0, dumpTreeEitherLevel() >= 3);
 }

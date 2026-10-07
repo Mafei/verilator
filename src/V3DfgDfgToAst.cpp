@@ -224,8 +224,25 @@ class DfgToAstVisitor final : DfgVisitor {
         m_resultp = new AstVarRef{vtxp->fileline(), vtxp->vscp(), VAccess::READ};
     }
 
+    void visit(DfgPrev* vtxp) override {
+        m_resultp = new AstVarRef{vtxp->fileline(), vtxp->vscp(), VAccess::READ};
+    }
+
     void visit(DfgConst* vtxp) override {  //
         m_resultp = new AstConst{vtxp->fileline(), vtxp->num()};
+    }
+    void visit(DfgCReset* vtxp) override {
+        DfgVertex* const sinkp = vtxp->singleSink();
+        UASSERT_OBJ(sinkp, vtxp, "CReset should only have one sink");
+        UASSERT_OBJ(sinkp->is<DfgVertexVar>(), sinkp, "CReset should drive a variable");
+        AstVar* const varp = sinkp->as<DfgVertexVar>()->vscp()->varp();
+        m_resultp = new AstCReset{vtxp->fileline(), varp, false};
+    }
+    void visit(DfgMatchMasked* vtxp) override {
+        FileLine* const flp = vtxp->fileline();
+        AstNodeExpr* const lhsp = convertDfgVertexToAstNodeExpr(vtxp->lhsp());
+        AstVarScope* const matchp = vtxp->matchp()->as<DfgVertexVar>()->vscp();
+        m_resultp = new AstMatchMasked{flp, lhsp, matchp};
     }
 
     void visit(DfgRep* vtxp) override {
@@ -299,13 +316,14 @@ class DfgToAstVisitor final : DfgVisitor {
             if (DfgAstRd* const rVtxp = vtx.cast<DfgAstRd>()) {
                 // Render the driver
                 AstNodeExpr* const exprp = convertDfgVertexToAstNodeExpr(rVtxp->srcp());
-                // If it's the same as the reference, do not repalce it so FileLines are preserved
+                // If it's the same as the reference, do not replace it so FileLines are preserved
                 if (exprp->sameTree(rVtxp->exprp())) {
                     VL_DO_DANGLING(exprp->deleteTree(), exprp);
                     continue;
                 }
                 // Replace the reference with the expression
                 if (VN_IS(exprp, VarRef)) {
+                    exprp->fileline(rVtxp->exprp()->fileline());
                     ++m_ctx.m_varRefsSubstituted;
                 } else {
                     ++m_ctx.m_expressionsInlined;

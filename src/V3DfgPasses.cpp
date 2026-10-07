@@ -78,7 +78,13 @@ void V3DfgPasses::removeUnobservable(DfgGraph& dfg, V3DfgContext& dfgCtx) {
                             && !vVtxp->hasExtWrRefs()  //
                             && !vVtxp->hasModWrRefs();
         VL_DO_DANGLING(vVtxp->unlinkDelete(dfg), vVtxp);
-        if (srcp) VL_DO_DANGLING(srcp->unlinkDelete(dfg), srcp);
+        if (srcp) {
+            srcp->foreachSource([&](DfgVertex& src) {
+                src.as<DfgLogic>()->setDrivesUnusedVars();
+                return false;
+            });
+            VL_DO_DANGLING(srcp->unlinkDelete(dfg), srcp);
+        }
         if (delAst) {
             VL_DO_DANGLING(vscp->unlinkFrBack()->deleteTree(), vscp);
             ++ctx.m_varsDeleted;
@@ -108,6 +114,55 @@ void V3DfgPasses::removeUnobservable(DfgGraph& dfg, V3DfgContext& dfgCtx) {
     }
 }
 
+void V3DfgPasses::removeSelects(DfgGraph& dfg, V3DfgRemoveSelectsContext& ctx) {
+
+    std::vector<DfgSel*> selps;
+    for (DfgVertex& vtx : dfg.opVertices()) {
+        DfgSel* const selp = vtx.cast<DfgSel>();
+        if (!selp) continue;
+        selps.push_back(selp);
+    }
+
+    for (DfgSel* const selp : selps) {
+        FileLine* const flp = selp->fileline();
+        const DfgDataType& dtype = selp->dtype();
+
+        // Remove full width selects
+        if (selp->fromp()->dtype() == dtype) {
+            ++ctx.m_removedFullWidth;
+            selp->replaceWith(selp->fromp());
+            VL_DO_DANGLING(selp->unlinkDelete(dfg), selp);
+            continue;
+        }
+
+        // Push selects through synthesis temporaries only
+        DfgVarPacked* const varp = selp->fromp()->cast<DfgVarPacked>();
+        if (!varp || !varp->tmpForp()) continue;
+
+        // Find the driver of this range
+        const auto pair = varp->driverOfRange(selp->lsb(), selp->width());
+        DfgVertex* const driverp = pair.first;
+        const uint32_t driverLsb = pair.second;
+        if (!driverp) continue;
+
+        // If partial driver is the whole thing we are looking for, just replace with that
+        if (driverp->dtype() == dtype) {
+            ++ctx.m_replacedWithWholeDriver;
+            selp->replaceWith(driverp);
+            VL_DO_DANGLING(selp->unlinkDelete(dfg), selp);
+            continue;
+        }
+
+        // Otherwise create a new select from the partial driver
+        ++ctx.m_replacedWithSelFromDriver;
+        DfgSel* const newSelp = new DfgSel{dfg, flp, dtype};
+        newSelp->lsb(driverLsb);
+        newSelp->fromp(driverp);
+        selp->replaceWith(newSelp);
+        VL_DO_DANGLING(selp->unlinkDelete(dfg), selp);
+    }
+}
+
 void V3DfgPasses::inlineVars(DfgGraph& dfg) {
     for (DfgVertexVar& vtx : dfg.varVertices()) {
         // Nothing to inline it into
@@ -120,6 +175,8 @@ void V3DfgPasses::inlineVars(DfgGraph& dfg) {
         // Partial driver cannot be inlined
         if (srcp->is<DfgVertexSplice>()) continue;
         if (srcp->is<DfgUnitArray>()) continue;
+        // Don't inline CReset
+        if (srcp->is<DfgCReset>()) continue;
         // Okie dokie, here we go ...
         vtx.replaceWith(srcp);
     }

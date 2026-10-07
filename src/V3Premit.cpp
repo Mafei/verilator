@@ -41,7 +41,7 @@ constexpr int STATIC_CONST_MIN_WIDTH = 256;  // Minimum size to extract to stati
 class PremitVisitor final : public VNVisitor {
     // NODE STATE
     //  AstNodeExpr::user()     -> bool.  True if iterated already
-    //  *::user3()              -> Used when visiting AstNodeAssign
+    //  *::user3()              -> bool.  Used when visiting AstNodeAssign
     const VNUser1InUse m_inuser1;
 
     // STATE - across all visitors
@@ -139,34 +139,52 @@ class PremitVisitor final : public VNVisitor {
     }
 
     void visitShift(AstNodeBiop* nodep) {
-        // Shifts of > 32/64 bits in C++ will wrap-around and generate non-0s
         UINFO(4, "  ShiftFix  " << nodep);
-        const AstConst* const shiftp = VN_CAST(nodep->rhsp(), Const);
-        if (shiftp && shiftp->num().mostSetBitP1() > 32) {
-            shiftp->v3warn(
-                E_UNSUPPORTED,
-                "Unsupported: Shifting of by over 32-bit number isn't supported."
-                    << " (This isn't a shift of 32 bits, but a shift of 2^32, or 4 billion!)\n");
-        }
-        if (nodep->widthMin() <= 64  // Else we'll use large operators which work right
-                                     // C operator's width must be < maximum shift which is
-                                     // based on Verilog width
-            && nodep->width() < (1LL << nodep->rhsp()->widthMin())) {
-            AstNode* newp;
-            if (VN_IS(nodep, ShiftL)) {
-                newp = new AstShiftLOvr{nodep->fileline(), nodep->lhsp()->unlinkFrBack(),
-                                        nodep->rhsp()->unlinkFrBack()};
-            } else if (VN_IS(nodep, ShiftR)) {
-                newp = new AstShiftROvr{nodep->fileline(), nodep->lhsp()->unlinkFrBack(),
-                                        nodep->rhsp()->unlinkFrBack()};
-            } else {
-                UASSERT_OBJ(VN_IS(nodep, ShiftRS), nodep, "Bad case");
-                newp = new AstShiftRSOvr{nodep->fileline(), nodep->lhsp()->unlinkFrBack(),
-                                         nodep->rhsp()->unlinkFrBack()};
+        UASSERT_OBJ(VN_IS(nodep, ShiftL) || VN_IS(nodep, ShiftR) || VN_IS(nodep, ShiftRS), nodep,
+                    "Bad case");
+        // Shift larger than the width of the type (overshift) is undefined behavour in C++
+        // (in practice will shift by the wrapped shift amount). These are requierd to go to
+        // zero/msbs, so replacing them here.
+        FileLine* const flp = nodep->fileline();
+        if (const AstConst* const shiftp = VN_CAST(nodep->rhsp(), Const)) {
+            // Shift amount known to be constant. If oversized shift, replace with zero/msbs.
+            // Otherwise we can leave the original shifts which have better constant folding
+            // than the *Ovr versions.
+            const bool isOversized = shiftp->num().mostSetBitP1() > 32  //
+                                     || (shiftp->num().toSQuad() >= nodep->width());
+            if (isOversized) {
+                AstNodeExpr* newp = nullptr;
+                if (VN_IS(nodep, ShiftRS)) {
+                    AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+                    AstNodeExpr* const msbp = new AstSel{flp, lhsp, nodep->width() - 1, 1};
+                    newp = new AstExtendS{flp, msbp, nodep->width()};
+                } else {
+                    newp = new AstConst{flp, AstConst::DTyped{}, nodep->dtypep()};
+                }
+                nodep->replaceWithKeepDType(newp);
+                VL_DO_DANGLING(pushDeletep(nodep), nodep);
+                return;
             }
-            nodep->replaceWithKeepDType(newp);
-            VL_DO_DANGLING(pushDeletep(nodep), nodep);
-            return;
+        } else {
+            // Shift amount not known at compile time. Convert to *Ovr version. Don't need to do
+            // if it would use a wide operation which works correctly at runtime, of if the max
+            // value of the shift amount is less than the with of the shifted value.
+            if (nodep->widthMin() <= VL_QUADSIZE
+                && (nodep->width() < (1LL << nodep->rhsp()->widthMin()))) {
+                AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+                AstNodeExpr* const rhsp = nodep->rhsp()->unlinkFrBack();
+                AstNodeExpr* newp = nullptr;
+                if (VN_IS(nodep, ShiftL)) {
+                    newp = new AstShiftLOvr{flp, lhsp, rhsp};
+                } else if (VN_IS(nodep, ShiftR)) {
+                    newp = new AstShiftROvr{flp, lhsp, rhsp};
+                } else {
+                    newp = new AstShiftRSOvr{flp, lhsp, rhsp};
+                }
+                nodep->replaceWithKeepDType(newp);
+                VL_DO_DANGLING(pushDeletep(nodep), nodep);
+                return;
+            }
         }
         iterateChildren(nodep);
         checkNode(nodep);
@@ -267,6 +285,19 @@ class PremitVisitor final : public VNVisitor {
             }
         }
     }
+    void visit(AstWriteMem* nodep) override {
+        // Task lowering and scheduling put every memory dump inside a C++ function.
+        UASSERT_OBJ(m_cfuncp, nodep, "Memory dump not under CFunc");
+        START_STATEMENT_OR_RETURN(nodep);
+        iterateChildren(nodep);
+        // Memory dumps take an address, so force-aware reads need stable storage.
+        // Keep temporaries created here or while visiting a wide memory expression.
+        if (const AstVarRef* const refp = VN_CAST(nodep->memp(), VarRef)) {
+            refp->varp()->noSubst(true);
+        } else {
+            createTemp(nodep->memp())->noSubst(true);
+        }
+    }
     void visit(AstNodeStmt* nodep) override {
         START_STATEMENT_OR_RETURN(nodep);
         iterateChildren(nodep);
@@ -347,6 +378,14 @@ class PremitVisitor final : public VNVisitor {
         }
         checkNode(nodep);
     }
+    void visit(AstMatchMasked* nodep) override {
+        iterateChildren(nodep);
+        if (!nodep->user1SetOnce()) {
+            // Don't want this replicated by V3Expand
+            AstVar* const varp = createTemp(nodep);
+            varp->noSubst(true);  // Do not re-inline in V3Subst
+        }
+    }
     void visit(AstCond* nodep) override {
         // Convert AstCond to AstIf in order to avoid evaluating
         // sub-expressions in both branches unconditionally.
@@ -389,12 +428,33 @@ class PremitVisitor final : public VNVisitor {
         // Any strings sent to a display must be var of string data type,
         // to avoid passing a pointer to a temporary.
         AstNodeExpr* exprsp = nodep->exprsp();
-        if (nodep->exprFormat()) exprsp = VN_AS(exprsp->nextp(), NodeExpr);
+        if (nodep->exprFormat()) {
+            exprsp = VN_AS(exprsp->nextp(), NodeExpr);
+            for (AstNode* argp = exprsp; argp; argp = argp->nextp()) {
+                const AstSFormatArg* const fargp = VN_CAST(argp, SFormatArg);
+                if (fargp && fargp->formatAttr().isEnum()) {
+                    // Evaluate the format before materializing enum arguments.
+                    AstVar* const varp = createTemp(nodep->exprsp());
+                    varp->noSubst(true);
+                    break;
+                }
+            }
+        }
         for (AstNodeExpr *argp = exprsp, *nextp; argp; argp = nextp) {
             nextp = VN_AS(argp->nextp(), NodeExpr);
 
             AstSFormatArg* const fargp = VN_CAST(argp, SFormatArg);
             AstNodeExpr* const subargp = fargp ? fargp->exprp() : argp;
+            if (fargp && fargp->formatAttr().isEnum()) {
+                // The name lookup must see the same value as the numeric argument.
+                AstVar* const valueVarp = createTemp(subargp);
+                valueVarp->noSubst(true);
+                if (!VN_IS(fargp->namep(), VarRef)) {
+                    AstVar* const nameVarp = createTemp(fargp->namep());
+                    nameVarp->noSubst(true);
+                }
+                continue;
+            }
             // Must avoid taking address of rvalue, so even Const needs a temp
             if (subargp->isString() && !VN_IS(subargp, VarRef)) {
                 AstVar* const varp = createTemp(subargp);

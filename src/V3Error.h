@@ -55,6 +55,7 @@ public:
         // Boolean information we track per-line, but aren't errors
         I_CELLDEFINE,   // Inside cell define from `celldefine/`endcelldefine
         I_COVERAGE,     // Coverage is on/off from /*verilator coverage_on/off*/
+        I_ERRORING,     // Node created to handle earlier error; suppress new errors
         I_DEF_NETTYPE_WIRE,  // `default_nettype is WIRE (false=NONE)
         I_LINT,         // All lint messages
         I_STYLE,        // All style messages
@@ -90,6 +91,7 @@ public:
         CASEWITHX,      // Case with X values
         CASEX,          // Casex
         CASTCONST,      // Cast is constant
+        CASTFOURSTATE,  // Implicit logic (between 2/4 state logic)
         CDCRSTLOGIC,    // Logic in async reset path. Historical, never issued.
         CLKDATA,        // Clock used as data. Historical, never issued.
         CMPCONST,       // Comparison is constant due to limited range
@@ -107,6 +109,7 @@ public:
         ENUMITEMWIDTH,  // Error: enum item width mismatch
         ENUMVALUE,      // Error: enum type needs explicit cast
         EOFNEWLINE,     // End-of-file missing newline
+        FINALDLY,       // Final delayed statement
         FSMMULTI,       // Multiple FSM candidates in one always block
         FUNCTIMECTL,    // Functions cannot have timing/delay/wait
         FUTURE,         // Feature is under development and not yet supported
@@ -119,7 +122,6 @@ public:
         IGNOREDRETURN,  // Ignoring return value (function as task)
         IMPERFECTSCH,   // Imperfect schedule (disabled by default). Historical, never issued.
         IMPLICIT,       // Implicit wire
-        LOGICCAST,      // Implicit logic (between 2/4 state logic)
         IMPLICITSTATIC, // Implicit static function
         IMPORTSTAR,     // Import::* in $unit
         IMPURE,         // Impure function not being inlined
@@ -130,12 +132,15 @@ public:
         INSIDETRUE,     // Inside range is always true
         LATCH,          // Latch detected outside of always_latch block
         LITENDIAN,      // Little endian, renamed to ASCRANGE
+        LOGICCAST,      // Implicit logic (between 2/4 state logic)
         MINTYPMAXDLY,   // Unsupported: min/typ/max delay expressions
         MISINDENT,      // Misleading indentation
         MODDUP,         // Duplicate module
         MODMISSING,     // Error: missing module
         MULTIDRIVEN,    // Driven from multiple blocks
+        MULTIDRIVENPROC,  // Driven from multiple plain always blocks
         MULTITOP,       // Multiple top level modules
+        NEVERMATCH,     // Sequence can never match
         NEWERSTD,       // Newer language standard required
         NOEFFECT,       // Statement has no effect
         NOLATCH,        // No latch detected in always_latch block
@@ -162,6 +167,7 @@ public:
         SELRANGE,       // Selection index out of range
         SHORTREAL,      // Shortreal not supported
         SIDEEFFECT,     // Sideeffect ignored
+        SIMILARNAME,    // names differ only by case
         SPECIFYIGN,     // Specify construct ignored
         SPLITVAR,       // Cannot split the variable
         STATICVAR,      // Static variable declared in a loop with a declaration assignment
@@ -217,8 +223,8 @@ public:
             // Leading spaces indicate it can't be disabled.
             " MIN", " INFO", " FATAL", " FATALMANY", " FATALSRC", " ERROR", " FIRST_NAMED",
             // Boolean
-            " I_CELLDEFINE", " I_COVERAGE", " I_DEF_NETTYPE_WIRE", " I_LINT", " I_STYLE",
-            " I_TIMING", " I_TRACING",
+            " I_CELLDEFINE", " I_COVERAGE", " I_ERRORING", " I_DEF_NETTYPE_WIRE", " I_LINT",
+            " I_STYLE", " I_TIMING", " I_TRACING",
             // Errors
             "CONTASSINIT", "CONSTWRITTEN", "LIFETIME", "NEEDTIMINGOPT", "NOTIMING", "PORTSHORT",
             "TASKNSVAR", "UNSUPPORTED",
@@ -226,29 +232,30 @@ public:
             " EC_FIRST_WARN", "ALWCOMBORDER", "ALWNEVER", "ASCRANGE", "ASSIGNDLY", "ASSIGNEQEXPR",
             "ASSIGNIN", "BADSTDPRAGMA", "BADVLTPRAGMA", "BLKANDNBLK", "BLKLOOPINIT", "BLKSEQ",
             "BSSPACE", "CASEINCOMPLETE", "CASEOVERLAP", "CASEWITHX", "CASEX", "CASTCONST",
-            "CDCRSTLOGIC", "CLKDATA", "CMPCONST", "COLONPLUS", "COMBDLY", "CONSTRAINTIGN",
-            "CONTASSREG", "COVERIGN", "DECLFILENAME", "DEFOVERRIDE", "DEFPARAM", "DEPRECATED",
-            "ENCAPSULATED", "ENDLABEL", "ENUMITEMWIDTH", "ENUMVALUE", "EOFNEWLINE", "FSMMULTI",
-            "FUNCTIMECTL", "FUTURE", "GENCLK", "GENUNNAMED", "HIERBLOCK", "HIERPARAM",
-            "IEEEMAYDEPRECATE", "IFDEPTH", "IGNOREDRETURN", "IMPERFECTSCH", "IMPLICIT",
-            "LOGICCAST", "IMPLICITSTATIC", "IMPORTSTAR", "IMPURE", "INCABSPATH", "INFINITELOOP",
-            "INITIALDLY", "INSECURE", "INSIDETRUE", "LATCH", "LITENDIAN", "MINTYPMAXDLY",
-            "MISINDENT", "MODDUP", "MODMISSING", "MULTIDRIVEN", "MULTITOP", "NEWERSTD", "NOEFFECT",
-            "NOLATCH", "NONSTD", "NORETURN", "NOTREDOP", "NULLPORT", "PARAMNODEFAULT",
-            "PINCONNECTEMPTY", "PINMISSING", "PINNOCONNECT", "PINNOTFOUND", "PKGNODECL",
-            "PREPROCZERO", "PROCASSINIT", "PROCASSWIRE", "PROFOUTOFDATE", "PROTECTED",
-            "PROTOTYPEMIS", "RANDC", "REALCVT", "REDEFMACRO", "RISEFALLDLY", "SELRANGE",
-            "SHORTREAL", "SIDEEFFECT", "SPECIFYIGN", "SPLITVAR", "STATICVAR", "STMTDLY",
-            "SUPERNFIRST", "SYMRSVDWORD", "SYNCASYNCNET", "TICKCOUNT", "TIMESCALEMOD", "UNDRIVEN",
-            "UNOPT", "UNOPTFLAT", "UNOPTTHREADS", "UNPACKED", "UNSATCONSTR", "UNSIGNED", "UNUSED",
-            "UNUSEDGENVAR", "UNUSEDLOOP", "UNUSEDPARAM", "UNUSEDSIGNAL", "USERERROR", "USERFATAL",
-            "USERINFO", "USERWARN", "VARHIDDEN", "WAITCONST", "WIDTH", "WIDTHCONCAT",
-            "WIDTHEXPAND", "WIDTHTRUNC", "WIDTHXZEXPAND", "ZERODLY", "ZEROREPL", " MAX"};
+            "CASTFOURSTATE", "CDCRSTLOGIC", "CLKDATA", "CMPCONST", "COLONPLUS", "COMBDLY",
+            "CONSTRAINTIGN", "CONTASSREG", "COVERIGN", "DECLFILENAME", "DEFOVERRIDE", "DEFPARAM",
+            "DEPRECATED", "ENCAPSULATED", "ENDLABEL", "ENUMITEMWIDTH", "ENUMVALUE", "EOFNEWLINE",
+            "FINALDLY", "FSMMULTI", "FUNCTIMECTL", "FUTURE", "GENCLK", "GENUNNAMED", "HIERBLOCK",
+            "HIERPARAM", "IEEEMAYDEPRECATE", "IFDEPTH", "IGNOREDRETURN", "IMPERFECTSCH",
+            "IMPLICIT", "IMPLICITSTATIC", "IMPORTSTAR", "IMPURE", "INCABSPATH", "INFINITELOOP",
+            "INITIALDLY", "INSECURE", "INSIDETRUE", "LATCH", "LITENDIAN", "LOGICCAST", "MINTYPMAXDLY",
+            "MISINDENT", "MODDUP", "MODMISSING", "MULTIDRIVEN", "MULTIDRIVENPROC", "MULTITOP",
+            "NEVERMATCH", "NEWERSTD", "NOEFFECT", "NOLATCH", "NONSTD", "NORETURN", "NOTREDOP",
+            "NULLPORT", "PARAMNODEFAULT", "PINCONNECTEMPTY", "PINMISSING", "PINNOCONNECT",
+            "PINNOTFOUND", "PKGNODECL", "PREPROCZERO", "PROCASSINIT", "PROCASSWIRE",
+            "PROFOUTOFDATE", "PROTECTED", "PROTOTYPEMIS", "RANDC", "REALCVT", "REDEFMACRO",
+            "RISEFALLDLY", "SELRANGE", "SHORTREAL", "SIDEEFFECT", "SIMILARNAME", "SPECIFYIGN",
+            "SPLITVAR", "STATICVAR", "STMTDLY", "SUPERNFIRST", "SYMRSVDWORD", "SYNCASYNCNET",
+            "TICKCOUNT", "TIMESCALEMOD", "UNDRIVEN", "UNOPT", "UNOPTFLAT", "UNOPTTHREADS",
+            "UNPACKED", "UNSATCONSTR", "UNSIGNED", "UNUSED", "UNUSEDGENVAR", "UNUSEDLOOP",
+            "UNUSEDPARAM", "UNUSEDSIGNAL", "USERERROR", "USERFATAL", "USERINFO", "USERWARN",
+            "VARHIDDEN", "WAITCONST", "WIDTH", "WIDTHCONCAT", "WIDTHEXPAND", "WIDTHTRUNC",
+            "WIDTHXZEXPAND", "ZERODLY", "ZEROREPL", " MAX"};
         return names[m_e];
     }
     // Warnings that default to off
     bool defaultsOff() const VL_MT_SAFE {
-        return (m_e == IMPERFECTSCH || m_e == I_CELLDEFINE || styleError());
+        return (m_e == IMPERFECTSCH || m_e == I_CELLDEFINE || m_e == I_ERRORING || styleError());
     }
     // Warnings that warn about nasty side effects
     bool dangerous() const VL_MT_SAFE { return (m_e == COMBDLY); }
@@ -270,11 +277,11 @@ public:
     bool pretendError() const VL_MT_SAFE {
         return (m_e == ASSIGNIN || m_e == BADSTDPRAGMA || m_e == BADVLTPRAGMA || m_e == BLKANDNBLK
                 || m_e == BLKLOOPINIT || m_e == CONTASSREG || m_e == ENCAPSULATED
-                || m_e == ENDLABEL || m_e == ENUMITEMWIDTH || m_e == ENUMVALUE || m_e == HIERPARAM
-                || m_e == FUNCTIMECTL || m_e == IMPURE || m_e == MODMISSING || m_e == NOTREDOP
-                || m_e == PARAMNODEFAULT || m_e == PINNOTFOUND || m_e == PKGNODECL
-                || m_e == PROCASSWIRE || m_e == PROTOTYPEMIS || m_e == SUPERNFIRST
-                || m_e == ZEROREPL);
+                || m_e == ENDLABEL || m_e == ENUMITEMWIDTH || m_e == ENUMVALUE || m_e == FINALDLY
+                || m_e == HIERPARAM || m_e == FUNCTIMECTL || m_e == IMPURE || m_e == MODMISSING
+                || m_e == NOTREDOP || m_e == PARAMNODEFAULT || m_e == PINNOTFOUND
+                || m_e == PKGNODECL || m_e == PROCASSWIRE || m_e == PROTOTYPEMIS
+                || m_e == SUPERNFIRST || m_e == ZEROREPL);
     }
     // Warnings to mention manual
     bool mentionManual() const VL_MT_SAFE {
@@ -296,10 +303,10 @@ public:
         return (m_e == ASSIGNDLY  // More than style, but for backward compatibility
                 || m_e == BLKSEQ || m_e == DECLFILENAME || m_e == DEFPARAM || m_e == EOFNEWLINE
                 || m_e == GENUNNAMED || m_e == IMPORTSTAR || m_e == INCABSPATH
-                || m_e == PINCONNECTEMPTY || m_e == PINNOCONNECT || m_e == PROCASSINIT
-                || m_e == SYNCASYNCNET || m_e == UNDRIVEN || m_e == UNUSEDGENVAR
-                || m_e == UNUSEDLOOP || m_e == UNUSEDPARAM || m_e == UNUSEDSIGNAL
-                || m_e == VARHIDDEN);
+                || m_e == MULTIDRIVENPROC || m_e == PINCONNECTEMPTY || m_e == PINNOCONNECT
+                || m_e == PROCASSINIT || m_e == SIMILARNAME || m_e == SYNCASYNCNET
+                || m_e == UNDRIVEN || m_e == UNUSEDGENVAR || m_e == UNUSEDLOOP
+                || m_e == UNUSEDPARAM || m_e == UNUSEDSIGNAL || m_e == VARHIDDEN);
     }
     bool isNamed() const { return m_e >= EC_FIRST_NAMED; }
 
@@ -778,11 +785,10 @@ void v3errorEndFatal(std::ostringstream& sstr)
         } \
     } while (false)
 /// Check self test values for expected value.  Safe from side-effects.
-// Type argument can be removed when go to C++11 (use auto).
-#define UASSERT_SELFTEST(Type, got, exp) \
+#define UASSERT_SELFTEST(got, exp) \
     do { \
-        Type g = (got); \
-        Type e = (exp); \
+        const auto g = (got); \
+        const decltype(g) e{exp}; \
         UASSERT(g == e, "Self-test failed '" #got "==" #exp "'" \
                         " got=" \
                             << g << " expected=" << e); \

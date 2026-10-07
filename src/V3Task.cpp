@@ -119,6 +119,8 @@ class TaskStateVisitor final : public VNVisitor {
     V3Graph m_callGraph;  // Task call graph
     TaskBaseVertex* m_curVxp;  // Current vertex we're adding to
     std::vector<AstInitialAutomatic*> m_initialps;  // Initial blocks to move
+    bool m_underPortVar = false;  // Visiting under a port AstVar; any expression there
+                                  // is a default value, evaluated at call sites only
 
 public:
     // METHODS
@@ -246,9 +248,9 @@ private:
         UASSERT_OBJ(nodep->taskp(), nodep, "Unlinked task");
         TaskFTaskVertex* const taskVtxp = getFTaskVertex(nodep->taskp());
         new TaskEdge{&m_callGraph, m_curVxp, taskVtxp};
-        if (isVirtualIfaceMethodCall(nodep) && isIfaceFTaskScope(getScope(nodep->taskp()))) {
-            taskVtxp->needsNonInlineCFunc(true);
-        }
+        // Virtual-interface method calls dispatch through a runtime handle and
+        // must not be inlined.
+        if (isVirtualIfaceMethodCall(nodep)) taskVtxp->needsNonInlineCFunc(true);
         // Do we have to disable inlining the function?
         const V3TaskConnects tconnects = V3Task::taskConnects(nodep, nodep->taskp()->stmtsp());
         if (!taskVtxp->noInline()) {  // Else short-circuit below
@@ -289,22 +291,28 @@ private:
         }
     }
     void visit(AstVar* nodep) override {
+        VL_RESTORER(m_underPortVar);
+        if (nodep->isIO()) m_underPortVar = true;
         iterateChildren(nodep);
         nodep->user4p(m_curVxp);  // Remember what task it's under
     }
     void visit(AstVarRef* nodep) override {
         iterateChildren(nodep);
+        if (m_underPortVar) return;
         AstVar* const varp = nodep->varp();
+        // Reading a generated constant table does not depend on external runtime state.
+        if (nodep->access().isReadOnly() && varp->isTemp() && varp->isConst()
+            && VN_IS(varp->valuep(), InitArray))
+            return;
         if (varp->user4u().toGraphVertex() != m_curVxp) {
             if (m_curVxp->pure() && !varp->isXTemp() && !varp->isParam()) m_curVxp->impure(nodep);
         }
     }
     void visit(AstClass* nodep) override {
         // Move initial statements into the constructor
-        VL_RESTORER(m_initialps);
+        VL_RESTORER_CLEAR(m_initialps);
         VL_RESTORER(m_ctorp);
         VL_RESTORER(m_classp);
-        m_initialps.clear();
         m_ctorp = nullptr;
         m_classp = nodep;
         {  // Find m_initialps, m_ctor
@@ -510,24 +518,38 @@ class TaskVisitor final : public VNVisitor {
         AstNodeExpr* postRhsp = new AstVarRef{newvscp->fileline(), newvscp, VAccess::READ};
         if (AstResizeLValue* soutPinp = VN_CAST(outPinp, ResizeLValue)) {
             outPinp = soutPinp->lhsp();
-            if (AstNodeUniop* aoutPinp = VN_CAST(outPinp, Extend)) {
-                outPinp = aoutPinp->lhsp();
-            } else if (AstNodeUniop* aoutPinp = VN_CAST(outPinp, ExtendS)) {
-                outPinp = aoutPinp->lhsp();
-            } else if (AstSel* aoutPinp = VN_CAST(outPinp, Sel)) {
-                outPinp = aoutPinp->fromp();
-            } else {
-                outPinp->v3fatalSrc("Inout pin resizing should have had extend or select");
-            }
-            if (outPinp->width() < portp->width()) {
-                postRhsp = new AstSel{pinp->fileline(), postRhsp, 0, pinp->width()};
-            } else {  // pin width > port width
-                if (pinp->isSigned() && postRhsp->isSigned()) {
-                    postRhsp = new AstExtendS{pinp->fileline(), postRhsp};
+            if (VN_IS(outPinp, RToIRoundS) || VN_IS(outPinp, RToIS)) {
+                outPinp = VN_AS(outPinp, NodeUniop)->lhsp();
+                if (postRhsp->isSigned()) {
+                    postRhsp = new AstISToRD{pinp->fileline(), postRhsp};
                 } else {
-                    postRhsp = new AstExtend{pinp->fileline(), postRhsp};
+                    postRhsp = new AstIToRD{pinp->fileline(), postRhsp};
+                }
+            } else {
+                if (AstNodeUniop* aoutPinp = VN_CAST(outPinp, Extend)) {
+                    outPinp = aoutPinp->lhsp();
+                } else if (AstNodeUniop* aoutPinp = VN_CAST(outPinp, ExtendS)) {
+                    outPinp = aoutPinp->lhsp();
+                } else if (AstSel* aoutPinp = VN_CAST(outPinp, Sel)) {
+                    outPinp = aoutPinp->fromp();
+                } else {
+                    outPinp->v3fatalSrc("Inout pin resizing should have had extend or select");
+                }
+                if (outPinp->width() < portp->width()) {
+                    postRhsp = new AstSel{pinp->fileline(), postRhsp, 0, pinp->width()};
+                } else {  // pin width > port width
+                    if (pinp->isSigned() && postRhsp->isSigned()) {
+                        postRhsp = new AstExtendS{pinp->fileline(), postRhsp};
+                    } else {
+                        postRhsp = new AstExtend{pinp->fileline(), postRhsp};
+                    }
                 }
             }
+            postRhsp->dtypeFrom(outPinp);
+        }
+        if (VN_IS(outPinp, IToRD) || VN_IS(outPinp, ISToRD)) {
+            outPinp = VN_AS(outPinp, NodeUniop)->lhsp();
+            postRhsp = new AstRToIRoundS{pinp->fileline(), postRhsp};
             postRhsp->dtypeFrom(outPinp);
         }
         // Put output assignment AFTER function call
@@ -980,7 +1002,7 @@ class TaskVisitor final : public VNVisitor {
             vscp->varp()->protect(false);
             portp->protect(false);
             // Add argument to call
-            const VAccess access = portp->isWritable() ? VAccess::WRITE : VAccess::READ;
+            const VAccess access = portp->direction().pinAccess();
             callp->add(", ");
             callp->add(new AstVarRef{portp->fileline(), vscp, access});
             return vscp;
@@ -1056,6 +1078,7 @@ class TaskVisitor final : public VNVisitor {
 
         // Add DPI Import to top, since it's a global function
         m_topScopep->scopep()->addBlocksp(funcp);
+        funcp->dpiCDecl(nodep->dpiCDecl());
         if (!makePortList(nodep, funcp)) return nullptr;
         return funcp;
     }
@@ -1345,6 +1368,10 @@ class TaskVisitor final : public VNVisitor {
         cfuncp->dpiExportImpl(nodep->dpiExport());
         cfuncp->dpiImportWrapper(nodep->dpiImport());
         cfuncp->recursive(nodep->recursive());
+        // Hardcoded based on UVM usage; TODO make a verilated_std.vlt control for these
+        cfuncp->unlikely(nodep->name() == "uvm_report_error" || nodep->name() == "uvm_report_info"
+                         || nodep->name() == "uvm_report_fatal"
+                         || nodep->name() == "uvm_report_warning");
         if (nodep->dpiImport() || nodep->dpiExport()) {
             cfuncp->isStatic(true);
             cfuncp->isLoose(true);
@@ -1354,12 +1381,14 @@ class TaskVisitor final : public VNVisitor {
         cfuncp->isVirtual(nodep->isVirtual());
         cfuncp->dpiPure(nodep->dpiPure());
         if (nodep->name() == "new") cfuncp->isConstructor(true);
+        if (nodep->isCovergroupSample()) cfuncp->isCovergroupSample(true);
         if (cfuncp->dpiExportImpl()) cfuncp->cname(nodep->cname());
 
         if (cfuncp->dpiImportWrapper()) cfuncp->cname(nodep->cname());
 
         const bool needSyms
-            = (!nodep->dpiImport() && !nodep->taskPublic()) || v3Global.opt.profExec();
+            = nodep->needsSyms()
+              && ((!nodep->dpiImport() && !nodep->taskPublic()) || v3Global.opt.profExec());
         if (needSyms) cfuncp->argTypes(EmitCUtil::symClassVar());
 
         if (!nodep->dpiImport() && !nodep->taskPublic()) {
@@ -1386,10 +1415,9 @@ class TaskVisitor final : public VNVisitor {
         if (nodep->dpiExport()) {
             AstScopeName* const snp = nodep->scopeNamep();
             UASSERT_OBJ(snp, nodep, "Missing scoping context");
-            // The AstScopeName is really a statement(ish) for tracking, not a function
             snp->dpiExport(true);
             snp->unlinkFrBack();
-            cfuncp->addStmtsp(snp);
+            cfuncp->scopeNamep(snp);
         }
 
         // Create list of arguments and move to function
@@ -1408,6 +1436,7 @@ class TaskVisitor final : public VNVisitor {
                         // Move it to new function
                         unlinkAndClone(nodep, portp, false);
                         portp->funcLocal(true);
+                        if (portp->valuep()) pushDeletep(portp->valuep()->unlinkFrBack());
                         cfuncp->addArgsp(portp);
                         // Pass inputs to DPI import wrappers by reference, unless fits in register
                         if (cfuncp->dpiImportWrapper() && portp->isReadOnly()) {
@@ -1635,6 +1664,7 @@ class TaskVisitor final : public VNVisitor {
         // Create cloned statements
         AstNode* beginp;
         AstCNew* cnewp = nullptr;
+        // getScope() is safe here: TaskStateVisitor stamped all FTask scopes before this pass.
         const bool virtualIfaceCall
             = TaskStateVisitor::isVirtualIfaceMethodCall(nodep)
               && TaskStateVisitor::isIfaceFTaskScope(m_statep->getScope(nodep->taskp()));
@@ -1873,6 +1903,49 @@ public:
         V3Stats::addStat("Optimizations, Hierarchical DPI wrappers with costs",
                          m_statHierDpisWithCosts);
     }
+};
+
+//######################################################################
+// Mark interface members under timing controls of interface CFuncs as interface-sensed
+
+class TaskIfaceSensVisitor final : public VNVisitorConst {
+    // STATE
+    bool m_underIfaceFunc = false;  // Under a CFunc owned by an interface scope
+    bool m_underSenses = false;  // Under a sensitivity expression of such a CFunc
+
+    // METHODS
+    void markSensesAndIterate(AstNode* nodep) {
+        if (!m_underIfaceFunc) return;
+        VL_RESTORER(m_underSenses);
+        m_underSenses = true;
+        iterateAndNextConstNull(nodep);
+    }
+    // VISITORS
+    void visit(AstCFunc* nodep) override {
+        VL_RESTORER(m_underIfaceFunc);
+        m_underIfaceFunc = VN_IS(nodep->scopep()->modp(), Iface);
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstSenTree* nodep) override { markSensesAndIterate(nodep->sensesp()); }
+    void visit(AstWait* nodep) override {
+        markSensesAndIterate(nodep->condp());
+        iterateAndNextConstNull(nodep->stmtsp());
+    }
+    void visit(AstVarRef* nodep) override {
+        if (!m_underSenses) return;
+        UASSERT_OBJ(nodep->varScopep(), nodep, "No var scope");
+        // Keep temps: the clocking event var is a MODULETEMP
+        if (nodep->varp()->isFuncLocal()) return;
+        if (AstIface* const ifacep = VN_CAST(nodep->varScopep()->scopep()->modp(), Iface)) {
+            nodep->varp()->sensIfacep(ifacep);
+        }
+    }
+    void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
+
+public:
+    // CONSTRUCTORS
+    explicit TaskIfaceSensVisitor(AstNetlist* nodep) { iterateChildrenConst(nodep); }
+    ~TaskIfaceSensVisitor() override = default;
 };
 
 //######################################################################
@@ -2143,6 +2216,14 @@ AstNodeFTask* V3Task::taskConnectWrapNew(AstNodeFTask* taskp, const string& newn
             newTaskp->addStmtsp(newPortp);
         } else {  // Defaulting arg
             AstNodeExpr* const valuep = VN_AS(portp->valuep(), NodeExpr);
+            if ((portp->isRef() || portp->isConstRef()) && VN_IS(valuep, VarRef)) {
+                const VAccess refAccess = portp->direction().pinAccess();
+                AstVarRef* const refp = VN_AS(valuep->cloneTree(false), VarRef);
+                refp->access(refAccess);
+                AstArg* const newArgp = new AstArg{portp->fileline(), portp->name(), refp};
+                newCallp->addArgsp(newArgp);
+                continue;
+            }
             // Create local temporary
             newPortp = new AstVar{portp->fileline(), VVarType::BLOCKTEMP, portp->name(),
                                   portp->dtypep()};
@@ -2159,9 +2240,9 @@ AstNodeFTask* V3Task::taskConnectWrapNew(AstNodeFTask* taskp, const string& newn
             }
         }
         oldNewVars.emplace(portp, newPortp);
-        const VAccess pinAccess = portp->isWritable() ? VAccess::WRITE : VAccess::READ;
-        AstArg* const newArgp = new AstArg{portp->fileline(), portp->name(),
-                                           new AstVarRef{portp->fileline(), newPortp, pinAccess}};
+        AstArg* const newArgp = new AstArg{
+            portp->fileline(), portp->name(),
+            new AstVarRef{portp->fileline(), newPortp, portp->direction().pinAccess()}};
         newCallp->addArgsp(newArgp);
     }
     // Create wrapper call to original, passing arguments, adding setting of return value
@@ -2286,5 +2367,6 @@ void V3Task::taskAll(AstNetlist* nodep) {
         TaskStateVisitor visitors{nodep};
         const TaskVisitor visitor{nodep, &visitors};
     }  // Destruct before checking
+    { TaskIfaceSensVisitor{nodep}; }
     V3Global::dumpCheckGlobalTree("task", 0, dumpTreeEitherLevel() >= 3);
 }

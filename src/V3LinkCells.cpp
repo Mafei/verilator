@@ -157,11 +157,11 @@ class LinkConfigsVisitor final : public VNVisitor {
             m_isDefault = true;
             iterateAndNextNull(nodep->usep());
         } else if (nodep->isCell()) {
-            VL_RESTORER(m_cell);
+            VL_RESTORER_CLEAR(m_cell);
             m_cell = nodep->cellp()->name();
             iterateAndNextNull(nodep->usep());
         } else {
-            VL_RESTORER(m_hierInst);
+            VL_RESTORER_COPY(m_hierInst);
             {
                 VL_RESTORER(m_dotp);
                 m_dotp = VN_AS(nodep->cellp(), Dot);
@@ -236,6 +236,7 @@ class LinkCellsVisitor final : public VNVisitor {
     const V3GraphVertex* m_topVertexp = nullptr;  // Vertex of top module
     std::unordered_set<string> m_declfnWarned;  // Files we issued DECLFILENAME on
     string m_origTopModuleName;  // original name of the top module
+    int m_modDepth = 0;  // Depth of the current module
 
     // METHODS
     V3GraphVertex* vertex(AstNodeModule* nodep) {
@@ -310,7 +311,8 @@ class LinkCellsVisitor final : public VNVisitor {
             const string prettyName = AstNode::prettyName(modName);
             V3Parse parser{v3Global.rootp(), m_filterp};
             // true below -> other simulators treat modules in link-found files as library cells
-            parser.parseFile(nodep->fileline(), prettyName, true, false, m_modp->libname(), "");
+            parser.parseFile(nodep->fileline(), prettyName, true, false, m_modp->libname(), "",
+                             modName);
             V3Error::abortIfErrors();
             // We've read new modules, grab new pointers to their names
             readModNames();
@@ -374,6 +376,13 @@ class LinkCellsVisitor final : public VNVisitor {
         }
 
         return finalEdgep->cellp();
+    }
+
+    void assignParamNumbers(AstPin* const firstPinp) {
+        for (AstPin* pinp = firstPinp; pinp; pinp = VN_AS(pinp->nextp(), Pin)) {
+            pinp->param(true);
+            if (pinp->name() == "") pinp->name("__paramNumber" + cvtToStr(pinp->pinNum()));
+        }
     }
 
     // VISITORS
@@ -447,19 +456,20 @@ class LinkCellsVisitor final : public VNVisitor {
     void visit(AstConstPool* nodep) override {}
     void visit(AstNodeModule* nodep) override {
         // Module: Pick up modnames, so we can resolve cells later
+        VL_RESTORER(m_modDepth);
         VL_RESTORER(m_modp);
         {
             // For nested modules/classes, child below parent
             if (m_modp) newEdge(vertex(m_modp), vertex(nodep), 1, false);
-            //
             m_modp = nodep;
-            vertex(m_modp);  // Need vertex to levelize even if no edges
-
+            // Need vertex to levelize even if no edges
+            vertex(m_modp);
+            ++m_modDepth;
             UINFO(4, "Link Module: " << nodep);
             if (nodep->fileline()->filebasenameNoExt() != nodep->prettyName()
                 && !v3Global.opt.isLibraryFile(nodep->fileline()->filename(), nodep->libname())
                 && !VN_IS(nodep, NotFoundModule) && !nodep->recursiveClone()
-                && !nodep->internal()) {
+                && nodep != v3Global.rootp()->dollarUnitPkgp() && m_modDepth == 1) {
                 // We only complain once per file, otherwise library-like files
                 // have a huge mess of warnings
                 const auto itFoundPair = m_declfnWarned.insert(nodep->fileline()->filename());
@@ -519,10 +529,7 @@ class LinkCellsVisitor final : public VNVisitor {
             }
         }
         iterateChildren(nodep);
-        for (AstPin* pinp = nodep->paramsp(); pinp; pinp = VN_AS(pinp->nextp(), Pin)) {
-            pinp->param(true);
-            if (pinp->name() == "") pinp->name("__paramNumber" + cvtToStr(pinp->pinNum()));
-        }
+        assignParamNumbers(nodep->paramsp());
         // Parser didn't know what was interface, resolve now
         // For historical reasons virtual interface reference variables remain VARs
         if (m_varp && !nodep->isVirtual()) m_varp->setIfaceRef();
@@ -668,10 +675,7 @@ class LinkCellsVisitor final : public VNVisitor {
         for (AstPin* pinp = nodep->pinsp(); pinp; pinp = VN_AS(pinp->nextp(), Pin)) {
             if (pinp->name() == "") pinp->name("__pinNumber" + cvtToStr(pinp->pinNum()));
         }
-        for (AstPin* pinp = nodep->paramsp(); pinp; pinp = VN_AS(pinp->nextp(), Pin)) {
-            pinp->param(true);
-            if (pinp->name() == "") pinp->name("__paramNumber" + cvtToStr(pinp->pinNum()));
-        }
+        assignParamNumbers(nodep->paramsp());
         if (nodep->modp()) {
             nodep->modName(nodep->modp()->name());
             // Note what pins exist
@@ -806,10 +810,7 @@ class LinkCellsVisitor final : public VNVisitor {
 
     void visit(AstRefDType* nodep) override {
         iterateChildren(nodep);
-        for (AstPin* pinp = nodep->paramsp(); pinp; pinp = VN_AS(pinp->nextp(), Pin)) {
-            pinp->param(true);
-            if (pinp->name() == "") pinp->name("__paramNumber" + cvtToStr(pinp->pinNum()));
-        }
+        assignParamNumbers(nodep->paramsp());
         if (m_varp) {  // Parser didn't know what was interface, resolve now
             AstNodeModule* const varModp = findModuleSym(nodep->name(), m_modp->libname());
             if (AstIface* const ifacep = VN_CAST(varModp, Iface)) {
@@ -823,14 +824,11 @@ class LinkCellsVisitor final : public VNVisitor {
     }
     void visit(AstClassOrPackageRef* nodep) override {
         iterateChildren(nodep);
+        assignParamNumbers(nodep->paramsp());
         // Inside a class, an extends or reference to another class
         // Note we don't add a V3GraphEdge{vertex(m_modp), vertex(nodep->classOrPackagep()}
         // We could for an extends, but for another reference we cannot, as
         // it is legal to have classes both with parameters that link to each other
-        for (AstPin* pinp = nodep->paramsp(); pinp; pinp = VN_AS(pinp->nextp(), Pin)) {
-            pinp->param(true);
-            if (pinp->name() == "") pinp->name("__paramNumber" + cvtToStr(pinp->pinNum()));
-        }
     }
 
     void visit(AstVar* nodep) override {

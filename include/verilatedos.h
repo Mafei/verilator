@@ -319,6 +319,15 @@
 #endif
 
 //=========================================================================
+// C++-2020
+
+#if __cplusplus >= 202002L
+# define VL_NO_UNIQUE_ADDRESS_CXX20 [[no_unique_address]]
+#else
+# define VL_NO_UNIQUE_ADDRESS_CXX20
+#endif
+
+//=========================================================================
 // Optimization
 
 #ifndef VL_NO_LEGACY
@@ -332,10 +341,19 @@
 
 #ifdef VL_GCOV
 extern "C" void __gcov_dump();
+extern "C" void __gcov_reset();
 // Dump internal code coverage data before e.g. std::abort()
 # define VL_GCOV_DUMP() __gcov_dump()
+// Dump, then re-arm dumping; dumping is one-shot, so without the reset a dump
+// on a nonfatal path would silently discard everything counted after it
+# define VL_GCOV_DUMP_RESET() \
+        do { \
+            __gcov_dump(); \
+            __gcov_reset(); \
+        } while (false)
 #else
 # define VL_GCOV_DUMP()
+# define VL_GCOV_DUMP_RESET()
 #endif
 
 //=========================================================================
@@ -368,6 +386,7 @@ extern "C" void __gcov_dump();
 #define __STDC_FORMAT_MACROS
 
 // Now that C++ requires these standard types the vl types are deprecated
+#include <cstddef>  // offsetof (used by generated VlVarTableEntry tables)
 #include <cstdint>
 #include <cinttypes>
 #include <cmath>
@@ -444,6 +463,8 @@ using ssize_t = uint32_t;  ///< signed size_t; returned from read()
 #define VL_VFORMATATTR_SIGNED_FOURSTATE '&'  // The same as above but for four-state
 #define VL_VFORMATATTR_COMPLEX '!'  // (std::string*); for non-POD; e.g. struct, requires %p typically
 #define VL_VFORMATATTR_DOUBLE 'D'  // (double); promote %p to %f
+#define VL_VFORMATATTR_ENUM 'E'  // (width, IData/QData/const EData*, STRING, std::string* name)
+#define VL_VFORMATATTR_ENUM_SIGNED 'F'  // Same arguments as ENUM, with a signed numeric value
 #define VL_VFORMATATTR_SCOPE 'M'  // (char* name, char* scope); for scopes
 #define VL_VFORMATATTR_STRING 'S'  // (char* name, char* scope); for scopes  // (std::string*); for %p/%s
 #define VL_VFORMATATTR_TIMEUNIT 'T'  // (int timeunit); timeunits passed from V3Emit to runtime
@@ -461,6 +482,7 @@ using ssize_t = uint32_t;  ///< signed size_t; returned from read()
 // Integer size macros
 
 #define VL_BYTESIZE 8  ///< Bits in a CData / byte
+#define VL_BYTESIZE_LOG2 3  ///< log2(VL_BYTESIZE)
 #define VL_SHORTSIZE 16  ///< Bits in a SData / short
 #define VL_IDATASIZE 32  ///< Bits in an IData / word
 #define VL_QUADSIZE 64  ///< Bits in a QData / quadword
@@ -473,9 +495,9 @@ using ssize_t = uint32_t;  ///< signed size_t; returned from read()
 #endif
 
 /// Return number of bytes argument-number of bits needs (1 bit=1 byte)
-#define VL_BYTES_I(nbits) (((nbits) + (VL_BYTESIZE - 1)) / VL_BYTESIZE)
+#define VL_BYTES_I(nbits) (((nbits) + (VL_BYTESIZE - 1)) >> VL_BYTESIZE_LOG2)
 /// Return Words/EDatas in argument-number of bits needs (1 bit=1 word)
-#define VL_WORDS_I(nbits) (((nbits) + (VL_EDATASIZE - 1)) / VL_EDATASIZE)
+#define VL_WORDS_I(nbits) (((nbits) + (VL_EDATASIZE - 1)) >> VL_EDATASIZE_LOG2)
 // Number of Words/EDatas a quad requires
 #define VL_WQ_WORDS_E VL_WORDS_I(VL_QUADSIZE)
 
@@ -537,10 +559,10 @@ using ssize_t = uint32_t;  ///< signed size_t; returned from read()
 // #defines, to avoid requiring math.h on all compile runs
 
 #ifdef _MSC_VER
-static inline double VL_TRUNC(double n) {
+inline double VL_TRUNC(double n) {
     return (n < 0) ? std::ceil(n) : std::floor(n);
 }
-static inline double VL_ROUND(double n) {
+inline double VL_ROUND(double n) {
     return (n < 0) ? std::ceil(n-0.5) : std::floor(n + 0.5);
 }
 #else
@@ -609,6 +631,8 @@ static inline double VL_ROUND(double n) {
 # define VL_CPU_RELAX() asm volatile("lr 0,0" ::: "memory")
 #elif defined(__sparc__)
 # define VL_CPU_RELAX() asm volatile("rd %%ccr, %%g0" ::: "memory")
+#elif defined(__wasm__)  // Wasm has no spin-wait hint, and no inline asm
+# define VL_CPU_RELAX()
 #elif defined(VL_IGNORE_UNKNOWN_ARCH)
 # define VL_CPU_RELAX()
 #else

@@ -32,14 +32,24 @@
 VL_DEFINE_DEBUG_FUNCTIONS;
 
 //######################################################################
+
+// Hash a std::pair automatically
+struct PairHash final {
+    template <typename T, typename U>
+    std::size_t operator()(const std::pair<T, U>& x) const {
+        return std::hash<T>()(x.first) + std::hash<U>()(x.second);
+    }
+};
+
+//######################################################################
 // Now that all widthing is complete,
 // Copy all width() to widthMin().  V3Const expects this
 
 class WidthCommitVisitor final : public VNVisitor {
     // NODE STATE
-    // AstVar::user1p           -> bool, processed
-    //  AstNodeFTask::user2()    -> int. Non-zero if ever referenced (called)
-    //  AstNew::user2()          -> int. Count of number of references, minus references in
+    //  AstVar::user1p           -> bool.  Processed
+    //  AstNodeFTask::user2()    -> uint64_t. Non-zero if ever referenced (called)
+    //  AstNew::user2()          -> uint64_t. Count of number of references, minus references in
     //  functions never called
     const VNUser1InUse m_inuser1;
     const VNUser2InUse m_inuser2;
@@ -47,7 +57,7 @@ class WidthCommitVisitor final : public VNVisitor {
     // STATE
     AstNodeFTask* m_ftaskp = nullptr;  // Current function/task
     AstNodeModule* m_modp = nullptr;  // Current module
-    std::string m_contNba;  // In continuous- or non-blocking assignment
+    const char* m_contNbap = nullptr;  // In continuous- or non-blocking assignment
     bool m_contReads = false;  // Check read continuous automatic variables
     bool m_dynsizedelem = false;  // Writing dynamically-sized array element, not the array itself
     VMemberMap m_memberMap;  // Member names cached for fast lookup
@@ -119,7 +129,11 @@ private:
             nodep->v3fatalSrc("ref to unhandled definition type " << defp->prettyTypeName());
         }
         if (local || prot) {
-            const auto refClassp = VN_CAST(m_modp, Class);
+            // In case of covergroup, the reference is to the enclosing class, not the covergroup
+            // itself
+            const AstClass* refClassp = VN_CAST(m_modp, Class);
+            if (refClassp && refClassp->isCovergroup())
+                refClassp = refClassp->covergroupEnclosingClassp();
             const char* how = nullptr;
             // Inner nested classes can access `local` or `protected` members of their outer class
             const auto nestedAccess = [refClassp](const AstClass*, const AstNode* memberp) {
@@ -148,7 +162,7 @@ private:
     void varLifetimeCheck(AstNode* nodep, AstVar* varp) {
         // Skip if we are under a member select (lhs of a dot)
         // We don't care about lifetime of anything else than rhs of a dot
-        if (!m_underSel && !m_contNba.empty()) {
+        if (!m_underSel && m_contNbap) {
             std::string varType;
             const AstNodeDType* const varDtp = varp->dtypep()->skipRefp();
             if (varp->lifetime().isAutomatic() && !VN_IS(varDtp, IfaceRefDType)
@@ -162,7 +176,7 @@ private:
             if (!varType.empty()) {
                 UINFO(1, "    Related var dtype: " << varDtp);
                 nodep->v3error(varType
-                               << " variable not allowed in " << m_contNba
+                               << " variable not allowed in " << m_contNbap
                                << " assignment (IEEE 1800-2023 6.21): " << varp->prettyNameQ());
             }
         }
@@ -179,6 +193,38 @@ private:
                 newp->v3error("Illegal to call 'new' using an abstract virtual class "
                               + AstNode::prettyNameQ(newp->classOrPackagep()->origName())
                               + " (IEEE 1800-2023 8.21)");
+        }
+    }
+
+    void virtualRecurse(AstNodeFTask* nodep, const AstClass* classp, bool& isVirtualr) {
+        static std::unordered_map<std::pair<const AstClass*, const AstNodeFTask*>, bool, PairHash>
+            s_classFuncsChecked;  // Track what was recursed to avoid O(class*funcs^2)
+        // IEEE doesn't require virtual marking at derived classes' functions.
+        // Propagate virtual marking from base class function upwards.
+        auto pair = s_classFuncsChecked.emplace(std::make_pair(classp, nodep), isVirtualr);
+        if (!pair.second) {
+            if (pair.first->second) isVirtualr = true;
+            return;
+        }
+        //
+        if (nodep->isVirtual()) isVirtualr = true;
+        // Propagate value from extends/implements
+        for (AstClassExtends* extendsp = classp->extendsp(); extendsp;
+             extendsp = VN_AS(extendsp->nextp(), ClassExtends)) {
+            const AstClass* const eclassp = extendsp->classp();
+            if (AstNodeFTask* const fbasep
+                = VN_CAST(m_memberMap.findMember(eclassp, nodep->name()), NodeFTask)) {
+                if (fbasep != nodep) {
+                    virtualRecurse(fbasep, eclassp, isVirtualr);
+                    continue;
+                }
+            }
+            virtualRecurse(nodep, eclassp, isVirtualr);
+        }
+        if (isVirtualr) {
+            nodep->isVirtual(true);
+            // Update memoize map in case had a false when first created
+            s_classFuncsChecked[std::make_pair(classp, nodep)] = isVirtualr;
         }
     }
 
@@ -278,6 +324,11 @@ private:
     void visit(AstCastWrap* nodep) override {
         iterateChildren(nodep);
         editDType(nodep);
+        if (!v3Global.opt.fourstate()) {
+            UINFO(6, " Replace " << nodep << " w/ " << nodep->lhsp());
+            nodep->replaceWith(nodep->lhsp()->unlinkFrBack());
+            VL_DO_DANGLING(pushDeletep(nodep), nodep);
+        }
     }
     void visit(AstConstraint* nodep) override {
         iterateChildren(nodep);
@@ -335,6 +386,12 @@ private:
         m_ftaskp = nodep;
         iterateChildren(nodep);
         editDType(nodep);
+        bool isVirtual = false;
+        if (const AstClass* const classp = VN_CAST(m_modp, Class)) {
+            virtualRecurse(nodep, classp, isVirtual /*ref*/);
+        }
+        if (nodep->isStatic() && nodep->isVirtual())  // After propagated isVirtual
+            nodep->v3error("Static methods cannot be virtual");
         {
             const AstClass* const classp = VN_CAST(m_modp, Class);
             if (nodep->classMethod() && nodep->pureVirtual() && classp
@@ -345,6 +402,7 @@ private:
         }
         bool extended = false;
         if (const AstClass* const classp = VN_CAST(m_modp, Class)) {
+            // Walk down inheritance
             for (AstClassExtends* extendsp = classp->extendsp(); extendsp;
                  extendsp = extendsp->classp()->extendsp()) {
                 const AstClass* const eclassp = extendsp->classp();
@@ -416,9 +474,9 @@ private:
     void visit(AstAssignCont* nodep) override {
         iterateAndNextNull(nodep->timingControlp());
         {
-            VL_RESTORER(m_contNba);
+            VL_RESTORER(m_contNbap);
             VL_RESTORER(m_contReads);
-            m_contNba = "continuous";
+            m_contNbap = "continuous";
             m_contReads = true;
             iterateAndNextNull(nodep->lhsp());
             iterateAndNextNull(nodep->rhsp());
@@ -429,9 +487,9 @@ private:
         iterateAndNextNull(nodep->timingControlp());
         iterateAndNextNull(nodep->rhsp());
         {
-            VL_RESTORER(m_contNba);
+            VL_RESTORER(m_contNbap);
             VL_RESTORER(m_contReads);
-            m_contNba = "nonblocking";
+            m_contNbap = "nonblocking";
             m_contReads = false;
             iterateAndNextNull(nodep->lhsp());
         }
@@ -441,9 +499,9 @@ private:
         iterateAndNextNull(nodep->timingControlp());
         iterateAndNextNull(nodep->rhsp());
         {
-            VL_RESTORER(m_contNba);
+            VL_RESTORER(m_contNbap);
             VL_RESTORER(m_contReads);
-            m_contNba = "continuous";
+            m_contNbap = "continuous";
             m_contReads = false;
             iterateAndNextNull(nodep->lhsp());
         }
@@ -556,6 +614,7 @@ void V3WidthCommit::widthCommit(AstNetlist* nodep) {
 }
 
 void V3WidthCommit::widthCommitClean(AstNetlist* nodep) {
+    if (!v3Global.opt.fourstate()) return;  // Early return since everything has been done earlier
     UINFO(2, __FUNCTION__ << ":");
     {
         std::vector<AstCastWrap*> castWrapsToDelete;
@@ -565,7 +624,7 @@ void V3WidthCommit::widthCommitClean(AstNetlist* nodep) {
         });
         for (AstCastWrap* const nodep : castWrapsToDelete) {
             nodep->replaceWith(nodep->lhsp()->unlinkFrBack());
-            nodep->deleteTree();
+            VL_DO_DANGLING(nodep->deleteTree(), nodep);
         }
     }
     V3Global::dumpCheckGlobalTree("widthcommit_clean", 0, dumpTreeEitherLevel() >= 6);

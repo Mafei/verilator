@@ -573,8 +573,14 @@ public:
                      + "\", " + std::to_string(nodep->fileline()->lineno()) + ")->"),
                     memberVarp, resetp->constructing());
             } else {
-                AstVar* const varp = VN_AS(fromp, NodeVarRef)->varp();
-                emitVarReset("", varp, resetp->constructing());
+                AstNodeVarRef* const fromVarRefp = VN_AS(fromp, NodeVarRef);
+                AstVar* const varp = fromVarRefp->varp();
+                const string prefix
+                    = fromVarRefp->selfPointer().isEmpty()
+                          ? ""
+                          : dereferenceString(
+                                VN_AS(fromp, NodeVarRef)->selfPointerProtect(m_useSelfForThis));
+                emitVarReset(prefix, varp, resetp->constructing());
             }
             return;
         }
@@ -726,7 +732,8 @@ public:
     }
     void visit(AstAssocSel* nodep) override {
         iterateAndNextConstNull(nodep->fromp());
-        putnbs(nodep, ".at(");
+        const std::string atFunc = nodep->isLValue() ? ".atWrite(" : ".at(";
+        putnbs(nodep, atFunc);
         AstAssocArrayDType* const adtypep
             = VN_AS(nodep->fromp()->dtypep()->skipRefp(), AssocArrayDType);
         UASSERT_OBJ(adtypep, nodep, "Associative select on non-associative type");
@@ -735,7 +742,8 @@ public:
     }
     void visit(AstWildcardSel* nodep) override {
         iterateAndNextConstNull(nodep->fromp());
-        putnbs(nodep, ".at(");
+        const std::string atFunc = nodep->isLValue() ? ".atWrite(" : ".at(";
+        putnbs(nodep, atFunc);
         AstWildcardArrayDType* const adtypep
             = VN_AS(nodep->fromp()->dtypep()->skipRefp(), WildcardArrayDType);
         UASSERT_OBJ(adtypep, nodep, "Wildcard select on non-wildcard-associative type");
@@ -800,6 +808,21 @@ public:
         if (nodep->method() == VCMethod::FORCE_READ_SEL) {
             emitIQW(nodep);
             if (nodep->isWide()) puts("<" + cvtToStr(nodep->dtypep()->widthWords()) + ">");
+        } else if (nodep->method() == VCMethod::ARRAY_SLICE) {
+            // VlUnpacked::slice<N_Out>(loIdx) - N_Out is the (fixed) result array size
+            const AstUnpackArrayDType* const adtypep
+                = VN_AS(nodep->dtypep()->skipRefp(), UnpackArrayDType);
+            puts("<" + cvtToStr(adtypep->elementsConst()) + ">");
+        } else if (nodep->method() == VCMethod::COVERGROUP_ADD_COVERPOINT) {
+            // The hit-list bound is a template argument of the returned VlCoverpointT<>, and the
+            // node's own dtype is that type, so it is the one source of truth for both.
+            const AstCoverpointDType* const cpdtypep
+                = VN_AS(nodep->dtypep()->skipRefp(), CoverpointDType);
+            puts("<" + cvtToStr(cpdtypep->hitBound()) + ">");
+        } else if (nodep->method() == VCMethod::COVERGROUP_ADD_CROSS) {
+            const AstCoverCrossDType* const cxdtypep
+                = VN_AS(nodep->dtypep()->skipRefp(), CoverCrossDType);
+            puts("<" + cxdtypep->cppTemplateArgs() + ">");
         }
         puts("(");
         bool comma = false;
@@ -1128,7 +1151,7 @@ public:
     }
     void visit(AstFFlush* nodep) override {
         if (!nodep->filep()) {
-            putns(nodep, "Verilated::runFlushCallbacks();\n");
+            putns(nodep, "VL_FFLUSH_MT();");
         } else {
             putns(nodep, "VL_FFLUSH_I(");
             iterateAndNextConstNull(nodep->filep());
@@ -1584,16 +1607,24 @@ public:
             puts(")");
         }
     }
+    void visit(AstMatchMasked* nodep) override {
+        emitOpName(nodep, nodep->emitC(), nodep->lhsp(), nodep->matchp(), nullptr);
+    }
     void visit(AstMemberSel* nodep) override {
+        const AstVar* const varp = nodep->varp();
+        const bool dereferenceCovergroupRef
+            = varp->covergroupRefMember() && nodep->access().isReadOrRW();
+        if (dereferenceCovergroupRef) putnbs(nodep, "(*");
         iterateAndNextConstNull(nodep->fromp());
         putnbs(nodep, "->");
-        if (nodep->varp()->isIfaceRef()) {
+        if (varp->isIfaceRef()) {
             // varp is the __Viftop companion (e.g. "tx__Viftop"); use the
             // MemberSel name which matches the cell's C++ member (e.g. "tx").
             puts(nodep->nameProtect());
         } else {
-            puts(nodep->varp()->nameProtect());
+            puts(varp->nameProtect());
         }
+        if (dereferenceCovergroupRef) puts(")");
     }
     void visit(AstStructSel* nodep) override {
         iterateAndNextConstNull(nodep->fromp());
@@ -1757,6 +1788,9 @@ public:
     void visit(AstVarRef* nodep) override {
         const AstVar* const varp = nodep->varp();
         const AstNodeModule* const varModp = EmitCParentModule::get(varp);
+        const bool dereferenceCovergroupRef
+            = varp->covergroupRefMember() && nodep->access().isReadOrRW();
+        if (dereferenceCovergroupRef) putns(nodep, "(*");
         if (EmitCUtil::isConstPoolMod(varModp)) {
             // Reference to constant pool variable
             putns(nodep, EmitCUtil::topClassName() + "__ConstPool__");
@@ -1773,6 +1807,7 @@ public:
             emitDereference(nodep, nodep->selfPointerProtect(m_useSelfForThis));
         }
         putns(nodep, nodep->varp()->nameProtect());
+        if (dereferenceCovergroupRef) puts(")");
     }
     void visit(AstAddrOfCFunc* nodep) override {
         // Note: Can be thought to handle more, but this is all that is needed right now

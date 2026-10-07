@@ -449,7 +449,7 @@ void VerilatedTrace<VL_SUB_T, VL_BUF_T>::initLib(const std::string& name) VL_MT_
 // All of these take a destination pointer where the string will be emitted,
 // and a value to convert. There are a couple of variants for efficiency.
 
-static inline void cvtCDataToStr(char* dstp, CData value) {
+inline void cvtCDataToStr(char* dstp, CData value) {
 #ifdef VL_HAVE_SSE2
     // Similar to cvtSDataToStr but only the bottom 8 byte lanes are used
     const __m128i a = _mm_cvtsi32_si128(value);
@@ -471,7 +471,7 @@ static inline void cvtCDataToStr(char* dstp, CData value) {
 #endif
 }
 
-static inline void cvtSDataToStr(char* dstp, SData value) {
+inline void cvtSDataToStr(char* dstp, SData value) {
 #ifdef VL_HAVE_SSE2
     // We want each bit in the 16-bit input value to end up in a byte lane
     // within the 128-bit XMM register. Note that x86 is little-endian and we
@@ -507,7 +507,7 @@ static inline void cvtSDataToStr(char* dstp, SData value) {
 #endif
 }
 
-static inline void cvtIDataToStr(char* dstp, IData value) {
+inline void cvtIDataToStr(char* dstp, IData value) {
 #ifdef VL_HAVE_AVX2
     // Similar to cvtSDataToStr but the bottom 16-bits are processed in the
     // top half of the YMM registers
@@ -526,7 +526,7 @@ static inline void cvtIDataToStr(char* dstp, IData value) {
 #endif
 }
 
-static inline void cvtQDataToStr(char* dstp, QData value) {
+inline void cvtQDataToStr(char* dstp, QData value) {
     cvtIDataToStr(dstp, value >> 32);
     cvtIDataToStr(dstp + 32, value);
 }
@@ -648,9 +648,8 @@ template <>
 void VerilatedTraceBuffer<VL_BUF_T>::fullFourstateQData(uint32_t* oldp, QData newval,
                                                         QData newvalXZ, int bits) {
     const uint32_t code = oldp - m_sigs_oldvalp;
-    QData* oldcp = reinterpret_cast<QData*>(oldp);
-    oldcp[0] = newval;  // Still copy even if not tracing so chg doesn't call full
-    oldcp[1] = newvalXZ;
+    std::memcpy(oldp, &newval, sizeof(newval));
+    std::memcpy(oldp + (sizeof(QData) / sizeof(uint32_t)), &newvalXZ, sizeof(newvalXZ));
     if (VL_UNLIKELY(m_sigs_enabledp && !(VL_BITISSET_W(m_sigs_enabledp, code)))) return;
     emitFourstateQData(code, newval, newvalXZ, bits);
 }
@@ -665,15 +664,15 @@ void VerilatedTraceBuffer<VL_BUF_T>::fullWData(uint32_t* oldp, const WDataInP ne
 
 template <>
 void VerilatedTraceBuffer<VL_BUF_T>::fullFourstateWData(uint32_t* oldp, const WDataInP newval,
-                                                        const WDataInP newvalXZ, int bits) {
+                                                        const WDataInP newvalXZp, int bits) {
     const uint32_t code = oldp - m_sigs_oldvalp;
     for (int i = 0; i < VL_WORDS_I(bits); ++i) {
         const int oldIdx = i << 1;
         oldp[oldIdx] = newval[i];
-        oldp[oldIdx | 1] = newvalXZ[i];
+        oldp[oldIdx | 1] = newvalXZp[i];
     }
     if (VL_UNLIKELY(m_sigs_enabledp && !(VL_BITISSET_W(m_sigs_enabledp, code)))) return;
-    emitFourstateWData(code, newval, newvalXZ, bits);
+    emitFourstateWData(code, newval, newvalXZp, bits);
 }
 
 template <>

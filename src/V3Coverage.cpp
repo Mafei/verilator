@@ -65,6 +65,9 @@ class ExprCoverageEligibleVisitor final : public VNVisitorConst {
         }
     }
 
+    // Silently omit this node as should not be considered here
+    void visit(AstCastWrap* nodep) override { iterateChildrenConst(nodep); }
+
     void visit(AstNode* nodep) override {
         if (!nodep->isExprCoverageEligible()) {
             m_eligible = false;
@@ -166,10 +169,13 @@ class CoverageVisitor final : public VNVisitor {
 
     // METHODS
 
+    // Return non-nullptr reason if this variable shouldn't have toggle coverage
     const char* varIgnoreToggle(const AstVar* nodep) {
-        // Return true if this shouldn't be traced
-        // See also similar rule in V3TraceDecl::varIgnoreTrace
-        if (!nodep->isToggleCoverable()) return "Not relevant signal type";
+        const bool cover = nodep->isIO() || (nodep->isSignal() && nodep->isBitLogic());
+        if (!cover) return "Not relevant signal";
+        if (nodep->isConst()) return "Signal is constant";
+        if (nodep->isDouble()) return "Signal is double";
+        if (nodep->isString()) return "Signal is string";
         if (!v3Global.opt.coverageUnderscore()) {
             const string prettyName = nodep->prettyName();
             if (prettyName[0] == '_') return "Leading underscore";
@@ -276,16 +282,28 @@ class CoverageVisitor final : public VNVisitor {
         const AstNodeModule* const origModp = m_modp;
         VL_RESTORER(m_modp);
         VL_RESTORER(m_state);
-        VL_RESTORER(m_exprTempNames);
-        VL_RESTORER(m_funcTemps);
+        VL_RESTORER_COPY(m_exprTempNames);
+        VL_RESTORER_COPY(m_funcTemps);
         createHandle(nodep);
         m_modp = nodep;
-        m_state.m_inModOff = false;  // Haven't made top shell, so tops are real tops
+        m_state.m_inModOff = nodep->isTop();  // Already made top shell, no coverage for it
         if (!origModp) {
             // No blocks cross (non-nested) modules, so save some memory
             m_varnames.clear();
             m_handleLines.clear();
         }
+        iterateChildren(nodep);
+    }
+    void visit(AstClass* nodep) override {
+        VL_RESTORER(m_modp);
+        VL_RESTORER(m_state);
+        VL_RESTORER_COPY(m_exprTempNames);
+        VL_RESTORER_COPY(m_funcTemps);
+        createHandle(nodep);
+        m_modp = nodep;
+        // Covergroup declarations are not executable statements; suppress line/expr/toggle
+        // coverage so declarative elements (covergroup, coverpoint, cross) are not annotated
+        m_state.m_inModOff = nodep->isCovergroup();
         iterateChildren(nodep);
     }
     void visit(AstAlways* nodep) override {
@@ -341,8 +359,8 @@ class CoverageVisitor final : public VNVisitor {
 
     void visit(AstNodeFTask* nodep) override {
         VL_RESTORER(m_ftaskp);
-        VL_RESTORER(m_exprTempNames);
-        VL_RESTORER(m_funcTemps);
+        VL_RESTORER_COPY(m_exprTempNames);
+        VL_RESTORER_COPY(m_funcTemps);
         m_ftaskp = nodep;
         if (!nodep->dpiImport()) iterateProcedure(nodep);
     }
@@ -360,6 +378,8 @@ class CoverageVisitor final : public VNVisitor {
             } else {
                 itemp->addElsesp(stmtp);
             }
+        } else if (AstBegin* const itemp = VN_CAST(nodep, Begin)) {
+            itemp->addStmtsp(stmtp);
         } else {
             nodep->v3fatalSrc("Bad node type");
         }
@@ -368,8 +388,7 @@ class CoverageVisitor final : public VNVisitor {
         VL_RESTORER(m_state);
         VL_RESTORER(m_exprStmtsp);
         VL_RESTORER(m_inToggleOff);
-        // skip properties for expresison coverage
-        if (!VN_IS(nodep, Property)) m_exprStmtsp = nodep;
+        m_exprStmtsp = nodep;
         m_inToggleOff = true;
         createHandle(nodep);
         iterateChildren(nodep);
@@ -518,8 +537,10 @@ class CoverageVisitor final : public VNVisitor {
                     newent.cleanup();
                 }
             }
-        } else if (VN_IS(dtypep, QueueDType)) {
+        } else if (VN_IS(dtypep, QueueDType) || VN_IS(dtypep, AssocArrayDType)
+                   || VN_IS(dtypep, WildcardArrayDType)) {
             // Not covered
+            varp->v3warn(COVERIGN, "Coverage ignored for type " << dtypep->prettyTypeName());
         } else {
             dtypep->v3fatalSrc("Unexpected node data type in toggle coverage generation: "
                                << dtypep->prettyTypeName());
@@ -726,6 +747,11 @@ class CoverageVisitor final : public VNVisitor {
                 newCoverInc(nodep->fileline(), declp, m_beginHier + "_vlCoverageUserTrace"));
         }
     }
+    void visit(AstPropSpec* nodep) override {
+        VL_RESTORER(m_exprStmtsp);
+        m_exprStmtsp = nullptr;
+        iterateChildren(nodep);
+    }
     void visit(AstStop* nodep) override {
         UINFO(4, "  STOP: " << nodep);
         m_state.m_on = false;
@@ -743,7 +769,7 @@ class CoverageVisitor final : public VNVisitor {
     }
     void visit(AstGenBlock* nodep) override {
         // Similar to AstBegin
-        VL_RESTORER(m_beginHier);
+        VL_RESTORER_COPY(m_beginHier);
         if (nodep->name() != "") {
             m_beginHier = m_beginHier + (m_beginHier != "" ? "__DOT__" : "") + nodep->name();
         }
@@ -757,8 +783,10 @@ class CoverageVisitor final : public VNVisitor {
         // generate blocks; each point should get separate consideration.
         // (Currently ignored for line coverage, since any generate iteration
         // covers the code in that line.)
-        VL_RESTORER(m_beginHier);
+        VL_RESTORER_COPY(m_beginHier);
         VL_RESTORER(m_inToggleOff);
+        VL_RESTORER(m_exprStmtsp);
+        m_exprStmtsp = nodep;
         m_inToggleOff = true;
         if (nodep->name() != "") {
             m_beginHier = m_beginHier + (m_beginHier != "" ? "__DOT__" : "") + nodep->name();
@@ -803,10 +831,10 @@ class CoverageVisitor final : public VNVisitor {
                     if (pair.second) {
                         varp = new AstVar{fl, VVarType::MODULETEMP, m_exprTempNames.get(frefp),
                                           dtypep};
+                        varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
                         pair.first->second = varp;
                         if (m_ftaskp) {
                             varp->funcLocal(true);
-                            varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
                             m_ftaskp->stmtsp()->addHereThisAsNext(varp);
                         } else {
                             m_modp->stmtsp()->addHereThisAsNext(varp);
@@ -853,7 +881,7 @@ class CoverageVisitor final : public VNVisitor {
         UASSERT_OBJ(m_exprs.empty(), nodep, "unexpected expression coverage garbage");
         VL_RESTORER(m_seeking);
         VL_RESTORER(m_objective);
-        VL_RESTORER(m_exprs);
+        VL_RESTORER_CLEAR(m_exprs);  // Already asserted above it's empty.
 
         m_seeking = SEEKING;
         m_objective = false;
@@ -1088,7 +1116,20 @@ class CoverageVisitor final : public VNVisitor {
         lineTrack(nodep);
     }
 
+    // Silently omit this node as should not be considered here
+    void visit(AstCastWrap* nodep) override { iterateChildren(nodep); }
+
     // VISITORS - BOTH
+    void visit(AstProperty* nodep) override {
+        VL_RESTORER(m_state);
+        m_state.m_on = false;
+        iterateChildren(nodep);
+    }
+    void visit(AstSequence* nodep) override {
+        VL_RESTORER(m_state);
+        m_state.m_on = false;
+        iterateChildren(nodep);
+    }
     void visit(AstNode* nodep) override {
         iterateChildren(nodep);
         lineTrack(nodep);

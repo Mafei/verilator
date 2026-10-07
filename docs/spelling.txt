@@ -32,6 +32,7 @@ Bagri
 Balboni
 Baltazar
 Bardsley
+Barua
 Benchmarking
 Berman
 Bhagavatula
@@ -198,6 +199,7 @@ Holme
 Homebrew
 Hornung
 Hossell
+Hsieh
 Hsu
 Huggett
 Hutt
@@ -389,6 +391,7 @@ Preprocess
 Pretet
 Pretl
 Pringlemeir
+Prithayan
 Priyadharshini
 Pullup
 Pulver
@@ -477,6 +480,7 @@ Syms
 Synopsys
 SystemC
 SystemVerilog
+Szpotanski
 Takatsukasa
 Tambe
 Tarik
@@ -512,6 +516,7 @@ Ueno
 Uints
 Undefine
 Undefines
+Unigen
 Unsized
 Uppal
 Urbach
@@ -537,6 +542,7 @@ Verilog
 Vighnesh
 Viktor
 Vilp
+VlRNG
 VlWide
 Vlip
 Vm
@@ -621,6 +627,7 @@ benchmarking
 biguint
 binToOneHot
 bindir
+binsof
 biops
 bisonpre
 bitOpTree
@@ -644,6 +651,7 @@ casez
 casted
 castro
 cb
+cbValueChange
 ccache
 ccall
 cdc
@@ -684,6 +692,8 @@ countones
 cout
 covergroup
 covergroups
+coverpoint
+coverpoints
 cpp
 cppstyle
 cpu
@@ -705,6 +715,7 @@ de
 dearray
 deassign
 debugi
+deduplication
 defenv
 defname
 defparam
@@ -860,6 +871,7 @@ hx
 hyperthreading
 hyperthreads
 icecream
+ico
 idmap
 ifdef
 ifdefed
@@ -915,6 +927,8 @@ linters
 linux
 liu
 livelock
+liveness
+lldb
 ln
 loc
 localparam
@@ -922,6 +936,7 @@ localparams
 localtime
 logicals
 longint
+lookups
 lossy
 lsb
 lubc
@@ -933,6 +948,7 @@ makefile
 makefiles
 malloc
 manpages
+memoization
 metacomment
 metacomments
 miree
@@ -941,6 +957,7 @@ misconnected
 misconversion
 misdetecting
 misoptimized
+misoptimizing
 missized
 mk
 mno
@@ -989,6 +1006,7 @@ noprivate
 noreturn
 notif
 nullptr
+num
 numactl
 onehot
 ooo
@@ -1121,6 +1139,7 @@ specparam
 splitme
 spp
 sqrt
+srand
 srandom
 src
 srcdir
@@ -1165,8 +1184,10 @@ systemc
 taskify
 tcmalloc
 tcmalloc
+teardown
 tenghtt
 testbench
+testbenches
 threadsafe
 threashold
 timeInc
@@ -1201,6 +1222,7 @@ typename
 uint
 un
 unbased
+unclocked
 uncomment
 undef
 undefineall
