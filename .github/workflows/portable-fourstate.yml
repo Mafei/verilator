@@ -1,0 +1,79 @@
+name: Portable four-state builds
+on:
+  push:
+    branches: [fourstate-portable]
+  pull_request:
+    branches: [dev/fourstate]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: portable-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  macos:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install build tools on the cloud runner
+        run: brew install autoconf automake help2man
+      - name: Build, check dependencies, relocate, and run regressions
+        run: bash ci/portable/build.bash macos-arm64
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: macos-arm64-${{ github.run_id }}
+          path: |
+            out/
+            logs/
+            test_regress/obj_vlt/*/*.log
+          if-no-files-found: error
+  rocky8:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build in Rocky Linux 8.10
+        run: |
+          docker pull rockylinux:8.10
+          docker image inspect rockylinux:8.10 --format '{{json .RepoDigests}}' > rocky-image.txt
+          docker run --rm -e GITHUB_ACTIONS=true -e CC=gcc -e CXX=g++ \
+            -v "$PWD:/work" -w /work rockylinux:8.10 bash -c '
+              set -e
+              dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils \
+                autoconf automake make perl git curl tar gzip xz findutils diffutils \
+                python3.11 python3.11-pip zlib-devel help2man
+              ln -s /usr/bin/python3.11 /usr/local/bin/python3
+              bash ci/portable/build.bash rocky8-x86_64
+            '
+      - name: Verify package in a fresh Rocky 8.10 container
+        run: |
+          docker run --rm -e GITHUB_ACTIONS=true -v "$PWD:/source:ro" rockylinux:8.10 bash -c '
+            set -e
+            dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils make perl python3.11 tar gzip
+            source /opt/rh/gcc-toolset-13/enable
+            ln -s /usr/bin/python3.11 /usr/local/bin/python3
+            mkdir -p /tmp/relocated
+            tar xzf /source/out/verilator-fourstate-rocky8-x86_64.tar.gz -C /tmp/relocated
+            cd /tmp
+            python3 /source/ci/portable/smoke.py /tmp/relocated/verilator-fourstate/bin/verilator /tmp/model
+          '
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: rocky8-x86_64-${{ github.run_id }}
+          path: |
+            out/
+            logs/
+            rocky-image.txt
+            test_regress/obj_vlt/*/*.log
+          if-no-files-found: error
