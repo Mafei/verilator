@@ -45,6 +45,8 @@ require a C++20-capable compiler (GCC 13 or a suitable Clang).
 GNU Flex 2.6.4 and Bison 3.8.2 are built from HTTPS archives with pinned SHA256
 hashes. The matching GNU `FlexLexer.h` is selected explicitly. Optional allocator
 libraries and CPU-specific `-march=native` optimizations are not used.
+Flex is configured with `CPPFLAGS=-D_GNU_SOURCE` so glibc 2.28 declares
+`reallocarray`; otherwise Flex 2.6.4 can truncate its return pointer and crash.
 
 Artifacts contain the optimized compiler, Python/Perl scripts, runtime headers
 and sources, generated make metadata, CMake/pkg-config data, examples, licenses,
@@ -56,3 +58,8 @@ CI checks the relocated package by compiling and executing a four-state timing
 model, including a required failure on an unknown comparison. The Linux package
 is tested in a new Rocky 8.10 container with a different installation path.
 Published artifacts are development snapshots, not releases.
+
+The manual `Original four-state baselines` workflow builds both original commits
+with the same Rocky toolchain and runs a common scalar and aggregate probe.
+Only the public test harness and GNU Flex header adjustment are copied into
+these checkouts. Results and the exact source adjustment are uploaded as evidence.

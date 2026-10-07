@@ -58,6 +58,7 @@ jobs:
               bash ci/portable/build.bash rocky8-x86_64
             '
       - name: Verify package in a fresh Rocky 8.10 container
+        if: ${{ !cancelled() && hashFiles('out/verilator-fourstate-rocky8-x86_64.tar.gz') != '' }}
         run: |
           docker run --rm -e GITHUB_ACTIONS=true -v "$PWD:/source:ro" rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e bash -c '
             set -e

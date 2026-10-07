@@ -3,7 +3,9 @@
 // SPDX-FileCopyrightText: 2026 Mafei
 // SPDX-License-Identifier: CC0-1.0
 
-module t;
+module t #(
+  parameter bit REJECT_X = 0
+);
   logic [6:0] value;
   logic [6:0] memory [3:1];
   logic [47:0] ram [0:31];
@@ -32,7 +34,7 @@ module t;
     if (value !== 7'b0011101 || $countones(value) != 4) $fatal(1, "known value");
     value = 7'bxxxxxxx;
     #1;
-    if ($test$plusargs("reject_x") && value !== 7'b0011101)
+    if (REJECT_X && value !== 7'b0011101)
       $fatal(1, "FOURSTATE_UNKNOWN_REJECTED");
     $write("*-* All Finished *-*\n");
     $finish;

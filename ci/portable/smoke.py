@@ -12,13 +12,15 @@ work.mkdir(parents=True, exist_ok=True)
 source = pathlib.Path(__file__).resolve().parents[2] / 'test_regress/t/t_fourstate_portable.v'
 env = os.environ.copy()
 env.pop('VERILATOR_ROOT', None)
+env.pop('CPLUS_INCLUDE_PATH', None)
 subprocess.run([compiler, '--version'], check=True, env=env)
 subprocess.run([compiler, '--binary', '--fourstate', '-Wno-FUTURE', '--top-module', 't', '--Mdir', str(work / 'obj_dir'), '-j', '2', str(source)], check=True, cwd=work, env=env)
 model = work / 'obj_dir/Vt'
 passed = subprocess.run([str(model)], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
 print(passed.stdout)
 assert passed.returncode == 0 and '*-* All Finished *-*' in passed.stdout, passed.returncode
-rejected = subprocess.run([str(model), '+reject_x'], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+subprocess.run([compiler, '--binary', '--fourstate', '-Wno-FUTURE', '--top-module', 't', '-GREJECT_X=1', '--Mdir', str(work / 'reject_obj'), '-j', '2', str(source)], check=True, cwd=work, env=env)
+rejected = subprocess.run([str(work / 'reject_obj/Vt')], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
 print(rejected.stdout)
 assert rejected.returncode != 0 and 'FOURSTATE_UNKNOWN_REJECTED' in rejected.stdout, rejected.returncode
 if sys.platform.startswith('linux'):

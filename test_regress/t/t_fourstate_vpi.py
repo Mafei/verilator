@@ -9,9 +9,11 @@
 
 import vltest_bootstrap
 
-test.scenarios('simulator')
+test.scenarios('vlt')
 
-test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE'])
+test.compile(make_top_shell=False,
+             make_main=False,
+             verilator_flags2=['--exe', '--vpi', '--fourstate', '-Wno-FUTURE', test.pli_filename])
 
 test.execute()
 

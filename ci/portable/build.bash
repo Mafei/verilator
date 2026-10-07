@@ -112,16 +112,19 @@ tar -czf "out/verilator-fourstate-$platform.tar.gz" -C stage/opt verilator-fours
 if [[ $platform == macos-arm64 ]]; then
     mkdir -p /tmp/verilator-relocated
     tar xzf "out/verilator-fourstate-$platform.tar.gz" -C /tmp/verilator-relocated
-    python3 ci/portable/smoke.py /tmp/verilator-relocated/verilator-fourstate/bin/verilator /tmp/portable-smoke
+    smoke_status=0
+    python3 ci/portable/smoke.py /tmp/verilator-relocated/verilator-fourstate/bin/verilator /tmp/portable-smoke || smoke_status=$?
 fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
-python3 test_regress/driver.py --vlt -j2 \
+regress_status=0
+(cd test_regress && python3 driver.py --vlt -j2 \
     t_fourstate_isunknown t_fourstate_countones t_fourstate_packed_array \
     t_fourstate_struct t_fourstate_sampled_expr t_fourstate_lognot \
     t_fourstate_api t_fourstate_noapi t_fourstate_dynarray t_fourstate_modport \
     t_fourstate_cond t_fourstate_trace_vcd t_fourstate_trace_fst \
-    t_vpi_get t_vpi_get_value_array t_fourstate_portable
+    t_vpi_get t_vpi_get_value_array t_fourstate_vpi t_fourstate_portable) || regress_status=$?
+[[ ${smoke_status:-0} == 0 && $regress_status == 0 ]]
 python3 - <<'PY'
 import hashlib,pathlib
 files=sorted(pathlib.Path('out').glob('*'))
