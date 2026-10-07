@@ -28,7 +28,9 @@ source .ci-venv/bin/activate
 python3 -m pip install --disable-pip-version-check distro
 # Build the waveform comparator on the Rocky baseline; Ubuntu-built binaries
 # can require a newer glibc. macOS uses the official ARM64 release archive.
-if [[ $platform == rocky8-x86_64 ]]; then
+if [[ -n ${PORTABLE_BASELINE:-} ]]; then
+    : # Baselines do not need a trace comparator.
+elif [[ $platform == rocky8-x86_64 ]]; then
     export RUSTUP_HOME="$root/.ci-rustup" CARGO_HOME="$root/.ci-cargo"
     curl --fail --location --retry 3 --proto '=https' -o .ci-tools-src/rustup-init.sh https://sh.rustup.rs
     sh .ci-tools-src/rustup-init.sh -y --profile minimal --default-toolchain 1.88.0 --no-modify-path
@@ -63,6 +65,7 @@ export CPLUS_INCLUDE_PATH="$root/.ci-tools/include"
 python3 ci/portable/test_flexfix.py
 {
     git rev-parse HEAD
+    printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
     git show -s --format='%H%n%P%n%s' HEAD
     uname -a
     "$CXX" --version
@@ -74,6 +77,12 @@ python3 ci/portable/test_flexfix.py
 autoconf
 ./configure --prefix=/opt/verilator-fourstate --disable-ccwarn --disable-tcmalloc --disable-jemalloc
 make -C src -j2 opt
+if [[ -n ${PORTABLE_BASELINE:-} ]]; then
+    export VERILATOR_ROOT="$root"
+    git diff -- src/flexfix > out/baseline-source.patch
+    python3 ci/portable/baseline.py "$root/bin/verilator" "$root/.baseline"
+    exit 0
+fi
 # Release binary plus all runtime headers, generated make metadata, and examples.
 make installbin installredirect installdata DESTDIR="$root/stage" \
     VL_INST_PUBLIC_SCRIPT_FILES='verilator verilator_gantt verilator_profcfunc' \
