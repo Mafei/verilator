@@ -21,6 +21,10 @@ independently squashed copies, without changing Git ancestry.
 - Route paired public variables through residual VPI registration rather than
   the newer value-only table; preserve X/Z comparisons in value callbacks.
 - Preserve dev four-state test fixtures and feature generic JSON fixtures.
+  The obsolete feature formatting-unsupported test is removed because dev's
+  formatting implementation preserves X/Z; the decimal, binary, octal and hex
+  output tests validate that behavior. `LOGICCAST` remains a warning alias for
+  feature's `CASTFOURSTATE` name.
   A successful focused CI run does not certify the entire upstream regression
   suite or complete IEEE four-state semantics.
 
@@ -47,6 +51,8 @@ hashes. The matching GNU `FlexLexer.h` is selected explicitly. Optional allocato
 libraries and CPU-specific `-march=native` optimizations are not used.
 Flex is configured with `CPPFLAGS=-D_GNU_SOURCE` so glibc 2.28 declares
 `reallocarray`; otherwise Flex 2.6.4 can truncate its return pointer and crash.
+FST model generation also requires LZ4 and zlib development headers and libraries.
+CI installs these dependencies on the cloud runners.
 
 Artifacts contain the optimized compiler, Python/Perl scripts, runtime headers
 and sources, generated make metadata, CMake/pkg-config data, examples, licenses,

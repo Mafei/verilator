@@ -314,6 +314,7 @@ private:
     V3ErrorCode renamedTo() const {
         // Return a new error this error has been renamed to
         if (m_e == LITENDIAN) return V3ErrorCode{ASCRANGE};
+        if (m_e == LOGICCAST) return V3ErrorCode{CASTFOURSTATE};
         return V3ErrorCode{EC_MIN};  // Not renamed; see isRenamed()
     }
     bool isRenamed() const { return renamedTo() != V3ErrorCode{EC_MIN}; }

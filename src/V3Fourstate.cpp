@@ -2751,7 +2751,6 @@ class FourstateVisitor final : public VNVisitor {
         for (AstNodeExpr* exprp = nodep->exprsp(); exprp;
              exprp = VN_AS(exprp->nextp(), NodeExpr)) {
             if (isFourstate(exprp)) {
-                castFourstateWarn(exprp);
                 if (AstSFormatArg* const sformatArgp = VN_CAST(exprp, SFormatArg)) {
                     switch (sformatArgp->formatAttr()) {
                     case VFormatAttr::SIGNED:

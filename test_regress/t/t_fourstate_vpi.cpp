@@ -79,8 +79,8 @@ int main(int argc, char** argv) {
     checkVector(wide, wideValue, 3);
     s_vpi_vecval memoryValue[] = {{0x2468ace0, 0x13579bdf}, {0x1234, 0xabcd}};
     checkVector(word, memoryValue, 2);
+    // vpi_remove_cb also releases its callback handle.
     vpi_remove_cb(callbackHandle);
-    vpi_release_handle(callbackHandle);
     vpi_release_handle(word);
     vpi_release_handle(memory);
     vpi_release_handle(wide);

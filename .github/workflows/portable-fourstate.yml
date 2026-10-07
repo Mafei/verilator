@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Install build tools on the cloud runner
-        run: brew install autoconf automake help2man
+        run: brew install autoconf automake help2man lz4
       - name: Build, check dependencies, relocate, and run regressions
         run: bash ci/portable/build.bash macos-arm64
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -53,7 +53,7 @@ jobs:
               dnf config-manager --set-enabled powertools
               dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
                 autoconf automake make perl git curl tar gzip xz findutils diffutils \
-                python3.11 python3.11-pip zlib-devel help2man
+                python3.11 python3.11-pip zlib-devel lz4-devel help2man
               ln -s /usr/bin/python3.11 /usr/local/bin/python3
               bash ci/portable/build.bash rocky8-x86_64
             '

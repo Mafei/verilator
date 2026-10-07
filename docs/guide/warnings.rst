@@ -455,13 +455,11 @@ List Of Warnings
    being casted has an unknown value (`x` or `z`) - it will become `0`;
    in other cases (for known values) simulation will work correctly.
 
-   Faulty example:
-
-   .. include:: ../../docs/gen/ex_CASTFOURSTATE_faulty.rst
-
-   Results in:
-
-   .. include:: ../../docs/gen/ex_CASTFOURSTATE_msg.rst
+   In this experimental branch, four-state formatting preserves both the value
+   and X/Z components and does not trigger this warning. Passing a four-state
+   argument to embedded C code or using a four-state file descriptor still
+   requires a conversion. The earlier name ``LOGICCAST`` remains an alias for
+   compatibility with existing warning controls.
 
 
 .. option:: CDCRSTLOGIC

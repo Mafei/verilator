@@ -22,6 +22,8 @@ if [[ $platform == rocky8-x86_64 ]]; then
 else
     [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]]
     export CC=clang CXX=clang++
+    lz4_prefix=$(brew --prefix lz4)
+    export LIBRARY_PATH="$lz4_prefix/lib"
 fi
 python3 -m venv .ci-venv
 source .ci-venv/bin/activate
@@ -65,6 +67,9 @@ tar xf flex.tar.gz
 cd "$root"
 export PATH="$root/.ci-tools/bin:$PATH"
 export CPLUS_INCLUDE_PATH="$root/.ci-tools/include"
+if [[ $platform == macos-arm64 ]]; then
+    export CPLUS_INCLUDE_PATH="$CPLUS_INCLUDE_PATH:$lz4_prefix/include"
+fi
 python3 ci/portable/test_flexfix.py
 {
     git rev-parse HEAD
@@ -123,7 +128,9 @@ regress_status=0
     t/t_fourstate_struct.py t/t_fourstate_sampled_expr.py t/t_fourstate_lognot.py \
     t/t_fourstate_api.py t/t_fourstate_noapi.py t/t_fourstate_dynarray.py t/t_fourstate_modport.py \
     t/t_fourstate_cond.py t/t_fourstate_trace_vcd.py t/t_fourstate_trace_fst.py \
-    t/t_vpi_get.py t/t_vpi_get_value_array.py t/t_fourstate_vpi.py t/t_fourstate_portable.py) || regress_status=$?
+    t/t_vpi_get.py t/t_vpi_get_value_array.py t/t_fourstate_vpi.py t/t_fourstate_portable.py \
+    t/t_fourstate_format.py t/t_fourstate_format_bin.py \
+    t/t_fourstate_format_octal.py t/t_fourstate_format_hex.py) || regress_status=$?
 [[ ${smoke_status:-0} == 0 && $regress_status == 0 ]]
 python3 - <<'PY'
 import hashlib,pathlib
