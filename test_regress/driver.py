@@ -2465,7 +2465,12 @@ class VlTest:
     #######################################################################
     # File utilities
 
-    def files_identical(self, fn1: str, fn2: str, is_logfile=False, strip_hex=False) -> None:
+    def files_identical(self,
+                        fn1: str,
+                        fn2: str,
+                        is_logfile=False,
+                        strip_hex=False,
+                        normalize_enum_hash=False) -> None:
         """Test if two files have identical contents"""
         delay = 0.25
         for tryn in range(Args.log_retries, -1, -1):
@@ -2473,12 +2478,16 @@ class VlTest:
                 time.sleep(delay)
                 delay = min(1, delay * 2)
             moretry = tryn != 0
-            if not self._files_identical_try(
-                    fn1=fn1, fn2=fn2, is_logfile=is_logfile, strip_hex=strip_hex, moretry=moretry):
+            if not self._files_identical_try(fn1=fn1,
+                                             fn2=fn2,
+                                             is_logfile=is_logfile,
+                                             strip_hex=strip_hex,
+                                             normalize_enum_hash=normalize_enum_hash,
+                                             moretry=moretry):
                 break
 
     def _files_identical_try(self, fn1: str, fn2: str, is_logfile: bool, strip_hex: bool,
-                             moretry: bool) -> bool:
+                             normalize_enum_hash: bool, moretry: bool) -> bool:
         # If moretry, then return true to try again
         try:
             f1 = open(  # pylint: disable=consider-using-with
@@ -2503,6 +2512,7 @@ class VlTest:
                                              fn2=fn2,
                                              is_logfile=is_logfile,
                                              strip_hex=strip_hex,
+                                             normalize_enum_hash=normalize_enum_hash,
                                              moretry=moretry)
         if f1:
             f1.close()
@@ -2511,10 +2521,22 @@ class VlTest:
         return again
 
     def _files_identical_reader(self, f1, f2, fn1: str, fn2: str, is_logfile: bool,
-                                strip_hex: bool, moretry: bool) -> bool:
+                                strip_hex: bool, normalize_enum_hash: bool, moretry: bool) -> bool:
         # If moretry, then return true to try again
         l1s = f1.readlines()
         l2s = f2.readlines() if f2 else []
+        if normalize_enum_hash:
+            # Enum type hashes vary with host-dependent dtype hashing. Preserve
+            # distinct hash identities, all references, and the numeric suffix.
+            hashes = {}
+
+            def enum_hash(match):
+                value = match.group(1)
+                if value not in hashes:
+                    hashes[value] = len(hashes)
+                return '__Venum_hHASH' + str(hashes[value])
+
+            l1s = [re.sub(r'\b__Venum_h([0-9a-f]{8})(?=__\d+\b)', enum_hash, line) for line in l1s]
         # print(" rawGOT="+pformat(l1s)+"\n rawEXP="+pformat(l2s))
         if is_logfile:
             l1o = []

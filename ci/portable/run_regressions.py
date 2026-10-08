@@ -5,11 +5,10 @@
 
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
-
+from pathlib import Path
 
 GROUPS = {
     "capabilities": """
@@ -46,13 +45,36 @@ GROUPS = {
 }
 
 
-def main():
-    if os.environ.get("GITHUB_ACTIONS") != "true":
-        raise SystemExit("Run regressions in GitHub Actions")
-    root = Path(__file__).resolve().parents[2]
+def parse_summary(log_text):
+    """Read the sole completed harness summary, including any retry failures."""
+    summaries = re.findall(r"^==TESTS DONE, ([^\n]*)$", log_text, re.MULTILINE)
+    if len(summaries) != 1:
+        raise ValueError("Expected exactly one completed harness summary")
+    status, separator, summary = summaries[0].partition(": ")
+    if not separator or status not in ("PASSED", "FAILED", "PASSED w/SKIPS"):
+        raise ValueError("Unrecognized harness summary")
+    pairs = re.findall(r"\b(Passed|Failed(?:-First)?|Skipped|Left|Running) (\d+)\b", summary)
+    counts = {key.lower(): int(value) for key, value in pairs}
+    if len(counts) != len(pairs) or not {"passed", "failed"}.issubset(counts):
+        raise ValueError("Missing or duplicate harness counts")
+    return status, counts
+
+
+def passed_counts(status, counts, expected):
+    return (status == "PASSED" and counts.get("passed") == expected and counts.get("failed") == 0
+            and all(
+                counts.get(key, 0) == 0 for key in ("failed-first", "skipped", "left", "running")))
+
+
+def run_groups(root, groups):
+    """Record every selected group even when an earlier subprocess fails."""
+    if not groups or len(set(groups)) != len(groups) or any(group not in GROUPS
+                                                            for group in groups):
+        raise ValueError("Select distinct, known regression groups")
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     results = {}
     failed = False
-    for group in sys.argv[1:]:
+    for group in groups:
         names = GROUPS[group]
         drivers = ["t/t_" + name + ".py" for name in names]
         for driver in drivers:
@@ -60,29 +82,46 @@ def main():
                 raise FileNotFoundError(driver)
         command = [sys.executable, "driver.py", "--vlt", "-j2", *drivers]
         with (root / "logs" / (group + "-regressions.log")).open("w") as log:
-            process = subprocess.Popen(command, cwd=root / "test_regress",
+            process = subprocess.Popen(command,
+                                       cwd=root / "test_regress",
                                        stdout=subprocess.PIPE,
-                                       stderr=subprocess.STDOUT, text=True)
+                                       stderr=subprocess.STDOUT,
+                                       text=True)
             for line in process.stdout:
                 log.write(line)
                 print(line, end="", flush=True)
             returncode = process.wait()
-        text = (root / "logs" / (group + "-regressions.log")).read_text()
-        summary = re.findall(r"==TESTS DONE,.*", text)
+        log_text = (root / "logs" / (group + "-regressions.log")).read_text()
+        status = "INVALID"
         counts = {}
-        if summary:
-            counts = {key.lower(): int(value) for key, value in
-                      re.findall(r"(Passed|Failed|Skipped) (\d+)", summary[-1])}
-        passed = (returncode == 0 and counts.get("passed") == len(names)
-                  and counts.get("failed") == 0 and counts.get("skipped", 0) == 0)
-        results[group] = {"selected": names, "expected": len(names),
-                          "returncode": returncode, "counts": counts,
-                          "success": passed}
+        try:
+            status, counts = parse_summary(log_text)
+        except ValueError as error:
+            print(group + ": " + str(error), file=sys.stderr)
+        passed = returncode == 0 and passed_counts(status, counts, len(names))
+        results[group] = {
+            "commit": head,
+            "selected": names,
+            "expected": len(names),
+            "returncode": returncode,
+            "counts": counts,
+            "summary_status": status,
+            "success": passed
+        }
         failed = failed or not passed
-    (root / "out" / "regression-results.json").write_text(
-        json.dumps(results, indent=2) + "\n")
-    raise SystemExit(1 if failed else 0)
+    (root / "out" / "regression-results.json").write_text(json.dumps(results, indent=2) + "\n")
+    return 1 if failed else 0
+
+
+def main():
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        raise SystemExit("Run regressions in GitHub Actions")
+    root = Path(__file__).resolve().parents[2]
+    try:
+        return run_groups(root, sys.argv[1:])
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
