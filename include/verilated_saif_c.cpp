@@ -284,20 +284,6 @@ void VerilatedSaifActivityVar::emitFourstateWData(const uint64_t time, const WDa
     updateLastTime(time);
 }
 
-VL_ATTR_ALWINLINE
-void VerilatedSaifActivityVar::emitFourstateWData(const uint64_t time, const WDataInP newval,
-                                                  const WDataInP newvalXZ, const uint32_t bits) {
-    assert(m_lastTime <= time);
-    const uint64_t dt = time - m_lastTime;
-    for (std::size_t i = 0; i < std::min(m_width, bits); ++i) {
-        const size_t wordIndex = i / VL_EDATASIZE;
-        m_bits[i].aggregateVal(dt, (newval[wordIndex] >> VL_BITBIT_E(i)) & 1,
-                               (newvalXZ[wordIndex] >> VL_BITBIT_E(i)) & 1);
-    }
-
-    updateLastTime(time);
-}
-
 VerilatedSaifActivityBit& VerilatedSaifActivityVar::bit(const std::size_t index) {
     assert(index < m_width);
     return m_bits[index];
