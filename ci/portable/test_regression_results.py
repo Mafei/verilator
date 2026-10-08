@@ -138,16 +138,22 @@ class ResultsTest(unittest.TestCase):
             len(GROUPS["upstream"]))
         self.assertEqual(self.run_fixture(), 0)
         self.verify()
-        # The real fake-driver subprocess also rejects a wrong full argv.
-        arguments = original["arguments"]
-        for wrong in ([arg for arg in arguments if arg != "--no-skip-identical"], arguments[:-1],
-                      [*arguments[:3], *reversed(arguments[3:])]):
-            with self.subTest(arguments=wrong):
-                self.config[first]["arguments"] = wrong
-                self.assertEqual(self.run_fixture(), 1)
-                self.assertEqual(self.results["upstream"]["returncode"], 98)
-                self.rejected()
         self.config[first] = original
+        # Every selected group uses the exact forced-generation argv, including
+        # new independent groups. A singleton's reversed selection is unchanged.
+        for group, names in GROUPS.items():
+            first = "t/t_" + names[0] + ".py"
+            arguments = self.config[first]["arguments"]
+            variants = [[arg for arg in arguments if arg != "--no-skip-identical"], arguments[:-1]]
+            if len(names) > 1:
+                variants.append([*arguments[:3], *reversed(arguments[3:])])
+            for wrong in variants:
+                with self.subTest(group=group, arguments=wrong):
+                    self.config[first]["arguments"] = wrong
+                    self.assertEqual(self.run_fixture(), 1)
+                    self.assertEqual(self.results[group]["returncode"], 98)
+                    self.rejected()
+            self.config[first]["arguments"] = arguments
         # An ordinary cloud checkout has neither build-created output directory.
         shutil.rmtree(self.root / "logs")
         shutil.rmtree(self.root / "out")

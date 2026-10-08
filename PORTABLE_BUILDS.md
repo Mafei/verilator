@@ -182,6 +182,16 @@ function calls or general strength, switch and bidirectional-net semantics.
 Existing four-state aggregate restrictions, including the explicit rejection
 of packed union variables, also remain in place.
 
+The `fourstate-resolve-20261008` candidate keeps all 127 pull-stage selections
+and adds an independent `resolve` group with four drivers, for **131 explicitly
+selected checks**. Three positive drivers target pair and triple drivers and
+resolved-net events. A compile-negative driver checks retained unsupported
+contexts against diagnostic goldens. The shared public header and oracle helper
+are tracked test inputs, not extra drivers. All groups retain forced generation,
+exact unique test names, counts, exits and commit provenance. This candidate's
+runtime and portable platform verification remain pending until their actual
+logs have been checked.
+
 The delayed NBA loss also reproduces with an actual optimized build of the
 unmodified official `4a2989705657d506d50dee5772bc17b3f689d9d5` baseline.
 It is not introduced by the four-state integration. The bounded fix captures
