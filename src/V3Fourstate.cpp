@@ -579,7 +579,7 @@ class FourstateVisitor final : public VNVisitor {
     AstNode* m_currentTmpSpotp = nullptr;  // Node after which put AstVar* for temporary variable
     bool m_tmpFuncLocal
         = false;  // Whether temporary variables shall be created as function locals
-    AstNodeStmt* m_currentStmtp = nullptr;  // Current statement
+    AstNode* m_currentStmtp = nullptr;  // Current statement or declarative coverage anchor
     AstNode* m_lastCalculationStatp = nullptr;  // Last calculation statement
     AstNodeModule* m_modp = nullptr;  // Current module
     std::vector<AstVar*> m_varpsToRemove;  // Vars to unlink and remove in destructor
@@ -836,12 +836,12 @@ class FourstateVisitor final : public VNVisitor {
         }
     };
     class StmtHelper final {
-        const VRestorerTrivial<AstNodeStmt*> m_currentStmtRestorer;
+        const VRestorerTrivial<AstNode*> m_currentStmtRestorer;
         const VRestorerTrivial<AstNode*> m_lastStmtRestorer;
         const TmpVarsReleaser m_tmpVarsReleaser;
 
     public:
-        StmtHelper(FourstateVisitor& visitor, AstNodeStmt* const stmtp)
+        StmtHelper(FourstateVisitor& visitor, AstNode* const stmtp)
             : m_currentStmtRestorer{visitor.m_currentStmtp}
             , m_lastStmtRestorer{visitor.m_lastCalculationStatp}
             , m_tmpVarsReleaser{visitor, stmtp} {

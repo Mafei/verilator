@@ -32,6 +32,7 @@ jobs:
             out/
             logs/
             test_regress/obj_vlt/*/*.log
+            test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
           if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
@@ -79,4 +80,5 @@ jobs:
             logs/
             rocky-image.txt
             test_regress/obj_vlt/*/*.log
+            test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
           if-no-files-found: error
