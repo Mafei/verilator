@@ -11,5 +11,6 @@ import vltest_bootstrap
 
 test.scenarios('simulator')
 test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE'])
-test.execute()
+test.execute(logfile=test.run_log_filename)
+test.file_grep(test.run_log_filename, r'Shift checks: (\d+)', 9832)
 test.passes()

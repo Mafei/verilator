@@ -1334,8 +1334,21 @@ class FourstateVisitor final : public VNVisitor {
             m_fourstateVisitor.addPrecalculation(nodep);
         }
 
-        AstNodeExpr* getShiftOperandValue(AstNodeExpr* const exprp) {
-            return m_fourstateVisitor.getOnceExpressionValue(exprp);
+        template <typename T_Shift>
+        AstNodeExpr* newFourstateShift(AstNodeBiop* const nodep, const bool xzPart) {
+            FileLine* const flp = nodep->fileline();
+            AstNodeExpr* lhsp = m_fourstateVisitor.getOnceExpressionValue(nodep->lhsp());
+            if (xzPart) {
+                // The value must still run when only the X/Z half is used or the count is unknown.
+                pushDeletep(lhsp);
+                lhsp = getFourstateExpressionXZ(nodep->lhsp(), false);
+            }
+            AstNodeExpr* const rhsp = m_fourstateVisitor.getOnceExpressionValue(nodep->rhsp());
+            T_Shift* const shiftp = new T_Shift{flp, lhsp, rhsp};
+            shiftp->dtypep(getTwoStateDtype(nodep->dtypep()));
+            // Arithmetic shifts extend the sign bit of both halves, including an X/Z sign bit.
+            return new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(nodep->rhsp())},
+                               createZeroOrOnesp(nodep, true), shiftp};
         }
 
         void liftExprStmtStatements(AstExprStmt* const exprStmtp) {
@@ -1850,39 +1863,13 @@ class FourstateVisitor final : public VNVisitor {
         }
 
         void visit(AstShiftL* const shiftlp) override {
-            // |b.xz ? '1 : (a.value << b.value)
-            FileLine* const flp = shiftlp->fileline();
-            m_resultp = new AstCond{
-                flp, new AstRedOr{flp, getFourstateExpressionXZ(shiftlp->rhsp())},
-                createZeroOrOnesp(shiftlp->lhsp(), true),
-                new AstShiftL{
-                    flp,
-                    getFourstateExpressionValue(
-                        shiftlp->lhsp(), true /*must be in tmp so it always gets evaluated*/),
-                    getFourstateExpressionValue(shiftlp->rhsp())}};
+            m_resultp = newFourstateShift<AstShiftL>(shiftlp, false);
         }
         void visit(AstShiftR* const shiftrp) override {
-            // |b.xz ? '1 : (a.value >> b.value)
-            FileLine* const flp = shiftrp->fileline();
-            m_resultp = new AstCond{
-                flp, new AstRedOr{flp, getFourstateExpressionXZ(shiftrp->rhsp())},
-                createZeroOrOnesp(shiftrp->lhsp(), true),
-                new AstShiftR{
-                    flp,
-                    getFourstateExpressionValue(
-                        shiftrp->lhsp(), true /*must be in tmp so it always gets evaluated*/),
-                    getFourstateExpressionValue(shiftrp->rhsp())}};
+            m_resultp = newFourstateShift<AstShiftR>(shiftrp, false);
         }
         void visit(AstShiftRS* const shiftrsp) override {
-            FileLine* const flp = shiftrsp->fileline();
-            AstNodeExpr* const lhsp = getShiftOperandValue(shiftrsp->lhsp());
-            AstNodeExpr* const rhsp = getShiftOperandValue(shiftrsp->rhsp());
-            AstShiftRS* const shiftp = new AstShiftRS{flp, lhsp, rhsp};
-            shiftp->dtypep(getTwoStateDtype(shiftrsp->dtypep()));
-            // Shift the value and X/Z halves with the same sign extension.
-            m_resultp = new AstCond{
-                flp, new AstRedOr{flp, getFourstateExpressionXZ(shiftrsp->rhsp())},
-                createZeroOrOnesp(shiftrsp, true), shiftp};
+            m_resultp = newFourstateShift<AstShiftRS>(shiftrsp, false);
         }
         void visit(AstExtend* const extendp) override {
             FileLine* const flp = extendp->fileline();
@@ -2231,35 +2218,13 @@ class FourstateVisitor final : public VNVisitor {
         }
 
         void visit(AstShiftL* const shiftlp) override {
-            // |b.xz ? '1 : (a.xz << b.value)
-            FileLine* const flp = shiftlp->fileline();
-            m_resultp
-                = new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(shiftlp->rhsp())},
-                              createZeroOrOnesp(shiftlp->lhsp(), true),
-                              new AstShiftL{flp, getFourstateExpressionXZ(shiftlp->lhsp(), false),
-                                            getFourstateExpressionValue(shiftlp->rhsp())}};
+            m_resultp = newFourstateShift<AstShiftL>(shiftlp, true);
         }
         void visit(AstShiftR* const shiftrp) override {
-            // |b.xz ? '1 : (a.xz >> b.value)
-            FileLine* const flp = shiftrp->fileline();
-            m_resultp
-                = new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(shiftrp->rhsp())},
-                              createZeroOrOnesp(shiftrp->lhsp(), true),
-                              new AstShiftR{flp, getFourstateExpressionXZ(shiftrp->lhsp(), false),
-                                            getFourstateExpressionValue(shiftrp->rhsp())}};
+            m_resultp = newFourstateShift<AstShiftR>(shiftrp, true);
         }
         void visit(AstShiftRS* const shiftrsp) override {
-            FileLine* const flp = shiftrsp->fileline();
-            // Evaluate the value even if only the X/Z half is required.
-            AstNodeExpr* const valuep = getShiftOperandValue(shiftrsp->lhsp());
-            pushDeletep(valuep);
-            AstNodeExpr* const lhsp = getFourstateExpressionXZ(shiftrsp->lhsp(), false);
-            AstNodeExpr* const rhsp = getShiftOperandValue(shiftrsp->rhsp());
-            AstShiftRS* const shiftp = new AstShiftRS{flp, lhsp, rhsp};
-            shiftp->dtypep(getTwoStateDtype(shiftrsp->dtypep()));
-            m_resultp = new AstCond{
-                flp, new AstRedOr{flp, getFourstateExpressionXZ(shiftrsp->rhsp())},
-                createZeroOrOnesp(shiftrsp, true), shiftp};
+            m_resultp = newFourstateShift<AstShiftRS>(shiftrsp, true);
         }
         void visit(AstExtend* const extendp) override {
             FileLine* const flp = extendp->fileline();
@@ -3153,20 +3118,24 @@ class FourstateVisitor final : public VNVisitor {
 
     void visit(AstIsUnknown* const nodep) override {
         FileLine* const flp = nodep->fileline();
+        AstNodeExpr* newp;
         if (isFourstate(nodep->lhsp())) {
             if (nodep->lhsp()->isPure()) {
-                nodep->replaceWith(new AstRedOr{flp, getFourstateExpressionXZ(nodep->lhsp())});
+                newp = new AstRedOr{flp, getFourstateExpressionXZ(nodep->lhsp())};
             } else {
-                nodep->replaceWith(new AstExprStmt{
+                newp = new AstExprStmt{
                     flp, new AstStmtExpr{flp, getFourstateExpressionValue(nodep->lhsp())},
-                    new AstRedOr{flp, getFourstateExpressionXZ(nodep->lhsp())}});
+                    new AstRedOr{flp, getFourstateExpressionXZ(nodep->lhsp())}};
             }
         } else if (nodep->lhsp()->isPure()) {
-            nodep->replaceWith(createZeroOrOnesp(nodep));
+            newp = createZeroOrOnesp(nodep);
         } else {
             AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
-            nodep->replaceWith(new AstRedOr{flp, new AstAnd{flp, lhsp, createZeroOrOnesp(lhsp)}});
+            newp = new AstRedOr{flp, new AstAnd{flp, lhsp, createZeroOrOnesp(lhsp)}};
         }
+        FourstateLogicTypePropagator{newp};
+        nodep->replaceWith(newp);
+        pushDeletep(nodep);
     }
 
     void visit(AstCountOnes* const nodep) override {
