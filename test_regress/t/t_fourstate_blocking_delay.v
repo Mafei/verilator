@@ -67,6 +67,9 @@ module blocking_width #(
 
   // The first statement is timed: later getter temporaries need an outer task anchor.
   task automatic drive_fork;
+`ifdef BLOCKING_NOINLINE
+    // verilator no_inline_task
+`endif
     fork_result = #(fork_delay_once(fork_delay)) fork_snapshot(fork_source);
     fork_follow = fork_delay[0] ? (pattern(0) ^ fork_result) : (pattern(1) ^ fork_result);
     `checkh(fork_follow, pattern(0) ^ fork_result)

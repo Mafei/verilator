@@ -24,6 +24,9 @@ test.compile(
     ]
 )
 test.execute(logfile=test.run_log_filename, iv_run_flags=['-N'])
+if test.vlt_all:
+    test.file_grep(test.stats, r'Fourstate, Blocking delay snapshots\s+(\d+)', 12)
+    test.file_grep(test.stats, r'Optimizations, Task C-scope locals\s+(\d+)', 48)
 test.file_grep(test.run_log_filename, r'Blocking delay checks: (\d+)', 306)
 expected = {}
 widths = {}
@@ -106,4 +109,26 @@ for width in (1, 7, 17, 33, 65, 129):
             append(expected, prefix + name, timestamp, f'{timestamp:064b}')
 check_trace(test, expected, widths)
 test.file_grep_not(test.run_log_filename, r'%Error|ERROR:|WARNING:')
+if test.vlt_all:
+    # Keep the existing non-inline external-reference boundary; no IMPURE waiver.
+    test.compile(
+        verilator_flags2=[
+            '--fourstate',
+            '--timing',
+            '--sched-zero-delay',
+            '-DBLOCKING_NOINLINE',
+            '--Mdir',
+            test.obj_dir + '/noninline',
+            '-Wno-FUTURE',
+            '-Wno-IEEEMAYDEPRECATE',
+            '-Wno-LITENDIAN',
+        ],
+        fails=True,
+        expect_filename=test.golden_filename.removesuffix('.out') + '_noninline.out',
+    )
+    test.file_grep_not(test.obj_dir + '/vlt_compile.log', r'Internal Error|syntax error')
+    test.file_grep(
+        test.obj_dir + '/vlt_compile.log', r'%Error-IMPURE: .*Unsupported: External variable'
+    )
+    test.file_grep(test.obj_dir + '/vlt_compile.log', r'%Error: Exiting due to (\d+) error\(s\)', 6)
 test.passes()
