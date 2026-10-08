@@ -10,22 +10,24 @@
 // verilog_format: on
 
 module t;
+  typedef logic [31:0] index_t;
   logic [6:0] memory [3:1];
-  int unsigned index;
+  index_t index;
   logic [6:0] data;
   logic [6:0] zero_memory [0:3];
-  int unsigned zero_index;
+  index_t zero_index;
   logic [6:0] ascending [1:3];
   logic [6:0] negative [-2:0];
-  int signed signed_index;
+  logic signed [31:0] signed_index;
   typedef logic [6:0] word_t;
   word_t matrix [1:2][3:1];
-  int unsigned row_index;
-  int unsigned column_index;
+  index_t row_index;
+  index_t column_index;
+  int unsigned two_state_index;
   bit [31:0] index_calls = 0;
   bit [31:0] rhs_calls = 0;
 
-  function automatic int unsigned selected_index();
+  function automatic index_t selected_index();
     index_calls = index_calls + 1;
     return zero_index;
   endfunction
@@ -81,11 +83,33 @@ module t;
     `checkh(rhs_calls, 32'd1);
     for (int i = 0; i < 4; i++) `checkh(zero_memory[i], 7'(i + 10));
 
-    signed_index = -4'sd1;
+    // Integer atom types are two-state; converting X/Z to int yields zero.
+    two_state_index = int'(32'bxz);
+    `checkh(zero_memory[two_state_index], 7'd10);
+
+    // Snapshots for successive statements and functions must remain independent.
+    zero_index = 'x;
+    index_calls = 0;
+    `checkh($isunknown(zero_memory[selected_index()]), 1'b1);
+    `checkh(index_calls, 32'd1);
+    zero_index = 32'd2;
+    index_calls = 0;
+    `checkh($isunknown(zero_memory[selected_index()]), 1'b0);
+    `checkh(index_calls, 32'd1);
+
+    zero_index = 'z;
+    index_calls = 0;
+    rhs_calls = 0;
+    zero_memory[selected_index()] = rhs_value();
+    `checkh(index_calls, 32'd1);
+    `checkh(rhs_calls, 32'd1);
+    for (int i = 0; i < 4; i++) `checkh(zero_memory[i], 7'(i + 10));
+
+    signed_index = -32'sd1;
     `checkh(negative[signed_index], 7'h22);
-    signed_index = 4'sd2;
+    signed_index = 32'sd2;
     `checkh(ascending[signed_index], 7'h22);
-    signed_index = -4'sd3;
+    signed_index = -32'sd3;
     `checkh(negative[signed_index], 7'bxxxxxxx);
     negative[signed_index] = 7'h7f;
     signed_index = 'x;
@@ -99,13 +123,13 @@ module t;
     `checkh(ascending[2], 7'h22);
     `checkh(ascending[3], 7'h33);
 
-    row_index = 2'd1;
-    column_index = 3'd2;
+    row_index = 32'd1;
+    column_index = 32'd2;
     `checkh(matrix[row_index][column_index], 7'd12);
     row_index = 'x;
     `checkh(matrix[row_index][column_index], 7'bxxxxxxx);
     matrix[row_index][column_index] = 7'h7f;
-    row_index = 2'd1;
+    row_index = 32'd1;
     column_index = 'z;
     `checkh(matrix[row_index][column_index], 7'bxxxxxxx);
     matrix[row_index][column_index] <= 7'h7f;
@@ -122,13 +146,13 @@ module t;
     #1;
     for (int i = 0; i < 4; i++) `checkh(zero_memory[i], 7'(i + 10));
 
-    index = 3'd2;
+    index = 32'd2;
     memory[index] <= 7'b10xz010;
-    index = 3'd1;
+    index = 32'd1;
     #1;
     `checkh(memory[2], 7'b10xz010);
     `checkh(memory[1], 7'h11);
-    index = 3'd0;
+    index = 32'd0;
     data = memory[index];
     `checkh(data, 7'bxxxxxxx);
     memory[index] = 7'h7f;

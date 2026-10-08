@@ -845,12 +845,14 @@ class FourstateVisitor final : public VNVisitor {
     class StmtHelper final {
         const VRestorerTrivial<AstNode*> m_currentStmtRestorer;
         const VRestorerTrivial<AstNode*> m_lastStmtRestorer;
+        const VRestorerClear<decltype(m_arrayIndexCaptures)> m_arrayIndexRestorer;
         const TmpVarsReleaser m_tmpVarsReleaser;
 
     public:
         StmtHelper(FourstateVisitor& visitor, AstNode* const stmtp)
             : m_currentStmtRestorer{visitor.m_currentStmtp}
             , m_lastStmtRestorer{visitor.m_lastCalculationStatp}
+            , m_arrayIndexRestorer{visitor.m_arrayIndexCaptures}
             , m_tmpVarsReleaser{visitor, stmtp} {
             visitor.m_lastCalculationStatp = visitor.m_currentStmtp = stmtp;
         }
