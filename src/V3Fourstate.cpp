@@ -2516,6 +2516,17 @@ class FourstateVisitor final : public VNVisitor {
         void visit(AstMul* const mulp) override { getFourstateExpressionArithmeticValue(mulp); }
         void visit(AstMulS* const mulsp) override { getFourstateExpressionArithmeticValue(mulsp); }
 
+        void visit(AstNegate* const negatep) override {
+            FileLine* const flp = negatep->fileline();
+            AstNodeExpr* const valuep = m_fourstateVisitor.getOnceExpressionValue(negatep->lhsp());
+            AstNegate* const resultp = new AstNegate{flp, valuep};
+            resultp->dtypep(getTwoStateDtype(negatep->dtypep()));
+            // Any unknown operand bit makes the entire arithmetic result X.
+            m_resultp
+                = new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(negatep->lhsp())},
+                              createZeroOrOnesp(negatep, true), resultp};
+        }
+
         template <typename Operator_T>
         void getFourstateExpressionDivValue(Operator_T* const biop) {
             // |(a.xz | b.xz) | ~|b.value ? '1 : (a op b)
@@ -2823,6 +2834,15 @@ class FourstateVisitor final : public VNVisitor {
         void visit(AstSub* const subp) override { getFourstateExpressionArithmeticXZ(subp); }
         void visit(AstMul* const mulp) override { getFourstateExpressionArithmeticXZ(mulp); }
         void visit(AstMulS* const mulsp) override { getFourstateExpressionArithmeticXZ(mulsp); }
+
+        void visit(AstNegate* const negatep) override {
+            // Preserve operand side effects even if only the X/Z half is needed.
+            pushDeletep(m_fourstateVisitor.getOnceExpressionValue(negatep->lhsp()));
+            FileLine* const flp = negatep->fileline();
+            m_resultp
+                = new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(negatep->lhsp())},
+                              createZeroOrOnesp(negatep, true), createZeroOrOnesp(negatep)};
+        }
 
         void getFourstateExpressionDivValue(AstNodeBiop* const biop) {
             // |(a.xz | b.xz) | ~|b.value ? '1 : '0
