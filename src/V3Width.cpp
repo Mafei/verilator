@@ -1288,7 +1288,16 @@ class WidthVisitor final : public VNVisitor {
                 // we want the select to be truncated to fit within the
                 // maximum select range, e.g. turn Xs outside of the select
                 // into something fast which pulls from within the array.
-                widthCheckSized(nodep, "Extract Range", nodep->lsbp(), selwidthDTypep, EXTEND_EXP,
+                // Preserve the full signed domain until V3Unknown checks bounds.
+                // Otherwise valid high indices become negative, or large positive
+                // and negative indices alias an in-range low-bit index. Narrow
+                // signed indices still need room for the unsigned upper bound.
+                const int indexWidth = nodep->lsbp()->isSigned()
+                                           ? std::max(nodep->lsbp()->width(), selwidth + 1)
+                                           : selwidth;
+                AstNodeDType* const indexDTypep = nodep->findLogicDType(
+                    indexWidth, indexWidth, nodep->lsbp()->dtypep()->numeric());
+                widthCheckSized(nodep, "Extract Range", nodep->lsbp(), indexDTypep, EXTEND_EXP,
                                 false /*NOWARN*/);
             }
             // UINFOTREE(9, nodep, "", "seldone");
@@ -1373,8 +1382,15 @@ class WidthVisitor final : public VNVisitor {
                 }
                 // Four-state bounds checks need every address bit, including high X/Z bits.
                 if (!v3Global.opt.fourstate()) {
-                    widthCheckSized(nodep, "Extract Range", nodep->bitp(), selwidthDTypep,
-                                    EXTEND_EXP, false /*NOWARN*/);
+                    // Keep signed indices intact for V3Unknown's bounds check, and
+                    // keep the upper bound representable for narrow signed types.
+                    const int indexWidth = nodep->bitp()->isSigned()
+                                               ? std::max(nodep->bitp()->width(), selwidth + 1)
+                                               : selwidth;
+                    AstNodeDType* const indexDTypep = nodep->findLogicDType(
+                        indexWidth, indexWidth, nodep->bitp()->dtypep()->numeric());
+                    widthCheckSized(nodep, "Extract Range", nodep->bitp(), indexDTypep, EXTEND_EXP,
+                                    false /*NOWARN*/);
                 }
             }
         }

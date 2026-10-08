@@ -155,6 +155,19 @@ class UnknownVisitor final : public VNVisitor {
         return exprp->cloneTreePure(false);
     }
 
+    static AstNodeExpr* indexForSelect(AstNodeExpr* const indexp) {
+        // The complete index is checked separately before this access. Model
+        // selections only need 32 address bits after that check, including when
+        // the source index is a wide signed expression. Four-state lowering
+        // still needs every index bit and its X/Z mask.
+        if (!v3Global.opt.fourstate() && indexp->width() > VL_IDATASIZE) {
+            AstSel* const selp = new AstSel{indexp->fileline(), indexp, 0, VL_IDATASIZE};
+            selp->dtypeSetBitSized(VL_IDATASIZE, VSigning::UNSIGNED);
+            return selp;
+        }
+        return indexp;
+    }
+
     // VISITORS
     void visit(AstNodeModule* nodep) override {
         UINFO(4, " MOD   " << nodep);
@@ -409,10 +422,10 @@ class UnknownVisitor final : public VNVisitor {
                 && V3Unknown::isStaticlyGte(maxmsbConstp->num(), lsbp)) {
                 // We don't need to add a conditional; we know the existing expression is ok
                 VL_DO_DANGLING(maxmsbConstp->deleteTree(), maxmsbConstp);
-                nodep->lsbp(lsbp);
+                nodep->lsbp(indexForSelect(lsbp));
                 return;
             }
-            nodep->lsbp(newExprStmtOrClone(lsbp));
+            nodep->lsbp(indexForSelect(newExprStmtOrClone(lsbp)));
             if (lsbp->width() < compareWidth) {
                 lsbp = lsbp->isSigned()
                            ? static_cast<AstNodeExpr*>(
@@ -496,10 +509,10 @@ class UnknownVisitor final : public VNVisitor {
             if (V3Unknown::isStaticlyGte(declElementsp->num(), bitp)) {
                 // We don't need to add a conditional; we know the existing expression is ok
                 VL_DO_DANGLING(declElementsp->deleteTree(), declElementsp);
-                nodep->bitp(bitp);
+                nodep->bitp(indexForSelect(bitp));
                 return;
             }
-            nodep->bitp(newExprStmtOrClone(bitp));
+            nodep->bitp(indexForSelect(newExprStmtOrClone(bitp)));
             AstNodeExpr* condp = new AstGte{nodep->fileline(), declElementsp, bitp};
             // Note below has null backp(); the Edit function knows how to deal with that.
             const AstNodeDType* const nodeDtp = nodep->dtypep()->skipRefp();
