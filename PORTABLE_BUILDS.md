@@ -142,6 +142,34 @@ without NBA queues and checks `$time` and fractional `$realtime` event bodies.
 The original readmem checks and failure-propagation gate remain part of the
 same selection.
 
+The `fourstate-pull-20261008` candidate preserves all 125 selected checks and
+adds an independent `pull` group with a positive simulation and a compile-negative
+driver, for **127 explicitly selected checks**. The positive driver checks 4,032
+values, event counts, snapshots and time observations, plus 116 exact VCD
+histories. It exercises single whole continuous drivers of local `tri0` and
+`tri1` packed vectors at 1/7/33/65/95/129 bits, ascending and nonzero ranges,
+mixed X/Z data, repeated values, release to Z and subsequent driving. Separate
+65-bit RHS signals in the same module check that different assignments retain
+independent captures. The compile-negative driver checks thirteen unsupported
+driver contexts against native compiler-generated diagnostic goldens.
+
+The bounded pull fix snapshots both value and X/Z halves before writing either
+target half. Only released Z bits receive the implicit pull value; active X
+bits remain X. This applies to one default-strength, untimed, whole continuous
+driver of a local four-state packed integral net. Hierarchical RHS reads and
+input-pin consumers are allowed. Multiple drivers, partial or hierarchical
+writes, output/inout/ref pin drivers, aliases, force/release or external write
+access, net or assignment delays, explicit driver strengths, and impure
+continuous RHS expressions remain outside
+this implementation and receive an unsupported diagnostic. Existing undriven
+pull defaults and optimized known constant drivers retain their separate paths.
+The fallback is never applied separately to multiple driver contributions.
+An independently checked function that updates a nonlocal call counter causes
+an inherited settle loop even when driving an ordinary wire. This candidate
+rejects impure pull-net RHS expressions instead of claiming that broader
+scheduling behavior is fixed. The selected tests do not certify arbitrary
+function calls or general strength, switch and bidirectional-net semantics.
+
 The delayed NBA loss also reproduces with an actual optimized build of the
 unmodified official `4a2989705657d506d50dee5772bc17b3f689d9d5` baseline.
 It is not introduced by the four-state integration. The bounded fix captures
@@ -201,7 +229,7 @@ being rewritten into logical operations that would turn it into X.
 | Constant case items | `t_fourstate_case_const` checks ordinary case X/Z equality, dynamic reverse one-hot items and constant-item `casex`/`casez` matching, including 7/33/65/95-bit items, first-match order, nested cases and exact selector call counts. | Dynamic wildcard items remain unsupported. |
 | Numeric conversion and two-state queues | `t_fourstate_real_conv` checks signed known integers, positive unknown-bit coercion, real rounding, `$rtoi`, mixed formatting and call counts. `t_fourstate_queue2` runs integral, bit, class and process queues plus a blocking semaphore schedule. | Four-state queue elements remain unsupported. These tests do not certify signed negative integers containing X/Z. |
 | Integer timing expressions | `t_fourstate_delay_int` runs eight groups with known, mixed-X/Z and all-X/Z integer delays, standalone procedural delays and NBA capture. Its four-state functions execute exactly 16 times and two-state return functions exactly eight times. | Any unknown delay bit makes the delay zero. Zero delays require `--sched-zero-delay`. Blocking intra-assignment delays to split four-state variables and impure net delays are explicitly rejected. Transport/inertial overlap and general SDF semantics are not certified. |
-| Implicit pull defaults and formatting | `t_fourstate_pull_default` runs undriven `tri0`/`tri1` and hierarchy checks plus known single drivers. Expanded hexadecimal formatting checks wide argument pointers and storage-padding exclusion for hex and decimal at 7/33/65/95 bits. | Returning a driven net to Z still fails the reference comparison. Explicit pull primitives, contention and strengths remain unsupported. Reference simulators differ in letter case for partial all-X/Z hexadecimal digits; those added checks accept both cases. |
+| Implicit pull defaults and formatting | `t_fourstate_pull_default` retains undriven and known single-driver checks. `t_fourstate_pull_release` checks single-driver Z fallback, preserved X bits, independent wide captures, events and exact waveforms. Expanded hexadecimal formatting checks wide argument pointers and storage-padding exclusion for hex and decimal at 7/33/65/95 bits. | Driven-Z fallback is bounded to the local whole single-driver scope described above. Explicit pull primitives, contention and strengths remain unsupported. Reference simulators differ in letter case for partial all-X/Z hexadecimal digits; those added checks accept both cases. |
 
 Compiler success alone is not accepted as capability evidence. These tests
 simulate and check values; the selected VCD/FST regressions additionally compare
