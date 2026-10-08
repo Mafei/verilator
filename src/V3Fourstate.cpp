@@ -933,12 +933,12 @@ class FourstateVisitor final : public VNVisitor {
         if (AstNodeFTask* const ftaskp = VN_CAST(varp->backp(), NodeFTask)) {
             if (ftaskp->fvarp() == varp) {
                 AstVar* const portEndp = getFTaskPortHelper(ftaskp).lastp();
-                AstVar* const returnValuep
-                    = new AstVar{varp->fileline(), VVarType::PORT, varp->name() + FOURSTATE_VALUE_SUFFIX,
-                                 getTwoStateDtype(varp->dtypep())};
-                AstVar* const returnXzp
-                    = new AstVar{varp->fileline(), VVarType::PORT, varp->name() + FOURSTATE_XZ_SUFFIX,
-                                 getTwoStateDtype(varp->dtypep())};
+                AstVar* const returnValuep = new AstVar{varp->fileline(), VVarType::PORT,
+                                                        varp->name() + FOURSTATE_VALUE_SUFFIX,
+                                                        getTwoStateDtype(varp->dtypep())};
+                AstVar* const returnXzp = new AstVar{varp->fileline(), VVarType::PORT,
+                                                     varp->name() + FOURSTATE_XZ_SUFFIX,
+                                                     getTwoStateDtype(varp->dtypep())};
                 returnValuep->direction(VDirection::OUTPUT);
                 returnXzp->direction(VDirection::OUTPUT);
                 returnValuep->funcLocal(true);
@@ -1129,20 +1129,19 @@ class FourstateVisitor final : public VNVisitor {
         // V3WidthSel already normalized the declaration's low bound, including ascending ranges.
         const AstUnpackArrayDType* const dtypep
             = VN_AS(selp->fromp()->dtypep()->skipRefp(), UnpackArrayDType);
-        AstNodeExpr* const badp = new AstOr{
-            flp, new AstRedOr{flp, getFourstateExpressionXZ(bitp)},
-            new AstGte{flp, new AstVarRef{flp, valueVarp, VAccess::READ},
-                       new AstConst{flp, AstConst::WidthedValue{}, width,
-                                    static_cast<uint32_t>(dtypep->elementsConst())}}};
+        AstNodeExpr* const badp
+            = new AstOr{flp, new AstRedOr{flp, getFourstateExpressionXZ(bitp)},
+                        new AstGte{flp, new AstVarRef{flp, valueVarp, VAccess::READ},
+                                   new AstConst{flp, AstConst::WidthedValue{}, width,
+                                                static_cast<uint32_t>(dtypep->elementsConst())}}};
         AstVar* const badVarp = createTmp(badp);
-        addPrecalculation(
-            new AstAssign{flp, new AstVarRef{flp, badVarp, VAccess::WRITE}, badp});
+        addPrecalculation(new AstAssign{flp, new AstVarRef{flp, badVarp, VAccess::WRITE}, badp});
         return m_arrayIndexCaptures.emplace(selp, ArrayIndexCapture{valueVarp, badVarp})
             .first->second;
     }
 
     static AstNodeExpr* newArrayIndexValue(AstArraySel* const selp,
-                                         const ArrayIndexCapture& capture) {
+                                           const ArrayIndexCapture& capture) {
         FileLine* const flp = selp->fileline();
         AstNodeExpr* resultp = new AstVarRef{flp, capture.valuep, VAccess::READ};
         // Bounds use the full snapshot; an in-range array address always fits in 64 bits.
@@ -1161,8 +1160,8 @@ class FourstateVisitor final : public VNVisitor {
              currentp = VN_CAST(currentp->fromp(), ArraySel)) {
             if (!isFixedIntegralArraySel(currentp)) break;
             const ArrayIndexCapture& capture = getArrayIndexCapture(currentp);
-            AstNodeExpr* const badp = new AstVarRef{currentp->fileline(), capture.badp,
-                                                  VAccess::READ};
+            AstNodeExpr* const badp
+                = new AstVarRef{currentp->fileline(), capture.badp, VAccess::READ};
             resultp = resultp ? new AstOr{selp->fileline(), resultp, badp} : badp;
         }
         return resultp;
@@ -1174,12 +1173,12 @@ class FourstateVisitor final : public VNVisitor {
         if (!isFixedIntegralArraySel(selp)) {
             // Whole subarrays and other element types retain their existing lowering.
             selp->bitp()->purityCheck();
-            AstArraySel* const resultp = new AstArraySel{
-                flp,
-                xzPart ? getFourstateExpressionXZ(selp->fromp())
-                       : getFourstateExpressionValue(selp->fromp()),
-                isFourstate(selp->bitp()) ? getTwoStateCast(selp->bitp())
-                                        : selp->bitp()->cloneTree(false)};
+            AstArraySel* const resultp
+                = new AstArraySel{flp,
+                                  xzPart ? getFourstateExpressionXZ(selp->fromp())
+                                         : getFourstateExpressionValue(selp->fromp()),
+                                  isFourstate(selp->bitp()) ? getTwoStateCast(selp->bitp())
+                                                            : selp->bitp()->cloneTree(false)};
             resultp->dtypep(getTwoStateDtype(selp->dtypep()));
             setSelpHandled(resultp);
             return resultp;
@@ -1213,8 +1212,8 @@ class FourstateVisitor final : public VNVisitor {
         resultp->dtypep(getTwoStateDtype(selp->dtypep()));
         setSelpHandled(resultp);
         if (lvalue || !leaf) return resultp;
-        return new AstCond{flp, getArrayReadBad(selp),
-                           createZeroOrOnesp(selp, isFourstate(selp)), resultp};
+        return new AstCond{flp, getArrayReadBad(selp), createZeroOrOnesp(selp, isFourstate(selp)),
+                           resultp};
     }
 
     AstNodeExpr* getFourstateExpressionSelHandler(AstSel* const selp,
@@ -1802,8 +1801,9 @@ class FourstateVisitor final : public VNVisitor {
             FileLine* const flp = nodep->fileline();
             AstCLog2* const clog2p
                 = new AstCLog2{flp, getFourstateExpressionValue(nodep->lhsp(), true)};
-            m_resultp = new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(nodep->lhsp())},
-                                   createZeroOrOnesp(nodep, true), clog2p};
+            m_resultp
+                = new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(nodep->lhsp())},
+                              createZeroOrOnesp(nodep, true), clog2p};
         }
 
         template <typename ComparisonOp_T>
@@ -1920,14 +1920,13 @@ class FourstateVisitor final : public VNVisitor {
         }
 
         void visit(AstArraySel* const arraySelp) override {
-            m_resultp
-                = m_fourstateVisitor.getFourstateExpressionArraySelHandler(arraySelp, false);
+            m_resultp = m_fourstateVisitor.getFourstateExpressionArraySelHandler(arraySelp, false);
         }
 
         void visit(AstSliceSel* const sliceSelp) override {
             m_resultp = new AstSliceSel{sliceSelp->fileline(),
-                                       getFourstateExpressionValue(sliceSelp->fromp()),
-                                       sliceSelp->declRange()};
+                                        getFourstateExpressionValue(sliceSelp->fromp()),
+                                        sliceSelp->declRange()};
             m_resultp->dtypep(getTwoStateDtype(sliceSelp->dtypep()));
             setSelpHandled(m_resultp);
         }
@@ -2029,15 +2028,15 @@ class FourstateVisitor final : public VNVisitor {
 
         void visit(AstStreamL* const streamlp) override {
             m_resultp = new AstStreamL{streamlp->fileline(),
-                                      getFourstateExpressionValue(streamlp->lhsp(), false),
-                                      streamlp->rhsp()->cloneTree(false)};
+                                       getFourstateExpressionValue(streamlp->lhsp(), false),
+                                       streamlp->rhsp()->cloneTree(false)};
             m_resultp->dtypep(getTwoStateDtype(streamlp->dtypep()));
         }
 
         void visit(AstStreamR* const streamrp) override {
             m_resultp = new AstStreamR{streamrp->fileline(),
-                                      getFourstateExpressionValue(streamrp->lhsp(), false),
-                                      streamrp->rhsp()->cloneTree(false)};
+                                       getFourstateExpressionValue(streamrp->lhsp(), false),
+                                       streamrp->rhsp()->cloneTree(false)};
             m_resultp->dtypep(getTwoStateDtype(streamrp->dtypep()));
         }
 
@@ -2060,7 +2059,6 @@ class FourstateVisitor final : public VNVisitor {
         //         structSelp->fromp()->cloneTree(false),
         //                            structSelp->name() + FOURSTATE_VALUE_SUFFIX};
         // }
-
 
         void visit(AstNodeVarRef* const varRefp) override {
             noTmp();
@@ -2330,15 +2328,15 @@ class FourstateVisitor final : public VNVisitor {
 
         void visit(AstStreamL* const streamlp) override {
             m_resultp = new AstStreamL{streamlp->fileline(),
-                                      getFourstateExpressionXZ(streamlp->lhsp(), false),
-                                      streamlp->rhsp()->cloneTree(false)};
+                                       getFourstateExpressionXZ(streamlp->lhsp(), false),
+                                       streamlp->rhsp()->cloneTree(false)};
             m_resultp->dtypep(getTwoStateDtype(streamlp->dtypep()));
         }
 
         void visit(AstStreamR* const streamrp) override {
             m_resultp = new AstStreamR{streamrp->fileline(),
-                                      getFourstateExpressionXZ(streamrp->lhsp(), false),
-                                      streamrp->rhsp()->cloneTree(false)};
+                                       getFourstateExpressionXZ(streamrp->lhsp(), false),
+                                       streamrp->rhsp()->cloneTree(false)};
             m_resultp->dtypep(getTwoStateDtype(streamrp->dtypep()));
         }
 
@@ -2361,7 +2359,6 @@ class FourstateVisitor final : public VNVisitor {
         //         structSelp->fromp()->cloneTree(false),
         //                            structSelp->name() + FOURSTATE_XZ_SUFFIX};
         // }
-
 
         void visit(AstNodeFTaskRef* const funcp) override {
             fourstateExpressionFuncRefHandler(funcp);
@@ -2394,8 +2391,8 @@ class FourstateVisitor final : public VNVisitor {
 
         void visit(AstSliceSel* const sliceSelp) override {
             m_resultp = new AstSliceSel{sliceSelp->fileline(),
-                                       getFourstateExpressionXZ(sliceSelp->fromp()),
-                                       sliceSelp->declRange()};
+                                        getFourstateExpressionXZ(sliceSelp->fromp()),
+                                        sliceSelp->declRange()};
             m_resultp->dtypep(getTwoStateDtype(sliceSelp->dtypep()));
             setSelpHandled(m_resultp);
         }
@@ -2452,8 +2449,9 @@ class FourstateVisitor final : public VNVisitor {
 
         void visit(AstCLog2* const nodep) override {
             FileLine* const flp = nodep->fileline();
-            m_resultp = new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(nodep->lhsp())},
-                                   createZeroOrOnesp(nodep, true), createZeroOrOnesp(nodep)};
+            m_resultp
+                = new AstCond{flp, new AstRedOr{flp, getFourstateExpressionXZ(nodep->lhsp())},
+                              createZeroOrOnesp(nodep, true), createZeroOrOnesp(nodep)};
         }
 
         void visit(AstExprStmt* exprStmtp) override {
@@ -2547,21 +2545,34 @@ class FourstateVisitor final : public VNVisitor {
         return result;
     }
 
-    AstNodeExpr* getCoverToggleChangeXZ(AstNodeExpr* const exprp) {
-        if (isFourstate(exprp)) return getFourstateExpressionXZ(exprp);
-        if (AstNodeVarRef* const varRefp = VN_CAST(exprp, NodeVarRef)) {
+    AstNodeExpr* getCoverTogglePart(AstNodeExpr* const exprp, const bool xzPart) {
+        // Toggle indices are generated in bounds. Keep this declarative coverage tree free of
+        // procedural index snapshots, which cannot be inserted beside an AstCoverToggle.
+        if (VN_IS(exprp, Const)) {
+            if (isFourstate(exprp)) {
+                return xzPart ? getFourstateExpressionXZ(exprp)
+                              : getFourstateExpressionValue(exprp);
+            }
+            return xzPart ? createZeroOrOnesp(exprp) : exprp->cloneTree(false);
+        } else if (AstNodeVarRef* const varRefp = VN_CAST(exprp, NodeVarRef)) {
             if (needsSplitting(varRefp->varp()->dtypep())) splitVar(varRefp->varp());
             if (getValuePartVarp(varRefp->varp())) {
                 AstNodeVarRef* const newp = varRefp->cloneTree(false);
-                if (!newp->name().empty()) newp->name(newp->name() + FOURSTATE_XZ_SUFFIX);
-                newp->varp(getSplittedXZ(varRefp->varp()));
+                if (xzPart && !newp->name().empty()) {
+                    newp->name(newp->name() + FOURSTATE_XZ_SUFFIX);
+                }
+                newp->varp(xzPart ? getSplittedXZ(varRefp->varp())
+                                  : getSplittedValue(varRefp->varp()));
                 newp->dtypep(getTwoStateDtype(varRefp->varp()->dtypep()));
                 setFourstate(newp, false);
                 return newp;
             }
+            return xzPart ? createZeroOrOnesp(exprp) : exprp->cloneTree(false);
         } else if (AstArraySel* const arraySelp = VN_CAST(exprp, ArraySel)) {
+            UASSERT_OBJ(VN_IS(arraySelp->bitp(), Const), arraySelp,
+                        "Toggle coverage array index must be constant");
             AstArraySel* const newp = new AstArraySel{
-                arraySelp->fileline(), getCoverToggleChangeXZ(arraySelp->fromp()),
+                arraySelp->fileline(), getCoverTogglePart(arraySelp->fromp(), xzPart),
                 isFourstate(arraySelp->bitp()) ? getTwoStateCast(arraySelp->bitp())
                                                : arraySelp->bitp()->cloneTree(false)};
             newp->dtypep(getTwoStateDtype(arraySelp->dtypep()));
@@ -2569,15 +2580,17 @@ class FourstateVisitor final : public VNVisitor {
             setSelpHandled(newp);
             return newp;
         } else if (AstSel* const selp = VN_CAST(exprp, Sel)) {
+            UASSERT_OBJ(VN_IS(selp->lsbp(), Const), selp,
+                        "Toggle coverage packed index must be constant");
             AstSel* const newp = selp->cloneTree(false);
-            newp->fromp(getCoverToggleChangeXZ(selp->fromp()));
+            newp->fromp(getCoverTogglePart(selp->fromp(), xzPart));
             newp->lsbp(selp->lsbp()->cloneTree(false));
             newp->dtypep(getTwoStateDtype(selp->dtypep()));
             setFourstate(newp, false);
             setSelpHandled(newp);
             return newp;
         }
-        exprp->v3fatalSrc("Unable to build X/Z toggle coverage lvalue");
+        exprp->v3fatalSrc("Unable to build toggle coverage selection");
         return nullptr;
     }
 
@@ -2666,10 +2679,10 @@ class FourstateVisitor final : public VNVisitor {
             // coverpoint bucket.
             AstCoverToggle* const xzp = nodep->cloneTree(false);
             xzp->incp(nodep->incp()->cloneTree(false));
-            xzp->origp(origFourstate ? getFourstateExpressionXZ(origp) : createZeroOrOnesp(origp));
-            xzp->changep(getCoverToggleChangeXZ(changep));
-            nodep->origp(getFourstateExpressionValue(origp));
-            nodep->changep(getFourstateExpressionValue(changep));
+            xzp->origp(origFourstate ? getCoverTogglePart(origp, true) : createZeroOrOnesp(origp));
+            xzp->changep(getCoverTogglePart(changep, true));
+            nodep->origp(getCoverTogglePart(origp, false));
+            nodep->changep(getCoverTogglePart(changep, false));
             nodep->addNextHere(xzp);
             origp->deleteTree();
             changep->deleteTree();

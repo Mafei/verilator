@@ -11,6 +11,8 @@ import vltest_bootstrap
 
 test.scenarios('vlt_all')
 
-test.compile(verilator_flags2=['--fourstate', '-Wno-FUTURE', '--coverage'])
+test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE', '--coverage'])
+
+test.execute()
 
 test.passes()
