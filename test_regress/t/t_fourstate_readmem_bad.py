@@ -38,12 +38,11 @@ errors = {
     5: '$readmem invalid address digit (X/Z and signed text are not allowed)',
 }
 
-test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE'])
 for number in range(11):
+    test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE', f'-DTEST_CASE={number}'])
     log = f'{test.obj_dir}/case_{number}.log'
     golden = test.golden_filename.removesuffix('.out') + f'_{number}.out'
-    test.execute(all_run_flags=[f'+CASE={number}'],
-                 logfile=log,
+    test.execute(logfile=log,
                  fails=number < 6,
                  check_finished=number >= 6,
                  expect_filename=golden)

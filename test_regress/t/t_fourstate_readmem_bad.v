@@ -19,7 +19,7 @@ module t;
   localparam bit [511:0] KNOWN_FILENAME = "t/t_fourstate_readmem_h.mem";
   localparam logic [511:0] UNKNOWN_FILENAME = 512'hz0000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00742f74_5f666f75_72737461_74655f72_6561646d_656d5f68_2e6d656d;
   bit [31:0] checks = 0;
-  bit [31:0] which = 0;
+  localparam bit [31:0] WHICH = `TEST_CASE;
 
   function automatic logic [7:0] sentinel(input int index);
     return (index % 2) != 0 ? 8'hz6 : 8'h5x;
@@ -48,9 +48,8 @@ module t;
   endtask
 
   initial begin
-    if (!$value$plusargs("CASE=%d", which)) $fatal(1, "Missing CASE selection");
     reset_memory();
-    case (which)
+    case (WHICH)
       0: $readmemb({`STRINGIFY(`TEST_OBJ_DIR), "/bad_0.mem"}, mem, 1, 4);
       1: $readmemh({`STRINGIFY(`TEST_OBJ_DIR), "/bad_1.mem"}, mem, 1, 4);
       2: $readmemh({`STRINGIFY(`TEST_OBJ_DIR), "/bad_2.mem"}, mem, 1, 4);
@@ -119,7 +118,7 @@ module t;
       end
       default: $fatal(1, "Bad CASE selection");
     endcase
-    if (which < 6) $fatal(1, "Malformed readmem input unexpectedly returned");
+    if (WHICH < 6) $fatal(1, "Malformed readmem input unexpectedly returned");
     $display("Readmem diagnostic checks: %0d", checks);
     $write("*-* All Finished *-*\n");
     $finish;
