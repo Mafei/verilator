@@ -11,10 +11,8 @@ import vltest_bootstrap
 
 test.scenarios('simulator')
 
-test.top_filename = 't/t_mod_interface_array5.v'
+test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE'])
 
-test.lint(verilator_flags2=['--fourstate', '-Wno-FUTURE', '-Wno-LOGICCAST'],
-          fails=True,
-          expect_filename=test.golden_filename)
+test.execute()
 
 test.passes()
