@@ -17,6 +17,8 @@ module t;
   bit [63:0] expected_delay;
   bit [31:0] delay_calls = 0;
   bit [31:0] calls_before;
+  bit [31:0] two_state_calls = 0;
+  logic [14:0] nba_two_state;
   time started;
   logic [14:0] value;
   logic [14:0] scheduled_value;
@@ -30,6 +32,11 @@ module t;
   function integer selected_delay();
     delay_calls = delay_calls + 1;
     return idly;
+  endfunction
+
+  function int selected_two_state_delay();
+    two_state_calls++;
+    return int'(expected_delay);
   endfunction
 
   initial begin
@@ -92,14 +99,18 @@ module t;
 
       nba_direct = '0;
       nba_function = '0;
+      nba_two_state = '0;
       calls_before = delay_calls;
       started = $time;
       scheduled_value = value;
       nba_direct <= #(idly) value;
       nba_function <= #(selected_delay()) value;
+      nba_two_state <= #(selected_two_state_delay()) value;
+      `checkd(two_state_calls, cycle + 1);
       `checkd(delay_calls, calls_before + 1);
       `checkh(nba_direct, 15'b0);
       `checkh(nba_function, 15'b0);
+      `checkh(nba_two_state, 15'b0);
       // Both delays and RHS values must be captured at the scheduling statement.
       idly = 999;
       value = ~scheduled_value;
@@ -107,6 +118,7 @@ module t;
         #(expected_delay - 1);
         `checkh(nba_direct, 15'b0);
         `checkh(nba_function, 15'b0);
+        `checkh(nba_two_state, 15'b0);
         #2;
       end else begin
         #1;
@@ -114,9 +126,12 @@ module t;
       `checkd($time - started, expected_delay + 1);
       `checkh(nba_direct, scheduled_value);
       `checkh(nba_function, scheduled_value);
+      `checkh(nba_two_state, scheduled_value);
+      `checkd(two_state_calls, cycle + 1);
       `checkd(delay_calls, calls_before + 1);
     end
     `checkd(delay_calls, 32'd16);
+    `checkd(two_state_calls, 32'd8);
     $write("*-* All Finished *-*\n");
     $finish;
   end

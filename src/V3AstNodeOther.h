@@ -2736,6 +2736,10 @@ public:
     bool isFuncReturn() const { return m_funcReturn; }
     bool isPullup() const { return m_isPullup; }
     bool isPulldown() const { return m_isPulldown; }
+    void pullDirection(bool pullup) {
+        m_isPullup = pullup;
+        m_isPulldown = !pullup;
+    }
     bool attrScBv() const { return m_attrScBv; }
     bool attrScBigUint() const { return m_attrScBigUint; }
     bool attrFileDescr() const { return m_attrFileDescr; }

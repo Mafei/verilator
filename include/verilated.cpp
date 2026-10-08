@@ -1244,6 +1244,26 @@ void _vl_vsformat(std::string& output, const std::string& format, int argc,
                         ldxz = lwxzp[0];
                     }
                 }
+                if (formatAttr == VL_VFORMATATTR_SIGNED_FOURSTATE
+                    || formatAttr == VL_VFORMATATTR_UNSIGNED_FOURSTATE) {
+                    // Expressions such as replication may leave storage padding dirty.
+                    // Clean owned copies so every format observes only the declared bits.
+                    if (lbits <= VL_QUADSIZE) {
+                        ld &= VL_MASK_Q(lbits);
+                        ldxz &= VL_MASK_Q(lbits);
+                        VL_SET_WQ(WDataOutP::external(strwide.data()), ld);
+                        VL_SET_WQ(WDataOutP::external(strwidexz.data()), ldxz);
+                    } else if (lbits % VL_EDATASIZE) {
+                        const int words = VL_WORDS_I(lbits);
+                        strwide.assign(lwp.datap(), lwp.datap() + words);
+                        strwidexz.assign(lwxzp.datap(), lwxzp.datap() + words);
+                        _vl_clean_inplace_w(lbits, WDataOutP::external(strwide.data()));
+                        _vl_clean_inplace_w(lbits, WDataOutP::external(strwidexz.data()));
+                        lwp = WDataInP::external(strwide.data());
+                        lwxzp = WDataInP::external(strwidexz.data());
+                        ld = VL_SET_QW(lwp);
+                    }
+                }
                 if (fmt == 'p') {
                     if (widthSet && width == 0) {  // For %0p, IEEE our choice, use 'h%0h
                         output += "'h";
@@ -1516,8 +1536,8 @@ void _vl_vsformat(std::string& output, const std::string& format, int argc,
                             // ...11 0xf
                             const IData maxValue = (1 << ((lsb & 0x3) + 1)) - 1;
                             lsb = (lsb / 4) * 4;  // Next digit
-                            const IData charval = VL_BITRSHIFT_W(lwp, lsb) & 0xf;
-                            const IData charxz = VL_BITRSHIFT_W(lwxzp, lsb) & 0xf;
+                            const IData charval = VL_BITRSHIFT_W(lwp, lsb) & maxValue;
+                            const IData charxz = VL_BITRSHIFT_W(lwxzp, lsb) & maxValue;
                             if (charxz != 0) {
                                 if ((charval & charxz) != 0) {
                                     append += ((charval & charxz) == maxValue) ? 'x' : 'X';
@@ -4406,7 +4426,8 @@ void VerilatedScope::varsInsertFromTable(const VlVarTableEntry* entp, size_t n,
         const VlVarTableEntry& e = entp[i];
         void* const datap = base + e.byteOffset;
         const VerilatedVarFlags vlflags = static_cast<VerilatedVarFlags>(e.vlflags);
-        VerilatedVar var{e.namep, datap, nullptr, e.vltype, vlflags, e.udims, e.pdims, /*isParam=*/false};
+        VerilatedVar var{e.namep, datap,   nullptr, e.vltype,
+                         vlflags, e.udims, e.pdims, /*isParam=*/false};
         for (int d = 0; d < e.udims; ++d) {
             var.m_unpacked[d].m_left = e.dims[2 * d];
             var.m_unpacked[d].m_right = e.dims[2 * d + 1];
@@ -4476,12 +4497,12 @@ void VerilatedScope::ifaceRefsEraseFromTable(const VlIfaceRefTableEntry* entp, s
     }
 }
 
-VerilatedVar* VerilatedScope::varInsertSized(const char* namep, void* datap, void* dataxzp, bool isParam,
-                                             VerilatedVarType vltype, int vlflags, int udims,
-                                             uint32_t entSize...) VL_MT_UNSAFE {
+VerilatedVar* VerilatedScope::varInsertSized(const char* namep, void* datap, void* dataxzp,
+                                             bool isParam, VerilatedVarType vltype, int vlflags,
+                                             int udims, uint32_t entSize...) VL_MT_UNSAFE {
     if (!m_varsp) m_varsp = new VerilatedVarNameMap;
-    VerilatedVar var(namep, datap, dataxzp, vltype, static_cast<VerilatedVarFlags>(vlflags), udims, 0,
-                     isParam, entSize);
+    VerilatedVar var(namep, datap, dataxzp, vltype, static_cast<VerilatedVarFlags>(vlflags), udims,
+                     0, isParam, entSize);
 
     va_list ap;
     va_start(ap, entSize);

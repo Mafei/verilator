@@ -411,6 +411,23 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         // Time is actually a fourstate but we never put `x` or `z` there
         setFourstate(nodep, false, m_fourstateInSubtree);
     }
+    void visit(AstIToRD* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        // Real values have no X/Z bits. Integer conversion clears unknown bits.
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
+    void visit(AstISToRD* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
+    void visit(AstRToIRoundS* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
+    void visit(AstRToIS* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
     void visit(AstScopeName* const nodep) override {
         iterateChildrenSeparately(nodep);
         setFourstate(nodep, false, m_fourstateInSubtree);
@@ -430,7 +447,10 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         case VCMethod::DYN_RENEW_COPY:
         case VCMethod::DYN_SIZE: break;
         default:
-            nodep->v3warn(E_UNSUPPORTED, "Unsupported CMethod hard: " << nodep->method().ascii());
+            if (needsSplitting(nodep->fromp()->dtypep())) {
+                nodep->v3warn(E_UNSUPPORTED,
+                              "Unsupported CMethod hard: " << nodep->method().ascii());
+            }
             break;
         }
         setFourstate(nodep, needsSplitting(nodep->fromp()->dtypep()), m_fourstateInSubtree);
@@ -584,6 +604,7 @@ class FourstateVisitor final : public VNVisitor {
     AstNodeModule* m_modp = nullptr;  // Current module
     std::vector<AstVar*> m_varpsToRemove;  // Vars to unlink and remove in destructor
     AstNodeExpr* m_caseMaskp = nullptr;
+    VCaseType m_caseType = VCaseType::CT_CASE;  // Active case wildcard semantics
 
     std::vector<FTaskPortsHelper> m_ftaskPortHelpers;  // Cache of FTaskPortsHelpers
 
@@ -987,6 +1008,11 @@ class FourstateVisitor final : public VNVisitor {
         }
         AstVar* const newXzp = varp->cloneTree(false);
         newXzp->name(newXzp->name() + FOURSTATE_XZ_SUFFIX);
+        if (varp->isPullup() || varp->isPulldown()) {
+            // The implicit pull drives a known value, so its unknown-bit mask
+            // defaults to zero even when the value half has a pull-up.
+            newXzp->pullDirection(false);
+        }
         if (const AstBasicDType* const basicp = varp->dtypep()->basicp()) {
             newXzp->fourstateOriginalDTypeKwd(basicp->keyword());
         }
@@ -2596,6 +2622,23 @@ class FourstateVisitor final : public VNVisitor {
 
     void visit(AstNodeAssign* const nodep) override {
         StmtHelper stmtHelper{*this, nodep};
+        if (AstDelay* const delayp = VN_CAST(nodep->timingControlp(), Delay)) {
+            if (VN_IS(nodep, AssignW)
+                && (!delayp->lhsp()->isPure()
+                    || (delayp->fallDelay() && !delayp->fallDelay()->isPure()))) {
+                delayp->v3warn(E_UNSUPPORTED,
+                               "Unsupported: Impure net delay expression with --fourstate");
+                pushDeletep(delayp->unlinkFrBack());
+            } else {
+                if (VN_IS(nodep, Assign) && isFourstate(nodep->lhsp())) {
+                    nodep->v3warn(E_UNSUPPORTED,
+                                  "Unsupported: Blocking intra-assignment delay with --fourstate");
+                }
+                // Both split assignments must use the same captured delay. Lower
+                // it before cloning, with calculations owned by the assignment.
+                lowerFourstateDelay(delayp);
+            }
+        }
         if (isFourstate(nodep->lhsp())) {
             AstNodeExpr* lhsp = nodep->lhsp()->unlinkFrBack();
             pushDeletep(lhsp);
@@ -2646,6 +2689,22 @@ class FourstateVisitor final : public VNVisitor {
             AstNodeExpr* const newRhsp = getTwoStateCast(nodep->rhsp());
             pushDeletep(nodep->rhsp()->unlinkFrBack());
             nodep->rhsp(newRhsp);
+        }
+        iterateChildren(nodep);
+    }
+    void visit(AstCMethodHard* const nodep) override {
+        // Queue insertion coerces an element to the queue's element type. A
+        // two-state queue must discard unknown bits without duplicating calls.
+        if ((nodep->method() == VCMethod::ARRAY_PUSH_BACK
+             || nodep->method() == VCMethod::ARRAY_PUSH_FRONT)
+            && !needsSplitting(nodep->fromp()->dtypep())) {
+            if (AstNodeExpr* const pinp = nodep->pinsp()) {
+                if (isFourstate(pinp)) {
+                    AstNodeExpr* const newp = getTwoStateCast(pinp);
+                    pinp->replaceWith(newp);
+                    pushDeletep(pinp);
+                }
+            }
         }
         iterateChildren(nodep);
     }
@@ -2701,6 +2760,47 @@ class FourstateVisitor final : public VNVisitor {
         }
         iterateChildren(nodep);
     }
+    void lowerFourstateDelay(AstDelay* const nodep) {
+        if (!nodep->isCycleDelay() && (isFourstate(nodep->lhsp()) || !nodep->lhsp()->isPure())) {
+            AstNodeExpr* const delayp = nodep->lhsp()->unlinkFrBack();
+            // An X/Z delay is zero, including mixed known and unknown bits.
+            // Capture impure expressions once before testing their X/Z mask.
+            const bool impure = !delayp->isPure();
+            AstNodeExpr* const valuep
+                = impure ? getOnceExpressionValue(delayp) : getFourstateExpressionValue(delayp);
+            AstNodeExpr* const newp
+                = isFourstate(delayp) ? new AstCond{nodep->fileline(),
+                                                    new AstRedOr{nodep->fileline(),
+                                                                 getFourstateExpressionXZ(delayp)},
+                                                    createZeroOrOnesp(delayp), valuep}
+                                      : valuep;
+            FourstateLogicTypePropagator{newp};
+            if (impure) {
+                // Consume both function outputs before timing lowering moves
+                // the delay into a separate coroutine. Its cross-function read
+                // must survive statement-temporary dead-store elimination.
+                AstVar* const varp = new AstVar{
+                    nodep->fileline(), m_tmpFuncLocal ? VVarType::BLOCKTEMP : VVarType::MODULETEMP,
+                    m_tmpNames.get(nodep), getTwoStateDtype(delayp->dtypep())};
+                varp->funcLocal(m_tmpFuncLocal);
+                varp->noSubst(true);
+                m_currentTmpSpotp->addHereThisAsNext(varp);
+                addPrecalculation(
+                    new AstAssign{nodep->fileline(),
+                                  new AstVarRef{nodep->fileline(), varp, VAccess::WRITE}, newp});
+                nodep->lhsp(new AstVarRef{nodep->fileline(), varp, VAccess::READ});
+                FourstateLogicTypePropagator{nodep->lhsp()};
+            } else {
+                nodep->lhsp(newp);
+            }
+            pushDeletep(delayp);
+        }
+        iterateChildren(nodep);
+    }
+    void visit(AstDelay* const nodep) override {
+        StmtHelper stmtHelper{*this, nodep};
+        lowerFourstateDelay(nodep);
+    }
     void visit(AstNodeIf* const nodep) override {
         StmtHelper stmtHelper{*this, nodep};
         if (isFourstate(nodep->condp())) {
@@ -2722,10 +2822,74 @@ class FourstateVisitor final : public VNVisitor {
         iterateChildren(nodep);
     }
 
+    void lowerConstantWildcardCase(AstCase* const nodep) {
+        // The selector and item may both contain wildcards. Compare both encoded
+        // halves after masking X/Z for casex, or only Z for casez.
+        if (nodep->caseType() != VCaseType::CT_CASEX && nodep->caseType() != VCaseType::CT_CASEZ) {
+            return;
+        }
+        if (!nodep->exprp()->dtypep()->isIntegralOrPacked()) return;
+        bool hasWildcard = false;
+        for (AstCaseItem* itemp = nodep->itemsp(); itemp;
+             itemp = VN_AS(itemp->nextp(), CaseItem)) {
+            for (AstNodeExpr* condp = itemp->condsp(); condp;
+                 condp = VN_AS(condp->nextp(), NodeExpr)) {
+                const AstConst* const constp = VN_CAST(condp, Const);
+                if (!constp || constp->num().isOpaque()) return;
+                hasWildcard |= constp->num().isAnyXZ();
+            }
+        }
+        if (!hasWildcard) return;
+        const bool casez = nodep->caseType() == VCaseType::CT_CASEZ;
+        AstNodeExpr* const selectorp = nodep->exprp();
+        AstNodeExpr* const valuep = getOnceExpressionValue(selectorp);
+        AstNodeExpr* const xzp = getFourstateExpressionXZ(selectorp);
+        for (AstCaseItem* itemp = nodep->itemsp(); itemp;
+             itemp = VN_AS(itemp->nextp(), CaseItem)) {
+            for (AstNodeExpr *condp = itemp->condsp(), *nextp; condp; condp = nextp) {
+                nextp = VN_AS(condp->nextp(), NodeExpr);
+                FileLine* const flp = condp->fileline();
+                AstNodeExpr* const itemValuep = getFourstateExpressionValue(condp);
+                AstNodeExpr* const itemXZp = getFourstateExpressionXZ(condp);
+                AstNodeExpr* const selectorMaskp
+                    = casez ? static_cast<AstNodeExpr*>(
+                                  new AstAnd{flp, xzp->cloneTree(false),
+                                             new AstNot{flp, valuep->cloneTree(false)}})
+                            : xzp->cloneTree(false);
+                AstNodeExpr* const itemMaskp
+                    = casez ? static_cast<AstNodeExpr*>(
+                                  new AstAnd{flp, itemXZp->cloneTree(false),
+                                             new AstNot{flp, itemValuep->cloneTree(false)}})
+                            : itemXZp->cloneTree(false);
+                AstNodeExpr* const maskp = new AstOr{flp, selectorMaskp, itemMaskp};
+                AstNodeExpr* const differencep
+                    = new AstConcat{flp, new AstXor{flp, valuep->cloneTree(false), itemValuep},
+                                    new AstXor{flp, xzp->cloneTree(false), itemXZp}};
+                AstNodeExpr* const matchp = new AstLogNot{
+                    flp,
+                    new AstRedOr{
+                        flp, new AstAnd{flp, differencep,
+                                        new AstNot{flp, new AstConcat{flp, maskp->cloneTree(false),
+                                                                      maskp}}}}};
+                FourstateLogicTypePropagator{matchp};
+                condp->replaceWith(matchp);
+                pushDeletep(condp);
+            }
+        }
+        pushDeletep(valuep);
+        pushDeletep(xzp);
+        pushDeletep(selectorp->unlinkFrBack());
+        nodep->exprp(new AstConst{nodep->fileline(), AstConst::BitTrue{}});
+        FourstateLogicTypePropagator{nodep->exprp()};
+    }
+
     void visit(AstCase* const nodep) override {
         StmtHelper stmtHelper{*this, nodep};
+        lowerConstantWildcardCase(nodep);
         VL_RESTORER(m_caseMaskp);
+        VL_RESTORER(m_caseType);
         m_caseMaskp = nullptr;
+        m_caseType = nodep->caseType();
         FileLine* const flp = nodep->exprp()->fileline();
         if (nodep->caseInside()) {
             for (AstCaseItem* itemp = nodep->itemsp(); itemp;
@@ -2818,6 +2982,7 @@ class FourstateVisitor final : public VNVisitor {
             oldp->unlinkFrBack(&relinker);
             AstNodeExpr* const newp = new AstConcat{flp, oldp, createZeroOrOnesp(oldp)};
             relinker.relink(newp);
+            FourstateLogicTypePropagator{newp};
             m_caseMaskp = createZeroOrOnesp(newp);
         }
         iterateChildren(nodep);
@@ -2828,7 +2993,10 @@ class FourstateVisitor final : public VNVisitor {
              condp = VN_AS(condp->nextp(), NodeExpr)) {
             FileLine* const flp = condp->fileline();
             if (isFourstate(condp)) {
-                condp->v3warn(E_UNSUPPORTED, "Four-state values in case items are unsupported");
+                if (m_caseType != VCaseType::CT_CASE) {
+                    condp->v3warn(E_UNSUPPORTED,
+                                  "Four-state values in case items are unsupported");
+                }
                 UASSERT_OBJ(m_caseMaskp, condp, "Fourstate caseItem but case is not four-state");
                 AstNodeExpr* newp
                     = new AstOr{flp,
@@ -3094,6 +3262,22 @@ class FourstateVisitor final : public VNVisitor {
         }
         iterateChildren(nodep);
     }
+    void visit(AstIToRD* const nodep) override {
+        if (isFourstate(nodep->lhsp())) {
+            AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+            pushDeletep(lhsp);
+            nodep->lhsp(getTwoStateCast(lhsp));
+        }
+        iterateChildren(nodep);
+    }
+    void visit(AstISToRD* const nodep) override {
+        if (isFourstate(nodep->lhsp())) {
+            AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+            pushDeletep(lhsp);
+            nodep->lhsp(getTwoStateCast(lhsp));
+        }
+        iterateChildren(nodep);
+    }
     void visit(AstEqCase* const nodep) override {
         FileLine* const flp = nodep->fileline();
         AstNodeExpr* newp;
@@ -3310,6 +3494,14 @@ class FourstateVisitor final : public VNVisitor {
         iterateChildren(nodep);
     }
     void visit(AstVar* const nodep) override {
+        if (AstDelay* const delayp = nodep->delayp()) {
+            if (!delayp->lhsp()->isPure()
+                || (delayp->fallDelay() && !delayp->fallDelay()->isPure())) {
+                delayp->v3warn(E_UNSUPPORTED,
+                               "Unsupported: Impure net delay expression with --fourstate");
+                pushDeletep(delayp->unlinkFrBack());
+            }
+        }
         if (VL_UNLIKELY(!isDTypepSupported(nodep->dtypep()->skipRefp()).first)) {
             nodep->v3warn(E_UNSUPPORTED,
                           "Unsupported: Variable of type: " << nodep->dtypep()->prettyDTypeNameQ()
