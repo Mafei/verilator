@@ -1208,8 +1208,8 @@ class TimingControlVisitor final : public VNVisitor {
             iterateChildren(nodep);
             return;
         }
-        // Insert new vars before the timing control if we're in a function; in a process we can't
-        // do that. These intra-assignment vars will later be passed to forked processes by value.
+        // Function temporaries are local to the invocation. NBA temporaries must also be local
+        // so each generated fork receives its own values rather than shared module storage.
         AstNode* insertBeforep = m_underProcedure ? nullptr : controlp;
         // Special case for NBA
         if (inAssignDly) {
@@ -1225,7 +1225,6 @@ class TimingControlVisitor final : public VNVisitor {
                 nodep->replaceWith(trigAssignp);
                 trigAssignp->addNextHere(nbaEventControlp);
                 nbaEventControlp->addStmtsp(nodep);
-                insertBeforep = forkp;
                 if (!controlp) controlp = nbaEventControlp;
             }
             controlp->replaceWith(forkp);
@@ -1234,6 +1233,7 @@ class TimingControlVisitor final : public VNVisitor {
             forkp->addForksp(beginp);
             addFlags(beginp, T_NBA_UPDATE);
             controlp = forkp;
+            insertBeforep = forkp;
         }
         UASSERT_OBJ(nodep, controlp, "Assignment should have timing control");
         // Move `insertBeforep` into `AstCLocalScope` if necessary to avoid jumping over

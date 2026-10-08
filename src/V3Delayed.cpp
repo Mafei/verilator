@@ -471,10 +471,16 @@ class DelayedVisitor final : public VNVisitor {
             return Scheme::ShadowVar;
         }
 
-        // In a suspendable of fork, we must use the unique flag scheme, TODO: why?
-        if (vscpInfo.m_inSuspOrFork) return Scheme::FlagUnique;
-
         const bool isIntegralOrPacked = dtypep->isIntegralOrPacked();
+        if (vscpInfo.m_inSuspOrFork) {
+            // A suspendable process or fork can execute the same NBA repeatedly before its
+            // pending updates commit. Preserve each packed update in execution order.
+            if (isIntegralOrPacked) {
+                if (vscpInfo.m_partial) return Scheme::ValueQueuePartial;
+                return Scheme::ValueQueueWhole;
+            }
+            return Scheme::FlagUnique;
+        }
         // Check for mixed usage (this also warns if not OK)
         if (checkMixedUsage(vscp, isIntegralOrPacked)) {
             // If it's a variable updated by both blocking and non-blocking
@@ -961,7 +967,6 @@ class DelayedVisitor final : public VNVisitor {
         // Extract array indices
         std::vector<AstNodeExpr*> idxps;
         {
-            UASSERT_OBJ(VN_IS(lhsNodep, ArraySel), lhsNodep, "Unexpected LHS form");
             while (AstArraySel* const aSelp = VN_CAST(lhsNodep, ArraySel)) {
                 idxps.emplace_back(aSelp->bitp()->unlinkFrBack());
                 lhsNodep = aSelp->fromp();

@@ -1932,7 +1932,7 @@ struct VlApplyIndices<N_Rank, N_Rank, T_Target> final {
 };
 
 //===================================================================
-// Commit queue for NBAs - currently only for unpacked arrays
+// Commit queue for NBAs to packed variables or unpacked array elements
 //
 // This data-structure is used to handle non-blocking assignments
 // that might execute a variable number of times in a single
@@ -1971,7 +1971,7 @@ class VlNBACommitQueue<T_Target, /* Partial: */ false, T_Element, N_Rank> final 
     // TYPES
     struct Entry final {
         T_Element value;
-        size_t indices[N_Rank];
+        std::array<size_t, N_Rank> indices;
     };
 
     // STATE
@@ -1994,7 +1994,7 @@ public:
     void commit(T_Commit& target) {
         if (m_pending.empty()) return;
         for (const Entry& entry : m_pending) {
-            VlApplyIndices<0, N_Rank, T_Commit>::apply(target, entry.indices) = entry.value;
+            VlApplyIndices<0, N_Rank, T_Commit>::apply(target, entry.indices.data()) = entry.value;
         }
         m_pending.clear();
     }
@@ -2007,7 +2007,7 @@ class VlNBACommitQueue<T_Target, /* Partial: */ true, T_Element, N_Rank> final {
     struct Entry final {
         T_Element value;
         T_Element mask;
-        size_t indices[N_Rank];
+        std::array<size_t, N_Rank> indices;
     };
 
     // STATE
@@ -2079,7 +2079,7 @@ public:
     void commit(T_Commit& target) {
         if (m_pending.empty()) return;
         for (const Entry& entry : m_pending) {  //
-            auto& ref = VlApplyIndices<0, N_Rank, T_Commit>::apply(target, entry.indices);
+            auto& ref = VlApplyIndices<0, N_Rank, T_Commit>::apply(target, entry.indices.data());
             // Maybe inefficient, but it works for now ...
             const auto oldValue = ref;
             ref = bOr(bAnd(entry.value, entry.mask), bAnd(oldValue, bNot(entry.mask)));
