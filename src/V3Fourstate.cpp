@@ -748,6 +748,7 @@ private:
     const AstNode* m_contextp = nullptr;
     string m_context;
     bool m_continuous = false;
+    bool m_staticInitializer = false;
 
     static bool isNet(const AstVar* const varp) {
         const VVarType kind = varp->varType();
@@ -756,11 +757,21 @@ private:
                && varp->dtypep()->skipRefp()->isIntegralOrPacked()
                && needsSplitting(varp->dtypep());
     }
+    bool isInputDefault(const AstVar* const varp) const {
+        return VN_IS(m_modp, Module) && varp->isInput() && !varp->isFuncLocal()
+               && varp->hasUserInit();
+    }
     void record(AstNodeVarRef* const refp, const AstNode* const writerp, const bool known,
                 const int64_t lo, const int width, const bool whole) {
         AstVar* const varp = refp->varp();
         if (!isNet(varp)) return;
         m_recordedRefs.insert(refp);
+        // LinkParse lowers a module input default to InitialStatic. It supplies an
+        // unconnected port fallback, rather than a contribution competing with its pin.
+        if (m_staticInitializer && VN_IS(m_assignp, Assign) && VN_IS(refp, VarRef) && whole
+            && m_context.empty() && isInputDefault(varp)) {
+            return;
+        }
         Net& net = m_nets[varp];
         net.varp = varp;
         const auto inserted = net.writerIndices.emplace(writerp, net.drivers.size());
@@ -820,7 +831,7 @@ private:
             net.varp = nodep;
             net.modulep = m_modp;
             m_varOrder.push_back(nodep);
-            if (nodep->valuep() && !nodep->isConst()) {
+            if (nodep->valuep() && !nodep->isConst() && !isInputDefault(nodep)) {
                 net.writerIndices.emplace(nodep, net.drivers.size());
                 net.drivers.push_back(
                     Driver{m_modp, nullptr, false, true, "declaration initializer", {}});
@@ -830,8 +841,10 @@ private:
     }
     void visit(AstNodeProcedure* nodep) override {
         VL_RESTORER(m_continuous);
+        VL_RESTORER(m_staticInitializer);
         const AstAlways* const alwaysp = VN_CAST(nodep, Always);
         m_continuous = alwaysp && alwaysp->keyword() == VAlwaysKwd::CONT_ASSIGN;
+        m_staticInitializer = VN_IS(nodep, InitialStatic);
         iterateChildrenConst(nodep);
     }
     void visit(AstNodeAssign* nodep) override {
