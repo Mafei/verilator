@@ -11,6 +11,7 @@ from pathlib import Path
 
 GROUPS = {
     "amd-repair": [
+        "fourstate_blocking_delay",
         "fourstate_cond_scale", "fourstate_drive_buffer", "fourstate_drive_deassign",
         "fourstate_drive_unsup", "fourstate_negate", "fourstate_negate_mask",
         "fourstate_packed_index", "fourstate_slice_bounds"
