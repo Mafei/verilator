@@ -312,6 +312,7 @@ class AssertVisitor final : public VNVisitor {
     unsigned m_monitorNum = 0;  // Global $monitor numbering (not per module)
     AstVar* m_monitorNumVarp = nullptr;  // $monitor number variable
     AstVar* m_monitorOffVarp = nullptr;  // $monitoroff variable
+    AstVar* m_monitorRequestVarp = nullptr;  // Explicit $monitoron request
     unsigned m_modPastNum = 0;  // Module past numbering
     unsigned m_modStrobeNum = 0;  // Module $strobe numbering
     AstNodeProcedure* m_procedurep = nullptr;  // Current procedure
@@ -452,6 +453,16 @@ class AssertVisitor final : public VNVisitor {
             v3Global.rootp()->dollarUnitPkgp()->addStmtsp(m_monitorOffVarp);
         }
         AstVarRef* const varrefp = new AstVarRef{nodep->fileline(), m_monitorOffVarp, access};
+        varrefp->classOrPackagep(v3Global.rootp()->dollarUnitPkgp());
+        return varrefp;
+    }
+    AstVarRef* newMonitorRequestVarRefp(const AstNode* nodep, VAccess access) {
+        if (!m_monitorRequestVarp) {
+            m_monitorRequestVarp = new AstVar{nodep->fileline(), VVarType::MODULETEMP,
+                                              "__VmonitorRequest", nodep->findBitDType()};
+            v3Global.rootp()->dollarUnitPkgp()->addStmtsp(m_monitorRequestVarp);
+        }
+        AstVarRef* const varrefp = new AstVarRef{nodep->fileline(), m_monitorRequestVarp, access};
         varrefp->classOrPackagep(v3Global.rootp()->dollarUnitPkgp());
         return varrefp;
     }
@@ -1211,24 +1222,55 @@ class AssertVisitor final : public VNVisitor {
                 });
             }
 
-            AstSenTree* const monSenTree = new AstSenTree{fl, monSenItemsp};
             const auto monNum = ++m_monitorNum;
-            // Where $monitor was we do "__VmonitorNum = N;"
+            AstVar* const pendingp
+                = new AstVar{fl, VVarType::MODULETEMP, "__VmonitorPending" + cvtToStr(monNum),
+                             nodep->findBitDType()};
+            m_modp->addStmtsp(pendingp);
+            // Registration schedules an initial print even if no argument changes.
             AstAssign* const newsetp = new AstAssign{
                 fl, newMonitorNumVarRefp(nodep, VAccess::WRITE), new AstConst{fl, monNum}};
             nodep->replaceWith(newsetp);
-            // Add "always_comb if (__VmonitorOn && __VmonitorNum==N) $display(...);"
-            AstNode* const stmtsp = nodep;
-            AstIf* const ifp = new AstIf{
-                fl,
-                new AstLogAnd{fl, new AstLogNot{fl, newMonitorOffVarRefp(nodep, VAccess::READ)},
-                              new AstEq{fl, new AstConst{fl, monNum},
-                                        newMonitorNumVarRefp(nodep, VAccess::READ)}},
-                stmtsp};
+            newsetp->addNext(new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
+                                           new AstConst{fl, AstConst::BitTrue{}}});
+            // Argument events only request output. Read their final values after all
+            // Active, Inactive and NBA work, and consume one request per time slot.
+            if (monSenItemsp) {
+                AstAssign* const requestp
+                    = new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
+                                    new AstConst{fl, AstConst::BitTrue{}}};
+                AstIf* const enabledp = new AstIf{
+                    fl,
+                    new AstLogAnd{fl,
+                                  new AstLogNot{fl, newMonitorOffVarRefp(nodep, VAccess::READ)},
+                                  new AstEq{fl, new AstConst{fl, monNum},
+                                            newMonitorNumVarRefp(nodep, VAccess::READ)}},
+                    requestp};
+                enabledp->isBoundsCheck(true);
+                m_modp->addStmtsp(new AstAlways{fl, VAlwaysKwd::ALWAYS,
+                                                new AstSenTree{fl, monSenItemsp}, enabledp});
+            }
+            AstIf* const ifp
+                = new AstIf{fl,
+                            new AstLogOr{fl, new AstVarRef{fl, pendingp, VAccess::READ},
+                                         newMonitorRequestVarRefp(nodep, VAccess::READ)},
+                            nodep};
             ifp->isBoundsCheck(true);  // To avoid LATCH warning
             ifp->branchPred(VBranchPred::BP_UNLIKELY);
-            AstNode* const newp = new AstAlways{fl, VAlwaysKwd::ALWAYS, monSenTree, ifp};
-            m_modp->addStmtsp(newp);
+            // Only the selected monitor consumes an explicit $monitoron request;
+            // other registered monitors may be in different modules.
+            ifp->addNext(new AstAssign{fl, newMonitorRequestVarRefp(nodep, VAccess::WRITE),
+                                       new AstConst{fl, AstConst::BitFalse{}}});
+            AstIf* const selectedp
+                = new AstIf{fl,
+                            new AstEq{fl, new AstConst{fl, monNum},
+                                      newMonitorNumVarRefp(nodep, VAccess::READ)},
+                            ifp};
+            selectedp->isBoundsCheck(true);
+            selectedp->branchPred(VBranchPred::BP_UNLIKELY);
+            selectedp->addNext(new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
+                                             new AstConst{fl, AstConst::BitFalse{}}});
+            m_modp->addStmtsp(new AstAlwaysPostponed{fl, selectedp});
         } else if (nodep->displayType() == VDisplayType::DT_STROBE) {
             nodep->displayType(VDisplayType::DT_DISPLAY);
             // Need one-shot
@@ -1257,6 +1299,12 @@ class AssertVisitor final : public VNVisitor {
             = new AstAssign{nodep->fileline(), newMonitorOffVarRefp(nodep, VAccess::WRITE),
                             new AstConst{nodep->fileline(), AstConst::BitTrue{}, nodep->off()}};
         nodep->replaceWith(newp);
+        if (!nodep->off()) {
+            // $monitoron forces output even if the monitor was already enabled.
+            newp->addNext(new AstAssign{nodep->fileline(),
+                                        newMonitorRequestVarRefp(nodep, VAccess::WRITE),
+                                        new AstConst{nodep->fileline(), AstConst::BitTrue{}}});
+        }
         VL_DO_DANGLING(pushDeletep(nodep), nodep);
     }
     void visit(AstAssert* nodep) override {  //
@@ -1407,6 +1455,7 @@ public:
         V3Stats::addStat("Assertions, assertOn checks combined", m_statAssertOnCombined);
         V3Stats::addStat("Assertions, assertOn checks hoisted", m_statAssertOnHoisted);
         V3Stats::addStat("Assertions, lifted impure case expressions", m_statLiftedCaseExprs);
+        V3Stats::addStat("Assertions, postponed monitors", m_monitorNum);
         // Rewrites can change purity, e.g. by compiling out assertion statements with --no-assert
         VIsCached::clearCacheTree();
     }
