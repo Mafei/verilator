@@ -1285,11 +1285,16 @@ class FourstateVisitor final : public VNVisitor {
         AstVar* const zVarp = capturePullPart(zp);
         AstNodeExpr* const capturedValuep = new AstVarRef{flp, valueVarp, VAccess::READ};
         AstNodeExpr* const capturedZp = new AstVarRef{flp, zVarp, VAccess::READ};
-        return {pullup ? static_cast<AstNodeExpr*>(new AstOr{flp, capturedValuep, capturedZp})
-                       : static_cast<AstNodeExpr*>(
-                             new AstAnd{flp, capturedValuep, new AstNot{flp, capturedZp}}),
-                new AstAnd{flp, new AstVarRef{flp, xzVarp, VAccess::READ},
-                           new AstNot{flp, new AstVarRef{flp, zVarp, VAccess::READ}}}};
+        const FourstatePair result{
+            pullup ? static_cast<AstNodeExpr*>(new AstOr{flp, capturedValuep, capturedZp})
+                   : static_cast<AstNodeExpr*>(
+                         new AstAnd{flp, capturedValuep, new AstNot{flp, capturedZp}}),
+            new AstAnd{flp, new AstVarRef{flp, xzVarp, VAccess::READ},
+                       new AstNot{flp, new AstVarRef{flp, zVarp, VAccess::READ}}}};
+        // The original assignment is revisited below, including its newly replaced RHS.
+        FourstateLogicTypePropagator{result.valuep};
+        FourstateLogicTypePropagator{result.xzp};
+        return result;
     }
 
     AstNodeExpr* getOnceExpressionValue(AstNodeExpr* const exprp) {
