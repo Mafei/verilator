@@ -1717,6 +1717,33 @@ class FourstateVisitor final : public VNVisitor {
         return result;
     }
 
+    void prepareBufferExpression(AstBufIf1* const nodep) {
+        if (getExprValuep(nodep)) return;
+        // Both output halves share one evaluation of each original input, including
+        // two-state function results that bypass the generic expression cache.
+        AstVar* const enableValuep = capturePullPart(getOnceExpressionValue(nodep->lhsp()));
+        AstVar* const enableXZp = capturePullPart(getFourstateExpressionXZ(nodep->lhsp()));
+        AstVar* const dataValuep = capturePullPart(getOnceExpressionValue(nodep->rhsp()));
+        AstVar* const dataXZp = capturePullPart(getFourstateExpressionXZ(nodep->rhsp()));
+        FileLine* const flp = nodep->fileline();
+        AstNodeExpr* const valuep
+            = new AstOr{flp, new AstVarRef{flp, enableXZp, VAccess::READ},
+                        new AstAnd{flp, new AstVarRef{flp, enableValuep, VAccess::READ},
+                                   new AstOr{flp, new AstVarRef{flp, dataValuep, VAccess::READ},
+                                             new AstVarRef{flp, dataXZp, VAccess::READ}}}};
+        AstNodeExpr* const xzp = new AstOr{
+            flp, new AstVarRef{flp, enableXZp, VAccess::READ},
+            new AstOr{flp, new AstNot{flp, new AstVarRef{flp, enableValuep, VAccess::READ}},
+                      new AstVarRef{flp, dataXZp, VAccess::READ}}};
+        FourstateLogicTypePropagator{valuep};
+        FourstateLogicTypePropagator{xzp};
+        setExprValuep(nodep, valuep);
+        setExprXZp(nodep, xzp);
+        pushDeletep(valuep);
+        pushDeletep(xzp);
+        ++m_statTristateBuffers;
+    }
+
     AstNodeExpr* getOnceExpressionValue(AstNodeExpr* const exprp) {
         if (isFourstate(exprp) || exprp->isPure()) {
             return getFourstateExpressionValue(exprp, true);
@@ -2455,13 +2482,8 @@ class FourstateVisitor final : public VNVisitor {
         void visit(AstBufIf1* const nodep) override {
             // Unknown enable gives X; a known disabled gate gives Z. Enabled buffer
             // inputs coerce data Z to X, matching the single-driver gate truth table.
-            FileLine* const flp = nodep->fileline();
-            m_resultp
-                = new AstOr{flp, getFourstateExpressionXZ(nodep->lhsp()),
-                            new AstAnd{flp, getFourstateExpressionValue(nodep->lhsp()),
-                                       new AstOr{flp, getFourstateExpressionValue(nodep->rhsp()),
-                                                 getFourstateExpressionXZ(nodep->rhsp())}}};
-            ++m_fourstateVisitor.m_statTristateBuffers;
+            m_fourstateVisitor.prepareBufferExpression(nodep);
+            m_resultp = getExprValuep(nodep)->cloneTree(false);
         }
 
         void visit(AstAnd* const andp) override {
@@ -2879,11 +2901,8 @@ class FourstateVisitor final : public VNVisitor {
     class FourstateExpressionXZVisitor final : public FourstateExpressionVisitor {
 
         void visit(AstBufIf1* const nodep) override {
-            FileLine* const flp = nodep->fileline();
-            m_resultp = new AstOr{
-                flp, getFourstateExpressionXZ(nodep->lhsp()),
-                new AstOr{flp, new AstNot{flp, getFourstateExpressionValue(nodep->lhsp())},
-                          getFourstateExpressionXZ(nodep->rhsp())}};
+            m_fourstateVisitor.prepareBufferExpression(nodep);
+            m_resultp = getExprXZp(nodep)->cloneTree(false);
         }
 
         void visit(AstAnd* const andp) override {
