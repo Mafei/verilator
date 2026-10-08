@@ -15,13 +15,19 @@ module t;
   logic [3:0] got;
 
   initial begin
-    `checkb({<<{f4(4'b10xz)}}, 4'bzx01);
-    `checkb({<<2{f4(4'b10xz)}}, 4'bxz10);
-    `checkb({<<3{f4(4'b10xz)}}, 4'b0xz1);
-    `checkb({<<4{f4(4'b10xz)}}, 4'b10xz);
+    got = {<<{f4(4'b10xz)}};
+    `checkb(got, 4'bzx01);
+    got = {<<2{f4(4'b10xz)}};
+    `checkb(got, 4'bxz10);
+    got = {<<3{f4(4'b10xz)}};
+    `checkb(got, 4'b0xz1);
+    got = {<<4{f4(4'b10xz)}};
+    `checkb(got, 4'b10xz);
 
-    `checkb({>>{f4(4'b10xz)}}, 4'b10xz);
-    `checkb({>>2{f4(4'b10xz)}}, 4'b10xz);
+    got = {>>{f4(4'b10xz)}};
+    `checkb(got, 4'b10xz);
+    got = {>>2{f4(4'b10xz)}};
+    `checkb(got, 4'b10xz);
 
     {<<{got}} = f4(4'b10xz);
     `checkb(got, 4'bzx01);
