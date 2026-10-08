@@ -17,9 +17,9 @@ module t;
   logic [31:0] unknown_end = 32'h0000_000z;
   bit [63:0] unsigned_overflow = 64'h8000_0000_0000_0000;
   localparam bit [511:0] KNOWN_FILENAME = "t/t_fourstate_readmem_h.mem";
-  localparam logic [511:0] UNKNOWN_FILENAME = {8'hzz, "t/t_fourstate_readmem_h.mem"};
+  localparam logic [511:0] UNKNOWN_FILENAME = 512'hz0000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00742f74_5f666f75_72737461_74655f72_6561646d_656d5f68_2e6d656d;
   bit [31:0] checks = 0;
-  int which = 0;
+  bit [31:0] which = 0;
 
   function automatic logic [7:0] sentinel(input int index);
     return (index % 2) != 0 ? 8'hz6 : 8'h5x;
@@ -73,7 +73,7 @@ module t;
 
         // Deliberate local policy: any X/Z filename/bound bit warns and does not
         // write. This does not certify the IEEE unknown-value conversion rules.
-        $readmemh({8'hxx, "t/t_fourstate_readmem_h.mem"}, mem, 1, 4);
+        $readmemh(512'hx0000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00000000_00742f74_5f666f75_72737461_74655f72_6561646d_656d5f68_2e6d656d, mem, 1, 4);
         check_unchanged();
         $readmemh(UNKNOWN_FILENAME, mem, 1, 4);
         check_unchanged();

@@ -7,6 +7,8 @@
 # SPDX-FileCopyrightText: 2026 Wilson Snyder
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
+import re
+
 import vltest_bootstrap
 
 test.scenarios('vlt_all')
@@ -27,6 +29,15 @@ for number, contents in data.items():
     with open(f'{test.obj_dir}/bad_{number}.mem', 'w', encoding='ascii') as stream:
         stream.write('// SPDX-License-Identifier: CC0-1.0\n' + contents)
 
+errors = {
+    0: '$readmemb invalid data digit',
+    1: '$readmemh invalid data digit',
+    2: '$readmem invalid address digit (X/Z and signed text are not allowed)',
+    3: '$readmem address exceeds the supported 32-bit declaration domain',
+    4: '$readmem address outside the requested range',
+    5: '$readmem invalid address digit (X/Z and signed text are not allowed)',
+}
+
 test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE'])
 for number in range(11):
     log = f'{test.obj_dir}/case_{number}.log'
@@ -39,6 +50,7 @@ for number in range(11):
     test.file_grep_not(log, r'Internal Error')
     if number < 6:
         test.file_grep_not(log, r'Malformed readmem input unexpectedly returned')
+        test.file_grep(log, re.escape(errors[number]))
     if number >= 6:
         test.file_grep(log, r'Readmem diagnostic checks: (\d+)', 156 if number == 6 else 12)
 test.passes()
