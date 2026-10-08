@@ -603,6 +603,11 @@ class ActiveVisitor final : public VNVisitor {
         }
         // Do not iterate children, technically not part of this process
     }
+    void visit(AstTime*) override {
+        // A time-dependent result must be evaluated at the explicit sensitivity event.
+        m_canBeComb = false;
+    }
+    void visit(AstTimeD*) override { m_canBeComb = false; }
 
     //--------------------
     void visit(AstVar*) override {}  // Accelerate

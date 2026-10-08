@@ -1932,7 +1932,7 @@ struct VlApplyIndices<N_Rank, N_Rank, T_Target> final {
 };
 
 //===================================================================
-// Commit queue for NBAs - currently only for unpacked arrays
+// Commit queue for NBAs to packed variables or unpacked array elements
 //
 // This data-structure is used to handle non-blocking assignments
 // that might execute a variable number of times in a single
@@ -1956,6 +1956,7 @@ struct VlApplyIndices<N_Rank, N_Rank, T_Target> final {
 //   derived from the bit selects (_[3:1]), which masks the bits that
 //   need to be updated, and additionally the RHS is widened to a full
 //   element size, with the bits inserted into the masked region.
+// Packed targets use rank zero and require no array indices.
 template <typename T_Target,  // Type of the variable this commit queue updates
           bool Partial,  // Whether partial element updates are necessary
           // The following we could figure out from 'T_Target using type traits, but passing
@@ -1971,7 +1972,7 @@ class VlNBACommitQueue<T_Target, /* Partial: */ false, T_Element, N_Rank> final 
     // TYPES
     struct Entry final {
         T_Element value;
-        size_t indices[N_Rank];
+        std::array<size_t, N_Rank> indices;
     };
 
     // STATE
@@ -1994,7 +1995,7 @@ public:
     void commit(T_Commit& target) {
         if (m_pending.empty()) return;
         for (const Entry& entry : m_pending) {
-            VlApplyIndices<0, N_Rank, T_Commit>::apply(target, entry.indices) = entry.value;
+            VlApplyIndices<0, N_Rank, T_Commit>::apply(target, entry.indices.data()) = entry.value;
         }
         m_pending.clear();
     }
@@ -2007,7 +2008,7 @@ class VlNBACommitQueue<T_Target, /* Partial: */ true, T_Element, N_Rank> final {
     struct Entry final {
         T_Element value;
         T_Element mask;
-        size_t indices[N_Rank];
+        std::array<size_t, N_Rank> indices;
     };
 
     // STATE
@@ -2079,7 +2080,7 @@ public:
     void commit(T_Commit& target) {
         if (m_pending.empty()) return;
         for (const Entry& entry : m_pending) {  //
-            auto& ref = VlApplyIndices<0, N_Rank, T_Commit>::apply(target, entry.indices);
+            auto& ref = VlApplyIndices<0, N_Rank, T_Commit>::apply(target, entry.indices.data());
             // Maybe inefficient, but it works for now ...
             const auto oldValue = ref;
             ref = bOr(bAnd(entry.value, entry.mask), bAnd(oldValue, bNot(entry.mask)));
