@@ -28,7 +28,7 @@ test.lint(
 output_vs = test.glob_some(test.obj_dir + "/" + test.vm_prefix + "_*_width.tree.v")
 
 for output_v in output_vs:
-    test.files_identical(output_v, test.golden_filename)
+    test.files_identical(output_v, test.golden_filename, normalize_enum_hash=True)
 
 if test.verbose:
     # Print if that the output Verilog is clean

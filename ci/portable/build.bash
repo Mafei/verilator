@@ -71,6 +71,7 @@ if [[ $platform == macos-arm64 ]]; then
     export CPLUS_INCLUDE_PATH="$CPLUS_INCLUDE_PATH:$lz4_prefix/include"
 fi
 python3 ci/portable/test_flexfix.py
+python3 ci/portable/test_regression_results.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
@@ -123,15 +124,12 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-(cd test_regress && python3 driver.py --vlt -j2 \
-    t/t_fourstate_isunknown.py t/t_fourstate_countones.py t/t_fourstate_packed_array.py \
-    t/t_fourstate_struct.py t/t_fourstate_sampled_expr.py t/t_fourstate_lognot.py \
-    t/t_fourstate_api.py t/t_fourstate_noapi.py t/t_fourstate_dynarray.py t/t_fourstate_modport.py \
-    t/t_fourstate_cond.py t/t_fourstate_trace_vcd.py t/t_fourstate_trace_fst.py \
-    t/t_vpi_get.py t/t_vpi_get_value_array.py t/t_fourstate_vpi.py t/t_fourstate_portable.py \
-    t/t_fourstate_format.py t/t_fourstate_format_bin.py \
-    t/t_fourstate_format_octal.py t/t_fourstate_format_hex.py) || regress_status=$?
-[[ ${smoke_status:-0} == 0 && $regress_status == 0 ]]
+python3 ci/portable/run_regressions.py fourstate integration upstream || regress_status=$?
+if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
+    echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
+    exit 1
+fi
+python3 ci/portable/check_results.py
 python3 - <<'PY'
 import hashlib,pathlib
 files=sorted(pathlib.Path('out').glob('*'))

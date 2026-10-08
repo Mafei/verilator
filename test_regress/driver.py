@@ -12,9 +12,15 @@ import multiprocessing
 import os
 import pickle
 import platform
-import pty
+try:
+    import pty
+except ImportError:
+    pty = None
 import re
-import resource
+try:
+    import resource
+except ImportError:
+    resource = None
 import runpy
 import shutil
 import signal
@@ -119,6 +125,13 @@ class VtOs:
         if check and proc.returncode:
             sys.exit("%Error: command failed '" + command + "':\n" + proc.stderr + proc.stdout)
         return str(proc.stdout)
+
+    @staticmethod
+    def system(command: str, debug=None) -> None:
+        """Run os.system, optionally showing command printed"""
+        if Args.verbose or debug:
+            print("\t" + command)
+        os.system(command)
 
     @staticmethod
     def unlink_ok(filename: str) -> None:
@@ -611,7 +624,7 @@ class Runner:
             print("==SUMMARY: " + self.sprint_summary(), file=sys.stderr)
 
             if (self._last_proc_finish_time != 0
-                    and ((time.time() - self._last_proc_finish_time) > 15)):
+                    and ((time.time() - self._last_proc_finish_time) >= 25)):
                 self._last_proc_finish_time = time.time()
                 other = ""
                 for proc in forker.running():
@@ -904,6 +917,7 @@ class VlTest:
             self.top_filename = re.sub(r'\.py$', '', self.py_filename) + '.' + self.v_suffix
         self.pli_filename = re.sub(r'\.py$', '', self.py_filename) + '.cpp'
         self.top_shell_filename = self.obj_dir + "/" + self.vm_prefix + "__top.v"
+        self.vlt_filename = re.sub(r'\.py$', '', self.py_filename) + '.vlt'
 
     def _define_opt_calc(self) -> str:
         return "--define " if self.xsim else "+define+"
@@ -1085,17 +1099,17 @@ class VlTest:
     def clean(self, for_rerun=False) -> None:
         """Called on a --driver-clean or rerun to cleanup files."""
         if self.clean_command:
-            os.system(self.clean_command)
-        os.system('/bin/rm -rf ' + self.obj_dir + '__fail1')
+            VtOs.system(self.clean_command)
+        VtOs.system('/bin/rm -rf ' + self.obj_dir + '__fail1')
         if for_rerun:
             # Prevents false-failures when switching compilers
             # Remove old results to force hard rebuild
-            os.system('/bin/mv ' + self.obj_dir + ' ' + self.obj_dir + '__fail1')
+            VtOs.system('/bin/mv ' + self.obj_dir + ' ' + self.obj_dir + '__fail1')
         else:
-            os.system('/bin/rm -rf ' + self.obj_dir)
+            VtOs.system('/bin/rm -rf ' + self.obj_dir)
 
     def clean_objs(self) -> None:
-        os.system("/bin/rm -rf " + ' '.join(glob.glob(self.obj_dir + "/*")))
+        VtOs.system("/bin/rm -rf " + ' '.join(glob.glob(self.obj_dir + "/*")))
 
     def _checkflags(self, param):
         checkflags = (
@@ -1496,6 +1510,8 @@ class VlTest:
         by all of the spawned child processess"""
         #  An  unprivileged  process may set only its soft limit
         #  to a value in the range from 0 up to the hard limit
+        if not resource:
+            return
         _, hardlimit = resource.getrlimit(resource.RLIMIT_CPU)
         softlimit = ctypes.c_long(min(seconds, ctypes.c_ulong(hardlimit).value)).value
         # Casting is required due to a quirk in Python,
@@ -1938,7 +1954,7 @@ class VlTest:
         if logfile:
             logfh = open(logfile, 'wb')  # pylint: disable=consider-using-with
 
-        if not Args.interactive_debugger:
+        if not Args.interactive_debugger and pty:
             # Some parallel job's run() may attempt to capture driver.py's
             # terminal, e.g. gdb does this. So, unless known we want to run GDB
             # (where we want it to control the terminal), become a controlling
@@ -2449,7 +2465,12 @@ class VlTest:
     #######################################################################
     # File utilities
 
-    def files_identical(self, fn1: str, fn2: str, is_logfile=False, strip_hex=False) -> None:
+    def files_identical(self,
+                        fn1: str,
+                        fn2: str,
+                        is_logfile=False,
+                        strip_hex=False,
+                        normalize_enum_hash=False) -> None:
         """Test if two files have identical contents"""
         delay = 0.25
         for tryn in range(Args.log_retries, -1, -1):
@@ -2457,12 +2478,16 @@ class VlTest:
                 time.sleep(delay)
                 delay = min(1, delay * 2)
             moretry = tryn != 0
-            if not self._files_identical_try(
-                    fn1=fn1, fn2=fn2, is_logfile=is_logfile, strip_hex=strip_hex, moretry=moretry):
+            if not self._files_identical_try(fn1=fn1,
+                                             fn2=fn2,
+                                             is_logfile=is_logfile,
+                                             strip_hex=strip_hex,
+                                             normalize_enum_hash=normalize_enum_hash,
+                                             moretry=moretry):
                 break
 
     def _files_identical_try(self, fn1: str, fn2: str, is_logfile: bool, strip_hex: bool,
-                             moretry: bool) -> bool:
+                             normalize_enum_hash: bool, moretry: bool) -> bool:
         # If moretry, then return true to try again
         try:
             f1 = open(  # pylint: disable=consider-using-with
@@ -2487,6 +2512,7 @@ class VlTest:
                                              fn2=fn2,
                                              is_logfile=is_logfile,
                                              strip_hex=strip_hex,
+                                             normalize_enum_hash=normalize_enum_hash,
                                              moretry=moretry)
         if f1:
             f1.close()
@@ -2495,10 +2521,22 @@ class VlTest:
         return again
 
     def _files_identical_reader(self, f1, f2, fn1: str, fn2: str, is_logfile: bool,
-                                strip_hex: bool, moretry: bool) -> bool:
+                                strip_hex: bool, normalize_enum_hash: bool, moretry: bool) -> bool:
         # If moretry, then return true to try again
         l1s = f1.readlines()
         l2s = f2.readlines() if f2 else []
+        if normalize_enum_hash:
+            # Enum type hashes vary with host-dependent dtype hashing. Preserve
+            # distinct hash identities, all references, and the numeric suffix.
+            hashes = {}
+
+            def enum_hash(match):
+                value = match.group(1)
+                if value not in hashes:
+                    hashes[value] = len(hashes)
+                return '__Venum_hHASH' + str(hashes[value])
+
+            l1s = [re.sub(r'\b__Venum_h([0-9a-f]{8})(?=__\d+\b)', enum_hash, line) for line in l1s]
         # print(" rawGOT="+pformat(l1s)+"\n rawEXP="+pformat(l2s))
         if is_logfile:
             l1o = []
@@ -2776,7 +2814,9 @@ class VlTest:
             del self._file_contents_cache[filename]
 
     def file_sed(self, in_filename: str, out_filename, edit_lambda) -> None:
-        contents = self.file_contents(in_filename)
+        # Read without newline translation, so binary files are preserved exactly
+        with open(in_filename, 'r', encoding='latin-1', newline='') as fh:
+            contents = fh.read()
         contents = edit_lambda(contents)
         self.write_wholefile(out_filename, contents)
 

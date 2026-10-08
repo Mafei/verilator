@@ -1,9 +1,9 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008]
   pull_request:
-    branches: [dev/fourstate]
+    branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008]
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,13 +17,16 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
       - name: Install build tools on the cloud runner
         run: brew install autoconf automake help2man lz4
       - name: Build, check dependencies, relocate, and run regressions
         run: bash ci/portable/build.bash macos-arm64
+      - name: Independently verify recorded results
+        if: ${{ !cancelled() && hashFiles('out/regression-results.json') != '' }}
+        run: python3 ci/portable/check_results.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -32,6 +35,7 @@ jobs:
             out/
             logs/
             test_regress/obj_vlt/*/*.log
+            test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
           if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
@@ -39,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
       - name: Build in Rocky Linux 8.10
@@ -70,6 +74,9 @@ jobs:
             cd /tmp
             python3 /source/ci/portable/smoke.py /tmp/relocated/verilator-fourstate/bin/verilator /tmp/model
           '
+      - name: Independently verify recorded results
+        if: ${{ !cancelled() && hashFiles('out/regression-results.json') != '' }}
+        run: python3 ci/portable/check_results.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -79,4 +86,5 @@ jobs:
             logs/
             rocky-image.txt
             test_regress/obj_vlt/*/*.log
+            test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
           if-no-files-found: error
