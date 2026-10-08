@@ -75,6 +75,18 @@ provenance, dependency reports, and checksums. Debug/coverage executables are
 not included. Unpack anywhere and invoke `bin/verilator`; leave `VERILATOR_ROOT`
 unset to use the relocated installation's own runtime files.
 
+The job log prints the optimized compiler's SHA256 immediately after its build.
+After validation it also prints every `out/SHA256SUMS` entry, including the
+portable tar package. The checksum file excludes itself so repeating this step
+does not create a self-referential digest. Debug enum evidence records the raw
+generated identifiers and both raw and normalized SHA256 values for each
+`t_debug_emitv` width dump. Normalization replaces only its eight-digit enum
+type hash, preserving distinct type identities, repeated references and numeric
+suffixes. The raw width dumps remain in the existing artifacts. A cloud checkout
+with those dumps can reproduce the log with
+`python3 ci/portable/log_evidence.py results`; it requires no download token or
+additional toolchain dependency.
+
 CI checks the relocated package by compiling and executing a four-state timing
 model, including a required failure on an unknown comparison. The Linux package
 is tested in a new Rocky 8.10 container with a different installation path.
@@ -94,6 +106,24 @@ exit code and commit provenance
 to agree. A partial group set, skipped tests, retry failures or a mismatched
 commit fail validation. The gate's independent failure fixtures also run with
 macOS Bash 3.2.
+
+The `fourstate-readmem-20261008` candidate preserves those 86 checks and adds
+an independent `readmem` group of 16 checks, for **102 explicitly selected
+checks**. Two new public four-state positive tests target integral memory-file
+loading and address ranges. A runtime-negative driver checks malformed input
+and range diagnostics, while a compile-negative driver checks retained
+unsupported memory types and shapes. Twelve unmodified upstream checks cover
+hexadecimal/binary reading and write/read round trips, wide and aligned elements,
+associative arrays, EOF without a newline, malformed addresses and digits,
+short or missing files, and unsupported associative-array types. These use their
+original sources and goldens. In particular, the historical name
+`t_sys_readmem_4state` denotes a compatibility test of two-state random-reset
+behavior; it is not evidence of preserved X/Z data. The new readmem candidate
+still requires compiler, runtime and portable-platform validation. Its selection
+does not establish support for all memory types or original vendor RAM models.
+Range inputs are committed `.mem` files; the width and runtime-negative drivers
+generate their inputs beneath `TEST_OBJ_DIR`. All drivers retain the forced
+generation option and their independent names, counts and exit-status checks.
 
 | Area | Public regression evidence | Scope and remaining limits |
 | --- | --- | --- |

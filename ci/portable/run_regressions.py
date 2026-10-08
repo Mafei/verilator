@@ -34,6 +34,13 @@ GROUPS = {
         "fourstate_sampled_expr", "fourstate_struct", "fourstate_trace_fst", "fourstate_trace_vcd",
         "fourstate_vpi", "vpi_get", "vpi_get_value_array"
     ],
+    "readmem": [
+        "fourstate_readmem", "fourstate_readmem_bad", "fourstate_readmem_range",
+        "fourstate_readmem_unsup", "sys_readmem", "sys_readmem_4state", "sys_readmem_assoc",
+        "sys_readmem_assoc_bad", "sys_readmem_bad_addr", "sys_readmem_bad_addr2",
+        "sys_readmem_bad_digit", "sys_readmem_bad_end", "sys_readmem_bad_notfound",
+        "sys_readmem_eof", "sys_writemem", "sys_writemem_b"
+    ],
     "upstream": [
         "class_param_enum", "class_static_default_arg", "class_type_param_upcast_chain",
         "debug_emitv", "fork_join_none_any_nested", "fork_join_none_nested_triggered",
