@@ -2956,6 +2956,28 @@ class FourstateVisitor final : public VNVisitor {
         AstVar* const varp = nodep->modVarp();
         if (!(varp->fourstateComplementp() || varp->isFourstateComplement())) {
             if (AstNodeExpr* const exprp = VN_CAST(nodep->exprp(), NodeExpr)) {
+                if (!(VN_IS(exprp, NodeVarRef) || VN_IS(exprp, Const))
+                    && varp->direction().isOutput()) {
+                    // Output lvalues need a procedural statement to own index captures.
+                    // Connect the child to a simple temporary, then copy its output to
+                    // the original lvalue whenever the value or selection changes.
+                    FileLine* const flp = nodep->fileline();
+                    AstVar* const tmpVarp
+                        = new AstVar{flp, VVarType::PORT, m_tmpNames.get(nodep), varp->dtypep()};
+                    tmpVarp->noReset(true);
+                    tmpVarp->lifetime(VLifetime::STATIC_EXPLICIT);
+                    m_modp->addStmtsp(tmpVarp);
+                    AstAlways* const alwaysp
+                        = new AstAlways{flp, VAlwaysKwd::ALWAYS_COMB, nullptr,
+                                        new AstAssign{flp, exprp->unlinkFrBack(),
+                                                      new AstVarRef{flp, tmpVarp, VAccess::READ}}};
+                    m_modp->addStmtsp(alwaysp);
+                    nodep->exprp(new AstVarRef{flp, tmpVarp, VAccess::WRITE});
+                    FourstateLogicTypePropagator{alwaysp};
+                    FourstateLogicTypePropagator{nodep};
+                    iterate(nodep);
+                    return;
+                }
                 const bool exprFourstate = isFourstate(exprp);
                 if (!(needsSplitting(varp->dtypep()) || exprFourstate)) {
                     iterateChildren(nodep);
