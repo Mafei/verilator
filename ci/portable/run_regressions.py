@@ -13,8 +13,9 @@ GROUPS = {
     "amd-repair": [
         "fourstate_blocking_delay",
         "fourstate_cond_scale", "fourstate_drive_buffer", "fourstate_drive_deassign",
-        "fourstate_drive_unsup", "fourstate_negate", "fourstate_negate_mask",
-        "fourstate_packed_index", "fourstate_slice_bounds"
+        "fourstate_drive_unsup", "fourstate_implicit_delay", "fourstate_monitor_postponed",
+        "fourstate_negate", "fourstate_negate_mask", "fourstate_packed_index",
+        "fourstate_slice_bounds", "timing_implicit_delay", "timing_monitor_postponed"
     ],
     "capabilities":
     ["fourstate_mac_model", "fourstate_mem_index", "fourstate_shiftrs", "fourstate_supplies"],
