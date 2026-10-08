@@ -83,6 +83,27 @@ module t;
     #0;
     #1 $monitoron;
     #1 $monitoroff;
+    // Preserve the first 13 checks and 12 monitor lines above. Replacing the
+    // active list while disabled waits for a subsequent $monitoron request.
+    `checkd($time, 14)
+    $monitor("OFF %0t %b %b", $time, source, wide);
+    source = MIXED;
+    wide = WIDE_MIXED;
+    #1;
+    `checkh(source, MIXED)
+    `checkh(wide, WIDE_MIXED)
+    source = MASK_CHANGE;
+    wide = WIDE_CHANGED;
+    #1 $monitoron;
+    #1;
+    `checkh(source, MASK_CHANGE)
+    `checkh(wide, WIDE_CHANGED)
+    $monitoron;
+    #1 $monitoroff;
+    source = 0;
+    wide = 0;
+    #1;
+    `checkd($time, 19)
     $display("Monitor checks: %0d", checks);
     $write("*-* All Finished *-*\n");
     $finish(0);

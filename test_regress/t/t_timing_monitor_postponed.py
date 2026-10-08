@@ -16,7 +16,7 @@ test.execute(
     iv_run_expect_filename=test.golden_filename,
     iv_run_flags=['-N'],
 )
-test.file_grep(test.run_log_filename, r'Monitor checks: (\d+)', 13)
+test.file_grep(test.run_log_filename, r'Monitor checks: (\d+)', 19)
 if test.vlt_all:
-    test.file_grep(test.stats, r'Assertions, postponed monitors\s+(\d+)', 4)
+    test.file_grep(test.stats, r'Assertions, postponed monitors\s+(\d+)', 5)
 test.passes()

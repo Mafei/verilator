@@ -1227,12 +1227,13 @@ class AssertVisitor final : public VNVisitor {
                 = new AstVar{fl, VVarType::MODULETEMP, "__VmonitorPending" + cvtToStr(monNum),
                              nodep->findBitDType()};
             m_modp->addStmtsp(pendingp);
-            // Registration schedules an initial print even if no argument changes.
+            // An enabled registration requests output even if no argument changes.
             AstAssign* const newsetp = new AstAssign{
                 fl, newMonitorNumVarRefp(nodep, VAccess::WRITE), new AstConst{fl, monNum}};
             nodep->replaceWith(newsetp);
-            newsetp->addNextHere(new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
-                                               new AstConst{fl, AstConst::BitTrue{}}});
+            newsetp->addNextHere(
+                new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
+                              new AstLogNot{fl, newMonitorOffVarRefp(nodep, VAccess::READ)}});
             // Argument events only request output. Read their final values after all
             // Active, Inactive and NBA work, and consume one request per time slot.
             if (monSenItemsp) {
