@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 Mafei
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+# Test method names describe the assertions; fixture helpers stay concise.
+# pylint: disable=missing-function-docstring
 """Exercise actual subprocess failures, provenance, logs, and the Bash gate."""
 
 import copy
@@ -23,13 +25,16 @@ GROUPS = run_regressions.GROUPS
 
 
 def summary(count, status="PASSED", extras=""):
+    """Build a completed harness summary for subprocess and log fixtures."""
     return f"==TESTS DONE, {status}: Passed {count}  Failed 0{extras}  Time 0:01\n"
 
 
 class ResultsTest(unittest.TestCase):
+    """Check strict results validation using an isolated Git checkout."""
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
+        # unittest cleanups run even when setUp fails before a test starts.
+        self.temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         for directory in ("logs", "out", "test_regress/t"):
@@ -95,6 +100,14 @@ class ResultsTest(unittest.TestCase):
         self.assertEqual(self.run_fixture(), 0)
         self.assertEqual(sum(result["counts"]["passed"] for result in self.results.values()),
                          sum(map(len, GROUPS.values())))
+        self.verify()
+        # An ordinary cloud checkout has neither build-created output directory.
+        shutil.rmtree(self.root / "logs")
+        shutil.rmtree(self.root / "out")
+        self.assertEqual(self.run_fixture(), 0)
+        self.assertTrue((self.root / "logs").is_dir())
+        self.assertTrue((self.root / "out").is_dir())
+        (self.root / "out/provenance.txt").write_text(self.head + "\n")
         self.verify()
 
     def test_missing_extra_and_empty_groups(self):
@@ -201,6 +214,7 @@ class ResultsTest(unittest.TestCase):
 
 
 class BashGateTest(unittest.TestCase):
+    """Exercise the build's actual shell gate with each failing subprocess."""
 
     def test_build_gate_propagates_smoke_regression_and_checker_failures(self):
         source = (SOURCE_ROOT / "ci/portable/build.bash").read_text()
@@ -235,6 +249,7 @@ python3() {
 
 
 class EnumHashTest(unittest.TestCase):
+    """Ensure enum hash normalization preserves identity and structure."""
 
     @classmethod
     def setUpClass(cls):
@@ -248,6 +263,8 @@ class EnumHashTest(unittest.TestCase):
         errors = []
         test.error_keep_going = errors.append
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            # Isolate the comparison engine without compiler or filesystem setup.
+            # pylint: disable=protected-access
             test._files_identical_reader(io.StringIO(actual),
                                          io.StringIO(expected),
                                          fn1="actual",
@@ -256,6 +273,7 @@ class EnumHashTest(unittest.TestCase):
                                          strip_hex=False,
                                          normalize_enum_hash=normalize,
                                          moretry=False)
+            # pylint: enable=protected-access
         return not errors
 
     def test_only_generated_enum_hash_is_normalized(self):

@@ -11,6 +11,7 @@ from run_regressions import GROUPS, parse_summary, passed_counts
 
 
 def check_results(root):
+    """Require every selected group to agree with its log and build commit."""
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     provenance_lines = (root / "out" / "provenance.txt").read_text().splitlines()
     provenance = provenance_lines[0] if provenance_lines else ""
@@ -24,6 +25,9 @@ def check_results(root):
         if not isinstance(result, dict):
             raise SystemExit("Malformed regression group: " + group)
         counts = result.get("counts")
+        # JSON booleans must not pass integer checks through isinstance(). Keep
+        # the full rejection gate together so its strict requirements are clear.
+        # pylint: disable=too-many-boolean-expressions,unidiomatic-typecheck
         if (not isinstance(counts, dict)
                 or any(type(value) is not int
                        for value in counts.values()) or result.get("commit") != head
@@ -32,6 +36,7 @@ def check_results(root):
                 or result["returncode"] != 0 or result.get("success") is not True
                 or not passed_counts(result.get("summary_status"), counts, len(selected))):
             raise SystemExit("Failed or incomplete regression group: " + group)
+        # pylint: enable=too-many-boolean-expressions,unidiomatic-typecheck
         try:
             status, actual_counts = parse_summary(
                 (root / "logs" / (group + "-regressions.log")).read_text())
@@ -43,6 +48,7 @@ def check_results(root):
 
 
 def main():
+    """Check results in this checkout, reporting missing inputs as failures."""
     root = Path(__file__).resolve().parents[2]
     try:
         check_results(root)
