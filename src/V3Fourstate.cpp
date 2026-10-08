@@ -726,8 +726,8 @@ public:
     struct Driver final {
         AstNodeModule* modulep;
         AstAssignW* assignp;
-        bool whole;
-        bool unknown;
+        bool whole = false;
+        bool unknown = false;
         string reason;
         std::vector<Range> ranges;
     };
