@@ -8,11 +8,27 @@
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
 import os
+import re
 import shutil
 
 import vltest_bootstrap
 
 test.scenarios('vlt_all')
+
+reasons = {
+    1: 'multiple drivers',
+    2: 'write outside a whole continuous assignment',
+    3: 'port or pin writer',
+    4: 'hierarchical writer',
+    5: 'alias',
+    6: 'force or external write access',
+    7: 'assignment delay',
+    8: 'net delay',
+    9: 'explicit drive strength',
+    10: 'force or external write access',
+    11: 'nonlocal or nonpacked variable',
+    12: 'nonlocal or nonpacked variable',
+}
 
 for number in range(1, 13):
     log = f'{test.obj_dir}/case_{number}.log'
@@ -23,6 +39,8 @@ for number in range(1, 13):
     shutil.copyfile(test.obj_dir + '/vlt_compile.log', log)
     test.file_grep_not(log, r'Internal Error|syntax error')
     test.file_grep(log, r'Unsupported: Driven tri0/tri1 net')
+    test.file_grep(log, re.escape(f'with --fourstate: {reasons[number]}.'))
+    test.file_grep(log, r'%Error: Exiting due to (\d+) error\(s\)', 1)
     if not os.path.exists(golden):
         test.copy_if_golden(log, golden)
     test.files_identical(log, golden, is_logfile=True)

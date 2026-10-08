@@ -13,8 +13,10 @@ import vltest_bootstrap
 
 test.scenarios('simulator')
 # Ascending packed ranges are intentional coverage for the same pull semantics.
-test.compile(verilator_flags2=['--binary', '--fourstate', '--trace', '-Wno-FUTURE',
+test.compile(verilator_flags2=['--binary', '--fourstate', '--trace', '--stats', '-Wno-FUTURE',
                               '-Wno-ASCRANGE'])
+if test.vlt_all:
+    test.file_grep(test.stats, r'Fourstate, Implicit pull driver fallbacks\s+(\d+)', 18)
 test.execute(logfile=test.run_log_filename)
 test.file_grep(test.run_log_filename, r'Pull release checks: (\d+)', 4032)
 test.file_grep_not(test.run_log_filename, r'%Error|ERROR:|WARNING:')
