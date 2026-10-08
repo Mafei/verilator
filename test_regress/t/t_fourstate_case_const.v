@@ -85,6 +85,19 @@ module t;
       `checkd(actual, expected);
       test_casex();
       test_casez();
+      // Reverse one-hot cases compare each dynamic four-state item exactly to 1.
+      // X/Z items do not match, and overlapping known items keep source priority.
+      if (selector[0] === 1'b1) expected = 0;
+      else if (selector[1] === 1'b1) expected = 1;
+      else if (selector[2] === 1'b1) expected = 2;
+      else expected = 3;
+      case (1'b1)
+        selector[0]: actual = 0;
+        selector[1]: actual = 1;
+        selector[2]: actual = 2;
+        default: actual = 3;
+      endcase
+      `checkd(actual, expected);
       `checkd(calls, (index + 1) * 4);
     end
     for (int index = 0; index < 8; index++) begin

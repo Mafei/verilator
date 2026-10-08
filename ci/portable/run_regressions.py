@@ -13,10 +13,10 @@ GROUPS = {
     "capabilities":
     ["fourstate_mac_model", "fourstate_mem_index", "fourstate_shiftrs", "fourstate_supplies"],
     "followup": [
-        "fourstate_case", "fourstate_case_const", "fourstate_case_inside", "fourstate_delay",
-        "fourstate_delay_int", "fourstate_demo_json", "fourstate_iface_array", "fourstate_inst",
-        "fourstate_membersel_sideeffect", "fourstate_pull_default", "fourstate_queue2",
-        "fourstate_real_conv", "fourstate_saif_time", "fourstate_trace_saif"
+        "fourstate_case", "fourstate_case_const", "fourstate_case_inside", "fourstate_case_onehot",
+        "fourstate_delay", "fourstate_delay_int", "fourstate_demo_json", "fourstate_iface_array",
+        "fourstate_inst", "fourstate_membersel_sideeffect", "fourstate_pull_default",
+        "fourstate_queue2", "fourstate_real_conv", "fourstate_saif_time", "fourstate_trace_saif"
     ],
     "extended": [
         "fourstate_arithmetics", "fourstate_assign_complex", "fourstate_assign_sel_lhs",

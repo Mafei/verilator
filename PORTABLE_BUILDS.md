@@ -84,9 +84,9 @@ Published artifacts are development snapshots, not releases.
 
 The `fourstate-sv-20261008` candidate adds four capability regressions and
 nineteen inherited four-state regressions to the upstream candidate's 48 checks,
-for 71 explicitly selected checks. The next bounded follow-up adds fourteen
+for 71 explicitly selected checks. The next bounded follow-up adds fifteen
 case, numeric conversion, timing, queue, interface, member, JSON, pull-default
-and SAIF checks, for **85 explicitly selected checks**. Existing checks retain
+and SAIF checks, for **86 explicitly selected checks**. Existing checks retain
 their names. Compiler invocations use `--no-skip-identical` so a prior generated
 model cannot certify a different compiler binary. The result gate requires
 every selected group, its original log, actual test names and counts, process
@@ -104,7 +104,7 @@ macOS Bash 3.2.
 | Supply nets | `t_fourstate_supplies` simulates constant `supply0` and `supply1` vectors. | Constants do not validate drive strengths, pullups/pulldowns, `tri0`/`tri1` or bus contention. |
 | Complex assignment and ports | The inherited complex-assignment and complex-pin tests execute X/Z checks and receiver side-effect assertions. Streaming assignments use a positive runtime test. | General multi-driver, UDP, switch, specify and strength resolution remain limited. Continuous-driver conflict registration remains disabled. |
 | Coverage and activity output | The coverage integration case executes array-input and compound-assignment assertions. The SAIF regressions compare VCD-derived T0/T1/TX/TZ residence times for every bit of their 1-to-301-bit signals and check close-time accounting, after removing a duplicate emitter. | The close operation credits residence time without manufacturing a transition. TC retains the fork's encoded-bit weighting; it is not certified as a physical power-tool transition metric. Unpacked-struct coverage is not certified. |
-| Constant case items | `t_fourstate_case_const` checks ordinary case X/Z equality and constant-item `casex`/`casez` matching, including 7/33/65/95-bit items, first-match order, nested cases and exact selector call counts. | Dynamic wildcard items remain unsupported. |
+| Constant case items | `t_fourstate_case_const` checks ordinary case X/Z equality, dynamic reverse one-hot items and constant-item `casex`/`casez` matching, including 7/33/65/95-bit items, first-match order, nested cases and exact selector call counts. | Dynamic wildcard items remain unsupported. |
 | Numeric conversion and two-state queues | `t_fourstate_real_conv` checks signed known integers, positive unknown-bit coercion, real rounding, `$rtoi`, mixed formatting and call counts. `t_fourstate_queue2` runs integral, bit, class and process queues plus a blocking semaphore schedule. | Four-state queue elements remain unsupported. These tests do not certify signed negative integers containing X/Z. |
 | Integer timing expressions | `t_fourstate_delay_int` runs eight groups with known, mixed-X/Z and all-X/Z integer delays, standalone procedural delays and NBA capture. Its four-state functions execute exactly 16 times and two-state return functions exactly eight times. | Any unknown delay bit makes the delay zero. Zero delays require `--sched-zero-delay`. Blocking intra-assignment delays to split four-state variables and impure net delays are explicitly rejected. Transport/inertial overlap and general SDF semantics are not certified. |
 | Implicit pull defaults and formatting | `t_fourstate_pull_default` runs undriven `tri0`/`tri1` and hierarchy checks plus known single drivers. Expanded hexadecimal formatting checks wide argument pointers and storage-padding exclusion for hex and decimal at 7/33/65/95 bits. | Returning a driven net to Z still fails the reference comparison. Explicit pull primitives, contention and strengths remain unsupported. Reference simulators differ in letter case for partial all-X/Z hexadecimal digits; those added checks accept both cases. |
@@ -152,7 +152,7 @@ when either RAM model fails.
 
 These original-model checks use `--timing` and keep warnings, including ignored
 specify/timing constructs; they certify a functional subset rather than SDF.
-No `XIL_TIMING`, `XIL_XECLIB` or `XIL_DR` macro is enabled. The 85 portable checks
+No `XIL_TIMING`, `XIL_XECLIB` or `XIL_DR` macro is enabled. The 86 portable checks
 are independent minimal regressions; the original-model probe evidence is
 separate and does not imply both portable platforms ran the vendor models.
 A newer Vivado library or exact RFSoC device requires a verified matching source

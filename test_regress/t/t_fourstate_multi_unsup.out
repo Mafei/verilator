@@ -1,8 +1,12 @@
+%Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:65:5: Unsupported: Blocking intra-assignment delay with --fourstate
+                                                    : ... note: In instance 't'
+   65 |     output D;
+      |     ^~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
 %Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:64:5: Unsupported: Variable of type: 'SAMPLEQUEUEDTYPE' with --fourstate
                                                     : ... note: In instance 't'
    64 |     input Q;
       |     ^~~~~
-                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
 %Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:68:9: Unsupported: Variable of type: 'logic$[$]' with --fourstate
                                                     : ... note: In instance 't'
    68 |   logic queue [$];
