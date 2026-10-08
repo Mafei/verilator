@@ -207,16 +207,30 @@ Implicit ANSI and non-ANSI output net declarations receive the same explicit
 nonlocal-target diagnostic as `output wire`. This does not add port resolution,
 bidirectional nets, switch primitives or general strength semantics.
 
+A module input declaration default supplies an unconnected-port fallback. Its
+synthetic static initializer is excluded from contribution counts; real
+continuous and hierarchical writers remain subject to the same audit. Connected
+inputs override that fallback for known, X and Z values.
+
 The pair driver checks all sixteen 0/1/X/Z pairs in both declaration orders and
 four net kinds at 1/7/33/65/95/129 bits: 768 primary checks, plus 384 known/dynamic
 and 768 literal-constant checks. The scalar triple driver checks all 64 input
 combinations in all six declaration orders and four net kinds: 1,536 checks.
 The event driver checks 4,320 values, snapshots, event counts and time/realtime
 observations, plus 476 packet checks at additional 17/24/31/32/63/64-bit storage
-boundaries. Their independent character-table oracle checks 1,328 complete VCD
-histories, including the driven sources. Sixteen compile-negative cases use
-native compiler-generated goldens. A successful simulation completion marker
-does not bypass the value or waveform oracle.
+boundaries. The input-default driver adds 1,296 assertions at the six primary
+widths with omitted, open and connected ports, including mixed X/Z, snapshots,
+events and time/realtime. The four positive drivers total 9,548 runtime assertions
+and 1,430 complete reference VCD histories, including the driven sources.
+Seventeen compile-negative cases use native compiler-generated goldens. A
+successful simulation completion marker does not bypass the value or waveform
+oracle.
+
+The harness emits each short `Self PASSED` record with both line boundaries in
+one native write, below the POSIX minimum atomic pipe-write limit. This prevents
+parallel compiler fragments from swallowing a record. The anchored result parser
+still rejects an embedded marker. Native partial-prefix and competing-writer
+fixtures exercise the real emitter alongside all existing failure controls.
 
 The source histories exposed an inherited trace-activity gap before the first
 suspension of a split coroutine. The bounded trace fix marks activity at entry
