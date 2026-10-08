@@ -83,8 +83,8 @@
 //      LHS = (__Vdly__LHS & __Vdly_Mask__LHS) | (LHS & ~__Vdly_Mask__LHS);
 //      __Vdly_Mask__LHS = '0;
 //
-// "Unique flag" scheme. Used for all variables updated by NBAs
-// in suspendable processees or forks. E.g.:
+// "Unique flag" scheme. Used for target types not handled by dynamic queues
+// in suspendable processes or forks. E.g.:
 //   #1 LHS <= RHS;
 // is converted to:
 //  - In the original logic, replace the AstAssignDelay with:
@@ -108,6 +108,8 @@
 //      __Vdly_CommitQueue__LHS.enqueue(__Vdly_Val__LHS, __Vdly_Dim0__LHS, __Vdly_Dim1__LHS);
 //  - Add new "Post-scheduled" logic:
 //      __Vdly_CommitQueue__LHS.commit(LHS);
+// Packed targets in suspendable processes or forks use the same queues without
+// array indices, preserving every update when the NBA executes repeatedly.
 //
 // TODO: generic LHS scheme as discussed in #5092
 //

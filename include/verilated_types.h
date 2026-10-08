@@ -1956,6 +1956,7 @@ struct VlApplyIndices<N_Rank, N_Rank, T_Target> final {
 //   derived from the bit selects (_[3:1]), which masks the bits that
 //   need to be updated, and additionally the RHS is widened to a full
 //   element size, with the bits inserted into the masked region.
+// Packed targets use rank zero and require no array indices.
 template <typename T_Target,  // Type of the variable this commit queue updates
           bool Partial,  // Whether partial element updates are necessary
           // The following we could figure out from 'T_Target using type traits, but passing
