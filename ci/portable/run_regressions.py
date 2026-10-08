@@ -12,6 +12,7 @@ import sys
 
 
 GROUPS = {
+    "integration": ["fourstate_coverage"],
     "fourstate": """
         fourstate_api fourstate_cond fourstate_countones fourstate_dynarray
         fourstate_format fourstate_format_bin fourstate_format_hex

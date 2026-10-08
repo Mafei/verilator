@@ -7,6 +7,8 @@ Its first parent retains the previously validated `fourstate-portable` commit
 `d565afb615e3393970d6ce030d75df68b594e6b8` as a rollback baseline.
 Cloud validation records the selected names and actual counts for 21 four-state
 regressions and 26 upstream regressions in `out/regression-results.json`.
+An additional four-state coverage compilation checks integration with the
+official declarative toggle-coverage AST node.
 The upstream group covers arithmetic shifts, memories, structures, classes,
 parameters, interfaces, sampled sensitivity, processes, forks and timing.
 
