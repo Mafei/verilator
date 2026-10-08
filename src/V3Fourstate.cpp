@@ -656,6 +656,8 @@ class FourstatePullVisitor final : public VNVisitorConst {
             reject(info, "assignment delay");
         } else if (m_assignp->strengthSpecp()) {
             reject(info, "explicit drive strength");
+        } else if (!m_assignp->rhsp()->isPure()) {
+            reject(info, "impure continuous RHS");
         } else {
             info.assignp = m_assignp;
             info.assignModulep = m_modp;
@@ -1272,8 +1274,7 @@ class FourstateVisitor final : public VNVisitor {
 
     FourstatePair applyImplicitPull(AstNodeExpr* const rhsp, const bool pullup) {
         FileLine* const flp = rhsp->fileline();
-        // Both halves and the Z mask must be sampled before either target half is written.
-        // Generating the halves once also preserves calls with side effects in the RHS.
+        // Generate each half once and snapshot both halves and Z before writing the target.
         AstNodeExpr* const valuep = getOnceExpressionValue(rhsp);
         AstNodeExpr* const xzp = getFourstateExpressionXZ(rhsp);
         // Keep captures distinct across continuous processes; these are not statement-pool temps.
