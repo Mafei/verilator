@@ -95,21 +95,9 @@
 //     end of the whole expression and sometimes in complex expression some of them could be
 //     released earlier - this is the same problem as with registers)
 //
-// - Handles wire conflicts
-//   All AstAssignW are collected then if there is more than one assign to one variable a conflict
-//   resolution is made.
-//   Conflict resolution is made by creating a balanced binary tree and then applying associative
-//   and commutative operation (different for normal conflict resolution different for triand and
-//   different for trior) which resolves the conflict.
-//
-//   Currently there are two things to have in mind when it comes to conflict resolution:
-//    - all assignments are merged under one `always` and if those assignments used an AstVarXRef
-//      then it is unsupported case right now
-//    - Mentioned conflict resolving operations are composed from basic bitwise operations and
-//      currently they are not creating subexpression and temporaries therefore, their complexity
-//      is O(m^log(n)) (where m is count of copies (~2-3) and n is amount of subexpressions (equal
-//      to ~2*(count of assignments in conflict))). However, usually there are only a few
-//      assignments in conflicts so, even though the complexity is bad it is still useable.
+// - Resolves bounded local continuous net drivers using persistent {X/Z, value} packets.
+//   Contributions remain in their original processes. A single combinational resolver snapshots
+//   its result before writing both halves of the resolved net.
 //
 //*************************************************************************
 // FourstateVisitor has a quite elaborate temporary variable system:
@@ -143,8 +131,11 @@
 #include "V3UniqueNames.h"
 #include "V3Unknown.h"
 
+#include <algorithm>
+#include <limits>
 #include <map>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -202,17 +193,6 @@ static bool isFourstate(const AstNodeExpr* const exprp) {
 static bool hasFourstateInSubtree(const AstNodeExpr* const exprp) {
     return getLogicType(exprp) == TWO_STATE_WITH_FOUR_STATE_IN_SUBTREE;
 }
-
-// Trait checking whether instance of type T can be used as an reducer, for assign conflict
-// resolution
-template <typename T, typename = void>
-struct ReducerTrait final : std::false_type {};
-template <typename T>
-struct ReducerTrait<
-    T, std::enable_if_t<std::is_same<decltype(std::declval<T>()(std::declval<FourstatePair>(),
-                                                                std::declval<FourstatePair>())),
-                                     FourstatePair>::value>>
-    final : std::true_type {};
 
 static bool isStaticlyNGte(const V3Number& msb, const AstNodeExpr* const exprp) {
     FileLine* const flp = exprp->fileline();
@@ -734,6 +714,278 @@ public:
     }
 };
 
+// Collect writers before lowering, retaining their original net and selection identities.
+// The early membership query only protects optimization; the later audit checks overlap.
+class FourstateNetDrivers final : public VNVisitorConst {
+public:
+    struct Range final {
+        int64_t lo;
+        int64_t hi;
+        size_t driver;
+    };
+    struct Driver final {
+        AstNodeModule* modulep;
+        AstAssignW* assignp;
+        bool whole;
+        bool unknown;
+        string reason;
+        std::vector<Range> ranges;
+    };
+    struct Net final {
+        AstVar* varp = nullptr;
+        AstNodeModule* modulep = nullptr;
+        std::vector<Driver> drivers;
+        std::map<const AstNode*, size_t> writerIndices;
+    };
+
+private:
+    std::map<AstVar*, Net> m_nets;
+    std::vector<AstVar*> m_varOrder;
+    std::unordered_set<const AstNodeVarRef*> m_recordedRefs;
+    AstNodeModule* m_modp = nullptr;
+    AstNodeAssign* m_assignp = nullptr;
+    const AstNode* m_contextp = nullptr;
+    string m_context;
+    bool m_continuous = false;
+
+    static bool isNet(const AstVar* const varp) {
+        const VVarType kind = varp->varType();
+        return (kind == VVarType::WIRE || kind == VVarType::TRIWIRE || kind == VVarType::TRIOR
+                || kind == VVarType::TRIAND)
+               && varp->dtypep()->skipRefp()->isIntegralOrPacked()
+               && needsSplitting(varp->dtypep());
+    }
+    void record(AstNodeVarRef* const refp, const AstNode* const writerp, const bool known,
+                const int64_t lo, const int width, const bool whole) {
+        AstVar* const varp = refp->varp();
+        if (!isNet(varp)) return;
+        m_recordedRefs.insert(refp);
+        Net& net = m_nets[varp];
+        net.varp = varp;
+        const auto inserted = net.writerIndices.emplace(writerp, net.drivers.size());
+        if (inserted.second) {
+            string reason = m_context;
+            if (reason.empty()) {
+                if (VN_IS(refp, VarXRef)) {
+                    reason = "hierarchical writer";
+                } else if (!VN_IS(m_assignp, AssignW) || !m_continuous) {
+                    reason = "writer outside a continuous assignment";
+                } else if (!whole) {
+                    reason = "partial continuous LHS";
+                }
+            }
+            net.drivers.push_back(
+                Driver{m_modp, VN_CAST(m_assignp, AssignW), whole, false, reason, {}});
+        }
+        Driver& driver = net.drivers[inserted.first->second];
+        const int64_t hi = lo + width - 1;
+        if (!known || width <= 0 || lo < 0 || hi >= varp->width()) {
+            driver.unknown = true;
+        } else {
+            driver.ranges.push_back(Range{lo, hi, inserted.first->second});
+        }
+    }
+    void scanLhs(AstNodeExpr* const exprp, const AstNode* const writerp, const bool known,
+                 const int64_t lo, const int width, const bool whole) {
+        if (AstNodeVarRef* const refp = VN_CAST(exprp, NodeVarRef)) {
+            record(refp, writerp, known, lo, width, whole);
+        } else if (AstSel* const selp = VN_CAST(exprp, Sel)) {
+            const AstConst* const indexp = VN_CAST(selp->lsbp(), Const);
+            const bool fixed = indexp && !indexp->num().isAnyXZ() && indexp->width() <= 32;
+            const int64_t index = fixed ? indexp->toSInt() : 0;
+            scanLhs(selp->fromp(), writerp,
+                    known && fixed && index >= 0
+                        && index + selp->widthConst() <= selp->fromp()->width(),
+                    lo + index, width, false);
+        } else if (AstConcat* const concatp = VN_CAST(exprp, Concat)) {
+            scanLhs(concatp->lhsp(), writerp, known, 0, concatp->lhsp()->width(), false);
+            scanLhs(concatp->rhsp(), writerp, known, 0, concatp->rhsp()->width(), false);
+        }
+        // Unpacked arrays are not resolver targets. Other LHS forms are recorded as unknown
+        // by their WRITE references during the normal visitor walk below.
+    }
+    void visit(AstNodeModule* nodep) override {
+        VL_RESTORER(m_modp);
+        m_modp = nodep;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstVar* nodep) override {
+        if (isNet(nodep)) {
+            Net& net = m_nets[nodep];
+            net.varp = nodep;
+            net.modulep = m_modp;
+            m_varOrder.push_back(nodep);
+            if (nodep->valuep() && !nodep->isConst()) {
+                net.writerIndices.emplace(nodep, net.drivers.size());
+                net.drivers.push_back(
+                    Driver{m_modp, nullptr, false, true, "declaration initializer", {}});
+            }
+        }
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNodeProcedure* nodep) override {
+        VL_RESTORER(m_continuous);
+        const AstAlways* const alwaysp = VN_CAST(nodep, Always);
+        m_continuous = alwaysp && alwaysp->keyword() == VAlwaysKwd::CONT_ASSIGN;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNodeAssign* nodep) override {
+        VL_RESTORER(m_assignp);
+        m_assignp = nodep;
+        scanLhs(nodep->lhsp(), nodep, true, 0, nodep->lhsp()->width(), true);
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNodeVarRef* nodep) override {
+        if (m_recordedRefs.count(nodep) || !nodep->access().isWriteOrRW()) return;
+        const AstNode* const writerp = m_contextp  ? m_contextp
+                                       : m_assignp ? static_cast<AstNode*>(m_assignp)
+                                                   : nodep;
+        record(nodep, writerp, false, 0, nodep->width(), false);
+    }
+    void visit(AstPin* nodep) override {
+        VL_RESTORER(m_contextp);
+        VL_RESTORER_COPY(m_context);
+        m_contextp = nodep;
+        if (AstVar* const formalp = nodep->modVarp()) {
+            if (isNet(formalp) && formalp->direction().isNonOutput()) {
+                Net& net = m_nets[formalp];
+                net.varp = formalp;
+                net.writerIndices.emplace(nodep, net.drivers.size());
+                net.drivers.push_back(
+                    Driver{m_modp, nullptr, false, true, "port or pin writer", {}});
+            }
+            if (formalp->isWritable() && nodep->exprp()) {
+                m_context = "port or pin writer";
+                scanLhs(nodep->exprp(), nodep, false, 0, nodep->exprp()->width(), false);
+            }
+        }
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstAlias* nodep) override {
+        VL_RESTORER(m_contextp);
+        VL_RESTORER_COPY(m_context);
+        m_contextp = nodep;
+        m_context = "alias";
+        for (AstNodeExpr* exprp = nodep->itemsp(); exprp;
+             exprp = VN_AS(exprp->nextp(), NodeExpr)) {
+            scanLhs(exprp, nodep, false, 0, exprp->width(), false);
+        }
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstAliasScope* nodep) override {
+        VL_RESTORER(m_contextp);
+        VL_RESTORER_COPY(m_context);
+        m_contextp = nodep;
+        m_context = "alias";
+        scanLhs(nodep->lhsp(), nodep, false, 0, nodep->lhsp()->width(), false);
+        scanLhs(nodep->rhsp(), nodep, false, 0, nodep->rhsp()->width(), false);
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstRelease* nodep) override {
+        VL_RESTORER(m_contextp);
+        VL_RESTORER_COPY(m_context);
+        m_contextp = nodep;
+        m_context = "force or release";
+        scanLhs(nodep->lhsp(), nodep, false, 0, nodep->lhsp()->width(), false);
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstAssignForce* nodep) override {
+        VL_RESTORER_COPY(m_context);
+        m_context = "force or release";
+        visit(static_cast<AstNodeAssign*>(nodep));
+    }
+    void visit(AstPull* nodep) override {
+        VL_RESTORER(m_contextp);
+        VL_RESTORER_COPY(m_context);
+        m_contextp = nodep;
+        m_context = "explicit pull primitive";
+        scanLhs(nodep->lhsp(), nodep, false, 0, nodep->lhsp()->width(), false);
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
+
+public:
+    explicit FourstateNetDrivers(AstNetlist* const netlistp) { iterateConst(netlistp); }
+    std::set<const AstVar*> multiDrivenNets() const {
+        std::set<const AstVar*> result;
+        for (AstVar* const varp : m_varOrder) {
+            if (m_nets.at(varp).drivers.size() > 1) result.insert(varp);
+        }
+        return result;
+    }
+    static bool overlaps(const Net& net) {
+        if (net.drivers.size() < 2) return false;
+        std::vector<Range> ranges;
+        for (const Driver& driver : net.drivers) {
+            if (driver.unknown) return true;
+            ranges.insert(ranges.end(), driver.ranges.begin(), driver.ranges.end());
+        }
+        std::sort(ranges.begin(), ranges.end(), [](const Range& a, const Range& b) {
+            if (a.lo != b.lo) return a.lo < b.lo;
+            if (a.hi != b.hi) return a.hi < b.hi;
+            return a.driver < b.driver;
+        });
+        int64_t hi = -1;
+        size_t driver = 0;
+        for (const Range& range : ranges) {
+            if (range.lo <= hi && range.driver != driver) return true;
+            if (range.lo > hi || range.hi > hi) {
+                hi = range.hi;
+                driver = range.driver;
+            }
+        }
+        return false;
+    }
+    std::vector<Net> auditedNets() const {
+        std::vector<Net> result;
+        for (AstVar* const varp : m_varOrder) {
+            const Net& net = m_nets.at(varp);
+            if (!overlaps(net)) continue;  // Disjoint partial writers retain their existing path.
+            string reason;
+            if (!VN_IS(net.modulep, Module) || varp->isIO() || varp->isClassMember()
+                || varp->isFuncLocal() || varp->lifetime().isAutomatic()) {
+                reason = "nonlocal target";
+            } else if (varp->isPullup() || varp->isPulldown()) {
+                reason = "implicit pull";
+            } else if (varp->isForced() || varp->isSigUserRWPublic()) {
+                reason = "force or external write access";
+            } else if (varp->delayp()) {
+                reason = "net delay";
+            } else if (varp->hasStrengthAssignment()) {
+                reason = "explicit drive strength";
+            } else if (varp->width() > std::numeric_limits<int>::max() / 2) {
+                reason = "packet width overflow";
+            } else if (net.drivers.size() > 3) {
+                reason = "more than three contributions";
+            }
+            for (const Driver& driver : net.drivers) {
+                if (!reason.empty()) break;
+                if (!driver.reason.empty()) {
+                    reason = driver.reason;
+                } else if (!driver.assignp || !driver.whole || driver.unknown) {
+                    reason = "writer outside a whole continuous assignment";
+                } else if (driver.modulep != net.modulep) {
+                    reason = "nonlocal writer";
+                } else if (driver.assignp->timingControlp()) {
+                    reason = "assignment delay";
+                } else if (driver.assignp->strengthSpecp()) {
+                    reason = "explicit drive strength";
+                } else if (!driver.assignp->rhsp()->isPure()) {
+                    reason = "impure continuous RHS";
+                }
+            }
+            if (reason.empty()) {
+                result.push_back(net);
+            } else {
+                varp->v3warn(E_UNSUPPORTED, "Unsupported: Multiple-driver net "
+                                                << varp->prettyNameQ()
+                                                << " with --fourstate: " << reason << ".");
+            }
+        }
+        return result;
+    }
+};
+
 // Splits AstVar of four-state type into two two-states
 // Transforms four-state logic expressions into two-states
 // Handles AssignW conflict resolution
@@ -811,130 +1063,15 @@ class FourstateVisitor final : public VNVisitor {
         m_pullAssignments;  // Audited whole continuous assignment -> implicit pull value
     uint32_t m_statPullFallbacks = 0;  // Whole continuous implicit-pull drivers lowered
 
-    // Original AstVar* and pair of assignments <value, xz>
-    using NetToAssignWps
-        = std::map<const AstVar*, std::vector<std::pair<AstAssignW*, AstAssignW*>>>;
-    NetToAssignWps m_assignWToTrior;  // Map from variables to their AssignWs
-    NetToAssignWps m_assignWToTriand;  // Map from variables to their AssignWs
-    NetToAssignWps m_assignWToWire;  // Map from variables to their AssignWs
-
-    static FourstatePair triReducer(const FourstatePair& a, const FourstatePair& b) {
-        FileLine* const flp = a.valuep->fileline();
-        FourstatePair result;
-        {
-            // a.value | b.value
-            result.valuep = new AstOr{flp, a.valuep, b.valuep};
-        }
-        {
-            // (a.value & a.xz) | (b.value & b.xz) | (a.xz & b.xz) | (a.value & ~b.value & ~b.xz) |
-            // (b.value & ~a.value & ~a.xz)
-            result.xzp = new AstOr{
-                flp,
-                new AstOr{flp,
-                          new AstOr{flp, new AstAnd{flp, a.valuep->cloneTree(false), a.xzp},
-                                    new AstAnd{flp, b.valuep->cloneTree(false), b.xzp}},
-                          new AstAnd{flp, a.xzp->cloneTree(false), b.xzp->cloneTree(false)}},
-                new AstOr{flp,
-                          new AstAnd{flp,
-                                     new AstAnd{flp, a.valuep->cloneTree(false),
-                                                new AstNot{flp, b.valuep->cloneTree(false)}},
-                                     new AstNot{flp, b.xzp->cloneTree(false)}},
-                          new AstAnd{flp,
-                                     new AstAnd{flp, b.valuep->cloneTree(false),
-                                                new AstNot{flp, a.valuep->cloneTree(false)}},
-                                     new AstNot{flp, a.xzp->cloneTree(false)}}}};
-        }
-        return result;
-    }
-    static FourstatePair triandReducer(const FourstatePair& a, const FourstatePair& b) {
-        FileLine* const flp = a.valuep->fileline();
-        FourstatePair result;
-        {
-            // (a.value & b.xz) | (b.value & a.xz) | (a.value & b.value)
-            result.valuep = new AstOr{
-                flp,
-                new AstOr{flp, new AstAnd{flp, a.valuep, b.xzp}, new AstAnd{flp, b.valuep, a.xzp}},
-                new AstAnd{flp, a.valuep->cloneTree(false), b.valuep->cloneTree(false)}};
-        }
-        {
-            // (a.xz & b.xz) | (a.value & b.value & a.xz) | (a.value & b.value & b.xz)
-            result.xzp = new AstOr{
-                flp,
-                new AstOr{flp, new AstAnd{flp, a.xzp->cloneTree(false), b.xzp->cloneTree(false)},
-                          new AstAnd{flp,
-                                     new AstAnd{flp, a.valuep->cloneTree(false),
-                                                b.valuep->cloneTree(false)},
-                                     b.xzp->cloneTree(false)}},
-                new AstAnd{flp,
-                           new AstAnd{flp, a.valuep->cloneTree(false), b.valuep->cloneTree(false)},
-                           b.xzp->cloneTree(false)}};
-        }
-        return result;
-    }
-    static FourstatePair triorReducer(const FourstatePair& a, const FourstatePair& b) {
-        FileLine* const flp = a.valuep->fileline();
-        FourstatePair result;
-        {
-            // a.value | b.value
-            result.valuep = new AstOr{flp, a.valuep, b.valuep};
-        }
-        {
-            // (a.value | b.xz) & (b.value | a.xz) & (a.xz | ~a.value) & (b.xz | ~b.value)
-            result.xzp
-                = new AstAnd{flp,
-                             new AstAnd{flp, new AstOr{flp, a.valuep->cloneTree(false), b.xzp},
-                                        new AstOr{flp, b.valuep->cloneTree(false), a.xzp}},
-                             new AstAnd{flp,
-                                        new AstOr{flp, a.xzp->cloneTree(false),
-                                                  new AstNot{flp, a.valuep->cloneTree(false)}},
-                                        new AstOr{flp, b.xzp->cloneTree(false),
-                                                  new AstNot{flp, b.valuep->cloneTree(false)}}}};
-        }
-        return result;
-    }
-
-    template <typename Reducer_T>
-    static FourstatePair buildTree(std::vector<FourstatePair> exprps, Reducer_T&& reducer) {
-        static_assert(ReducerTrait<Reducer_T>::value, "Reducer_T shall fullfill reducer trait");
-        while (exprps.size() > 1) {
-            const size_t halfSize = exprps.size() / 2;
-            for (size_t i = 0; i < halfSize; ++i) {
-                exprps[i] = reducer(exprps[i], exprps.back());
-                exprps.pop_back();
-            }
-        }
-        return exprps[0];
-    }
-    template <typename Reducer_T>
-    static void triorTriandReduce(const NetToAssignWps& assignWs, Reducer_T&& reducer) {
-        for (const auto& pair : assignWs) {
-            const auto& assignps = pair.second;
-            if (assignps.size() < 2) continue;
-            std::vector<FourstatePair> exprps;
-            exprps.reserve(assignps.size());
-            for (const auto& assignp : assignps) {
-                exprps.push_back({assignp.first->rhsp()->unlinkFrBack(),
-                                  assignp.second->rhsp()->unlinkFrBack()});
-                const AstVarXRef* xRefp = nullptr;
-                if (exprps.back().valuep->exists([&xRefp](const AstVarXRef* const refp) {
-                        xRefp = refp;
-                        return true;
-                    })) {
-                    // The issue is when hierarchical reference is being moved to another module.
-                    // Then it shall be fixed
-                    xRefp->v3warn(E_UNSUPPORTED,
-                                  "Unsupported: Hierarchical references with --fourstate");
-                }
-            }
-            FourstatePair result = buildTree(std::move(exprps), reducer);
-            assignps[0].first->rhsp(result.valuep);
-            assignps[0].second->rhsp(result.xzp);
-            for (size_t i = 1; i < assignps.size(); ++i) {
-                assignps[i].first->unlinkFrBack()->deleteTree();
-                assignps[i].second->unlinkFrBack()->deleteTree();
-            }
-        }
-    }
+    struct ResolvedNet final {
+        FourstateNetDrivers::Net net;
+        std::vector<AstVar*> slots;
+    };
+    std::vector<ResolvedNet> m_resolvedNets;  // Declaration/driver traversal order
+    std::map<const AstNodeAssign*, AstVar*> m_driverSlots;  // Original assignment -> packet
+    V3UniqueNames m_resolverNames{"__VfourstateDriver"};
+    uint32_t m_statResolvedNets = 0;
+    uint32_t m_statDriverSlots = 0;
 
     static AstConst* createZeroOrOnesp(const AstNodeExpr* const exprp, const bool ones = false) {
         AstConst* const resultp
@@ -984,35 +1121,6 @@ class FourstateVisitor final : public VNVisitor {
             return subDtype;
         }
         return {true, false};
-    }
-
-    void assignWConflictResolution(AstVar* const varp, AstAssignW* const assignwValuep,
-                                   AstAssignW* const assignwXzp) {
-        // Assignments to different things are unsupported
-        switch (varp->varType()) {
-        case VVarType::TRIOR:
-            m_assignWToTrior[varp].emplace_back(assignwValuep, assignwXzp);
-            break;
-        case VVarType::TRIAND:
-            m_assignWToTriand[varp].emplace_back(assignwValuep, assignwXzp);
-            break;
-        case VVarType::VAR:
-        case VVarType::TRIWIRE:
-        case VVarType::PORT:  // The issue with ports is that we lose information about the wire
-                              // type (tri/triand/trior)
-        case VVarType::WIRE: m_assignWToWire[varp].emplace_back(assignwValuep, assignwXzp); break;
-        case VVarType::SUPPLY0:
-        case VVarType::SUPPLY1:
-        case VVarType::TRI0:
-        case VVarType::TRI1:
-            varp->v3warn(E_UNSUPPORTED,
-                         "Unsupported: supply0/tri0 and supply1/tri1 with --fourstate");
-            break;
-        default:  // LCOV_EXCL_LINE
-            assignwValuep->v3fatalSrc(
-                "Unexpected variable type on lhs of assign: " << varp->varType().ascii());
-            break;
-        }
     }
 
     struct TmpVarsReleaser final {
@@ -1131,6 +1239,155 @@ class FourstateVisitor final : public VNVisitor {
         v3Global.rootp()->typeTablep()->addTypesp(resultp);
         dtypep->user1p(resultp);
         return resultp;
+    }
+
+    AstVar* newResolverVar(AstNodeModule* const modp, AstVar* const targetp, const string& suffix,
+                           const int width) {
+        AstVar* const varp
+            = new AstVar{targetp->fileline(), VVarType::MODULETEMP,
+                         m_resolverNames.get(targetp->name() + suffix), VFlagBitPacked{}, width};
+        varp->trace(false);
+        varp->noSubst(true);
+        modp->addStmtsp(varp);
+        return varp;
+    }
+
+    static AstNodeExpr* newPacketPart(AstVar* const packetp, const bool xz) {
+        const int width = packetp->width() / 2;
+        AstSel* const selp = new AstSel{packetp->fileline(),
+                                        new AstVarRef{packetp->fileline(), packetp, VAccess::READ},
+                                        xz ? width : 0, width};
+        selp->dtypeSetBitSized(width, VSigning::UNSIGNED);
+        return selp;
+    }
+
+    void prepareDrivers(const std::vector<FourstateNetDrivers::Net>& nets) {
+        AstNodeModule* modp = nullptr;
+        for (const FourstateNetDrivers::Net& net : nets) {
+            if (modp != net.modulep) {
+                modp = net.modulep;
+                m_resolverNames.reset();
+            }
+            ResolvedNet resolved{net, {}};
+            const int width = net.varp->width();
+            for (const FourstateNetDrivers::Driver& driver : net.drivers) {
+                AstVar* const slotp = newResolverVar(modp, net.varp, "_slot", 2 * width);
+                // Explicit full-width initialization also covers QData packets. This is not a
+                // constant variable: subsequent activations retain each contribution's value.
+                AstConst* const zp
+                    = new AstConst{slotp->fileline(), AstConst::DTyped{}, slotp->dtypep()};
+                zp->num().opSetRange(width, width, 1);
+                zp->dtypep(slotp->dtypep());
+                modp->addStmtsp(new AstInitial{
+                    slotp->fileline(),
+                    new AstAssign{slotp->fileline(),
+                                  new AstVarRef{slotp->fileline(), slotp, VAccess::WRITE}, zp}});
+                resolved.slots.push_back(slotp);
+                m_driverSlots.emplace(driver.assignp, slotp);
+                ++m_statDriverSlots;
+            }
+            m_resolvedNets.push_back(std::move(resolved));
+        }
+    }
+
+    AstAssign* lowerDriver(AstNodeAssign* const assignp, AstVar* const slotp) {
+        AstNodeExpr* const rhsp = assignp->rhsp();
+        // Preserve RHS identity across both getters: four-state function references cache one
+        // call and its two result parts. The packet is the contribution's only persistent write.
+        AstNodeExpr* const valuep = getOnceExpressionValue(rhsp);
+        AstNodeExpr* const xzp = getFourstateExpressionXZ(rhsp, true);
+        AstConcat* const packetp = new AstConcat{assignp->fileline(), xzp, valuep};
+        packetp->dtypep(slotp->dtypep());
+        // A normal assignment stays in the original CONT_ASSIGN process. Retaining AssignW
+        // here would allow a later constAssignW pass to hoist constant packets beside Initial Z.
+        AstAssign* const newp
+            = new AstAssign{assignp->fileline(),
+                            new AstVarRef{assignp->fileline(), slotp, VAccess::WRITE}, packetp};
+        assignp->replaceWith(newp);
+        pushDeletep(assignp);
+        { FourstateLogicTypePropagator{newp}; }
+        return newp;
+    }
+
+    void emitResolver(const ResolvedNet& resolved) {
+        AstVar* const targetp = resolved.net.varp;
+        AstNodeModule* const modp = resolved.net.modulep;
+        FileLine* const flp = targetp->fileline();
+        const int width = targetp->width();
+        AstVar* const any0p = newResolverVar(modp, targetp, "_any0", width);
+        AstVar* const any1p = newResolverVar(modp, targetp, "_any1", width);
+        AstVar* const anyXp = newResolverVar(modp, targetp, "_anyX", width);
+        AstVar* const allZp = newResolverVar(modp, targetp, "_allZ", width);
+        AstVar* const unknownp = newResolverVar(modp, targetp, "_unknown", width);
+        AstVar* const resultp = newResolverVar(modp, targetp, "_result", 2 * width);
+        const auto ref
+            = [flp](AstVar* const varp) { return new AstVarRef{flp, varp, VAccess::READ}; };
+        AstAlways* const procp = new AstAlways{flp, VAlwaysKwd::CONT_ASSIGN, nullptr};
+        const auto append = [procp, flp](AstVar* const varp, AstNodeExpr* const exprp) {
+            procp->addStmtsp(new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE}, exprp});
+        };
+        // Bits in each contribution are 0, 1, X=(1,1), or Z=(0,1). Keep summaries linear in the
+        // number of drivers and use fresh storage owned only by this resolver process.
+        bool first = true;
+        for (AstVar* const slotp : resolved.slots) {
+            AstNodeExpr* zerop = new AstAnd{flp, new AstNot{flp, newPacketPart(slotp, false)},
+                                            new AstNot{flp, newPacketPart(slotp, true)}};
+            AstNodeExpr* onep = new AstAnd{flp, newPacketPart(slotp, false),
+                                           new AstNot{flp, newPacketPart(slotp, true)}};
+            AstNodeExpr* xp
+                = new AstAnd{flp, newPacketPart(slotp, false), newPacketPart(slotp, true)};
+            AstNodeExpr* zp = new AstAnd{flp, new AstNot{flp, newPacketPart(slotp, false)},
+                                         newPacketPart(slotp, true)};
+            if (!first) {
+                zerop = new AstOr{flp, ref(any0p), zerop};
+                onep = new AstOr{flp, ref(any1p), onep};
+                xp = new AstOr{flp, ref(anyXp), xp};
+                zp = new AstAnd{flp, ref(allZp), zp};
+            }
+            append(any0p, zerop);
+            append(any1p, onep);
+            append(anyXp, xp);
+            append(allZp, zp);
+            first = false;
+        }
+        AstNodeExpr* unresolvedp = ref(anyXp);
+        AstNodeExpr* valuep = nullptr;
+        if (targetp->varType() == VVarType::TRIOR) {
+            unresolvedp = new AstAnd{flp, unresolvedp, new AstNot{flp, ref(any1p)}};
+            append(unknownp, unresolvedp);
+            valuep = new AstOr{flp, ref(any1p), ref(unknownp)};
+        } else if (targetp->varType() == VVarType::TRIAND) {
+            unresolvedp = new AstAnd{flp, unresolvedp, new AstNot{flp, ref(any0p)}};
+            append(unknownp, unresolvedp);
+            valuep = new AstOr{flp, new AstAnd{flp, ref(any1p), new AstNot{flp, ref(any0p)}},
+                               ref(unknownp)};
+        } else {
+            unresolvedp = new AstOr{flp, unresolvedp, new AstAnd{flp, ref(any0p), ref(any1p)}};
+            append(unknownp, unresolvedp);
+            valuep = new AstOr{flp, ref(any1p), ref(unknownp)};
+        }
+        AstConcat* const packetp
+            = new AstConcat{flp, new AstOr{flp, ref(allZp), ref(unknownp)}, valuep};
+        packetp->dtypep(resultp->dtypep());
+        append(resultp, packetp);
+        // The local packet WRITE connects both target writes through V3Split. Merely sharing
+        // external contribution READs would let its pure-input optimization separate them.
+        append(getValuePartVarp(targetp), newPacketPart(resultp, false));
+        append(getSplittedXZ(targetp), newPacketPart(resultp, true));
+        modp->addStmtsp(procp);
+        { FourstateLogicTypePropagator{procp}; }
+        ++m_statResolvedNets;
+    }
+
+    void emitResolvers() {
+        AstNodeModule* modp = nullptr;
+        for (const ResolvedNet& resolved : m_resolvedNets) {
+            if (modp != resolved.net.modulep) {
+                modp = resolved.net.modulep;
+                m_resolverNames.reset();
+            }
+            emitResolver(resolved);
+        }
     }
 
     void splitVar(AstVar* const varp) {
@@ -2844,6 +3101,15 @@ class FourstateVisitor final : public VNVisitor {
     }
 
     void visit(AstNodeAssign* const nodep) override {
+        if (const auto it = m_driverSlots.find(nodep); it != m_driverSlots.end()) {
+            // Independent continuous processes cannot share statement-pool temporaries.
+            // Destroy the statement helper before restoring the outer module's pool.
+            VL_RESTORER_CLEAR(m_tmpUnusedVarps);
+            StmtHelper stmtHelper{*this, nodep};
+            AstAssign* const newp = lowerDriver(nodep, it->second);
+            iterateChildren(newp);
+            return;
+        }
         StmtHelper stmtHelper{*this, nodep};
         if (AstDelay* const delayp = VN_CAST(nodep->timingControlp(), Delay)) {
             if (VN_IS(nodep, AssignW)
@@ -2888,32 +3154,6 @@ class FourstateVisitor final : public VNVisitor {
                 nodep->rhsp(newRhsp);
                 nodep->dtypeFrom(newLhsp);
             }
-            // if (AstAssignW* const assignWValuep = VN_CAST(nodep, AssignW)) {
-            //     while (lhsp) {
-            //         if (const AstSel* const selp = VN_CAST(lhsp, Sel)) {
-            //             lhsp = selp->fromp();
-            //         } else if (const AstArraySel* const aselp = VN_CAST(lhsp, ArraySel)) {
-            //             lhsp = aselp->fromp();
-            //         } else if (const AstSliceSel* const sselp = VN_CAST(lhsp, SliceSel)) {
-            //             lhsp = sselp->fromp();
-            //         } else {
-            //             break;
-            //         }
-            //     }
-            //     if (const AstNodeVarRef* const lhsVarRefp = VN_CAST(lhsp, NodeVarRef)) {
-            //         assignWConflictResolution(lhsVarRefp->varp(), assignWValuep,
-            //                                   VN_AS(assignXZp, AssignW));
-            //         if (const AstNode* const timingControlp = assignWValuep->timingControlp()) {
-            //             timingControlp->v3warn(
-            //                 E_UNSUPPORTED,
-            //                 "Continuous assignment delays are unsupported with --fourstate");
-            //         }
-            //     } else {
-            //         nodep->v3warn(E_UNSUPPORTED,
-            //                       "Fourstate LHS other than a simple variable or select "
-            //                       "reference is not supported with continuous assignment");
-            //     }
-            // }
         } else if (isFourstate(nodep->rhsp())) {
             AstNodeExpr* const newRhsp = getTwoStateCast(nodep->rhsp());
             pushDeletep(nodep->rhsp()->unlinkFrBack());
@@ -3883,14 +4123,17 @@ public:
         , m_fourstateGeneratorValueVisitor{*this}
         , m_fourstateGeneratorXZVisitor{*this} {
         m_pullAssignments = FourstatePullVisitor::collect(netlistp);
+        const std::vector<FourstateNetDrivers::Net> nets
+            = FourstateNetDrivers{netlistp}.auditedNets();
         V3Error::abortIfErrors();
+        prepareDrivers(nets);
         { FourstateLogicTypePropagator{netlistp}; }
         iterate(netlistp);
         m_pullAssignments.clear();  // Original assignment pointers are no longer needed.
         V3Error::abortIfErrors();
-        triorTriandReduce(m_assignWToTriand, triandReducer);
-        triorTriandReduce(m_assignWToTrior, triorReducer);
-        triorTriandReduce(m_assignWToWire, triReducer);
+        emitResolvers();
+        m_driverSlots.clear();
+        m_resolvedNets.clear();  // Clear original-node keys before deferred deletion.
         V3Error::abortIfErrors();
         // Split variables are obsolete. Audit only their lowered replacements, including
         // parameter initializers. Keep the originals alive until deferred deletion so
@@ -3914,6 +4157,8 @@ public:
     }
     ~FourstateVisitor() override {
         V3Stats::addStat("Fourstate, Implicit pull driver fallbacks", m_statPullFallbacks);
+        V3Stats::addStat("Fourstate, Resolved nets", m_statResolvedNets);
+        V3Stats::addStat("Fourstate, Persistent driver packets", m_statDriverSlots);
     }
 };
 
@@ -3922,4 +4167,8 @@ void V3Fourstate::fourstateAll(AstNetlist* netlistp) {
     { FourstateVisitor{netlistp}; }
     v3Global.setFourstateHandled();
     V3Global::dumpCheckGlobalTree("fourstate", 0, dumpTreeEitherLevel() >= 6);
+}
+
+std::set<const AstVar*> V3Fourstate::collectMultiDrivenNets(AstNetlist* const netlistp) {
+    return FourstateNetDrivers{netlistp}.multiDrivenNets();
 }

@@ -28,6 +28,7 @@
 #include "V3Const.h"
 
 #include "V3Ast.h"
+#include "V3Fourstate.h"
 #include "V3Global.h"
 #include "V3Simulate.h"
 #include "V3Stats.h"
@@ -940,6 +941,7 @@ class ConstVisitor final : public VNVisitor {
 
     // STATE
     VNIdAllocator m_ids;  // Node id allocator
+    std::unordered_set<size_t> m_fourstateMultiDrivenIds;  // Nets protected from constant hoisting
     bool m_params = false;  // If true, propagate parameterized and true numbers only
     bool m_required = false;  // If true, must become a constant
     bool m_wremove = true;  // Inside scope, no assignw removal
@@ -3713,7 +3715,8 @@ class ConstVisitor final : public VNVisitor {
             && !varrefp->varp()->valuep()  // Not already constified
             && !varrefp->varScopep()  // Not scoped (or each scope may have different initial val.)
             && !varrefp->varp()->isForced()  // Not forced (not really a constant)
-        ) {
+            && (!v3Global.opt.fourstate()
+                || !m_fourstateMultiDrivenIds.count(m_ids(varrefp->varp())))) {
             // ASSIGNW (VARREF, const) -> INITIAL ( ASSIGN (VARREF, const) )
             UINFO(4, "constAssignW " << nodep);
             // Make a initial assignment
@@ -4724,6 +4727,13 @@ public:
 
     AstNode* mainAcceptEdit(AstNode* nodep) {
         VIsCached::clearCacheTree();  // Avoid using any stale isPure
+        if (m_globalPass && m_doV && !m_params && v3Global.opt.fourstate()) {
+            if (AstNetlist* const netlistp = VN_CAST(nodep, Netlist)) {
+                for (const AstVar* const varp : V3Fourstate::collectMultiDrivenNets(netlistp)) {
+                    m_fourstateMultiDrivenIds.insert(m_ids(const_cast<AstVar*>(varp)));
+                }
+            }
+        }
         // Operate starting at a random place
         return iterateSubtreeReturnEdits(nodep);
     }
