@@ -383,11 +383,10 @@ class DelayedVisitor final : public VNVisitor {
         // scheduled logic), so need not error
         // A release's synthetic write must retain the overridden value immediately. Keep
         // mixed usage for the masked NBA scheme, but do not diagnose it as user comb logic.
-        blkRefs.erase(std::remove_if(blkRefs.begin(), blkRefs.end(),
-                                     [](const Ref& ref) {
-                                         return ref.m_inNonComb || ref.m_forceRetention;
-                                     }),
-                      blkRefs.end());
+        blkRefs.erase(
+            std::remove_if(blkRefs.begin(), blkRefs.end(),
+                           [](const Ref& ref) { return ref.m_inNonComb || ref.m_forceRetention; }),
+            blkRefs.end());
 
         // If nothing left, then we need not error
         if (blkRefs.empty()) return true;
