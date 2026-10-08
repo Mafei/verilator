@@ -1,5 +1,15 @@
 # Experimental four-state builds
 
+The `fourstate-upstream-20261008` branch additionally merges the official
+`verilator/verilator` master commit
+`4a2989705657d506d50dee5772bc17b3f689d9d5`, retrieved on 2026-10-08 UTC.
+Its first parent retains the previously validated `fourstate-portable` commit
+`d565afb615e3393970d6ce030d75df68b594e6b8` as a rollback baseline.
+Cloud validation records the selected names and actual counts for 21 four-state
+regressions and 26 upstream regressions in `out/regression-results.json`.
+The upstream group covers arithmetic shifts, memories, structures, classes,
+parameters, interfaces, sampled sensitivity, processes, forks and timing.
+
 This fork starts from Antmicro `dev/fourstate` at
 `dbb8aedaa478389639295e40f16dbc7183d10b48` and merges
 `feature/4_state_logic` at `5e132f32db577b3d596b66ce6378ac224ffa38d3`.
@@ -16,8 +26,9 @@ independently squashed copies, without changing Git ancestry.
 - Adopt feature's temporary ownership handling, top-level port metadata,
   64-bit trace comparison fixes, corrected VCD X/Z encoding, new FST writer,
   and its newer upstream compiler/runtime changes.
-- Keep the dev policy disabling continuous-driver conflict resolution for
-  complex assignments. Bus contention remains an experimental limitation.
+- Continuous-driver conflict registration is currently disabled, including
+  simple nets. Bus contention and drive-strength resolution remain experimental
+  limitations and require explicit semantic tests before they can be enabled.
 - Route paired public variables through residual VPI registration rather than
   the newer value-only table; preserve X/Z comparisons in value callbacks.
 - Preserve dev four-state test fixtures and feature generic JSON fixtures.

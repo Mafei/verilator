@@ -14,7 +14,6 @@
 
 import re
 import sys
-import platform
 
 for line in sys.stdin:
     # Fix flex 2.6.1 warning
@@ -48,7 +47,4 @@ for line in sys.stdin:
     line = re.sub(r'(#line \d+ ".*)_pretmp', r'\1', line)
     # Fix 'register' storage class specifier is deprecated and incompatible with C++17
     line = re.sub(r'register ', '', line)
-    # Experiment build selects GNU Flex 2.6.4 and its matching header.
-    # Keep GNU int signatures; the OS version does not describe this header.
-
     print(line, end='')

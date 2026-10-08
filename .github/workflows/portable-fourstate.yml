@@ -1,9 +1,9 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008]
   pull_request:
-    branches: [dev/fourstate]
+    branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008]
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
       - name: Install build tools on the cloud runner
@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'fourstate-portable' || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
       - name: Build in Rocky Linux 8.10
