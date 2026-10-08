@@ -9,6 +9,10 @@
 `define checkh(gotv, expv) do if ((gotv) !== (expv)) begin $write("%%Error: %s:%0d: got=%b expected=%b\n", `__FILE__, `__LINE__, (gotv), (expv)); `stop; end while (0);
 // verilog_format: on
 
+class ram_holder;
+  logic [6:0] words [0:1];
+endclass
+
 module t;
   typedef logic [31:0] index_t;
   logic [6:0] memory [3:1];
@@ -26,6 +30,13 @@ module t;
   int unsigned two_state_index;
   bit [31:0] index_calls = 0;
   bit [31:0] rhs_calls = 0;
+  bit [31:0] holder_calls = 0;
+  ram_holder holder = new;
+
+  function automatic ram_holder selected_holder();
+    holder_calls = holder_calls + 1;
+    return holder;
+  endfunction
 
   function automatic index_t selected_index();
     index_calls = index_calls + 1;
@@ -160,6 +171,27 @@ module t;
     `checkh(memory[1], 7'h11);
     `checkh(memory[2], 7'b10xz010);
     `checkh(memory[3], 7'h33);
+
+    // Class member arrays share the packed member's write-access semantics.
+    holder.words[0] = 7'h11;
+    holder.words[1] = 7'h22;
+    zero_index = 32'd1;
+    holder_calls = 0;
+    selected_holder().words[zero_index] = 7'b10xz010;
+    `checkh(holder_calls, 32'd1);
+    `checkh(holder.words[1], 7'b10xz010);
+    zero_index = 'x;
+    holder_calls = 0;
+    rhs_calls = 0;
+    selected_holder().words[zero_index] = rhs_value();
+    `checkh(holder_calls, 32'd1);
+    `checkh(rhs_calls, 32'd1);
+    `checkh(holder.words[0], 7'h11);
+    `checkh(holder.words[1], 7'b10xz010);
+    holder_calls = 0;
+    data = selected_holder().words[zero_index];
+    `checkh(holder_calls, 32'd1);
+    `checkh(data, 7'bxxxxxxx);
     $write("*-* All Finished *-*\n");
     $finish;
   end

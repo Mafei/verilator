@@ -1195,8 +1195,11 @@ class FourstateVisitor final : public VNVisitor {
         }();
         const ArrayIndexCapture& capture = getArrayIndexCapture(selp);
         AstNodeExpr* indexp = newArrayIndexValue(selp, capture);
-        const AstNodeVarRef* const basep = VN_CAST(selp->fromp()->baseFromp(true), NodeVarRef);
-        const bool lvalue = basep && basep->access().isWriteOrRW();
+        const AstNode* const basep = selp->fromp()->baseFromp(false);
+        const AstNodeVarRef* const varrefp = VN_CAST(basep, NodeVarRef);
+        const AstMemberSel* const memberSelp = VN_CAST(basep, MemberSel);
+        const bool lvalue = (varrefp && varrefp->access().isWriteOrRW())
+                            || (memberSelp && memberSelp->access().isWriteOrRW());
         const bool leaf = isIntegralArrayElement(selp);
         if (lvalue || !leaf) {
             AstConst* const invalidp
