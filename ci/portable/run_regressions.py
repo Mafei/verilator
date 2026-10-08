@@ -13,7 +13,7 @@ GROUPS = {
     "amd-repair": [
         "fourstate_cond_scale", "fourstate_drive_buffer", "fourstate_drive_deassign",
         "fourstate_drive_unsup", "fourstate_negate", "fourstate_negate_mask",
-        "fourstate_packed_index"
+        "fourstate_packed_index", "fourstate_slice_bounds"
     ],
     "capabilities":
     ["fourstate_mac_model", "fourstate_mem_index", "fourstate_shiftrs", "fourstate_supplies"],
