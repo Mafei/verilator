@@ -1092,7 +1092,51 @@ public:
         iterateConst(nodep->filenamep());
         puts(");\n");
     }
+    void emitReadMemBound(const AstNodeExpr* boundp) {
+        if (!boundp) {
+            puts("false, 0ULL, true, false");
+            return;
+        }
+        const AstFourstateExpr* const pairp = VN_AS(boundp, FourstateExpr);
+        puts("true, ");
+        iterateConst(pairp->valuep());
+        putbs(", (0ULL == ");
+        iterateConst(pairp->xzp());
+        puts(")");
+        putbs(pairp->isSigned() ? ", true" : ", false");
+    }
+    void emitReadMemFourstate(const AstNodeReadWriteMem* nodep, const AstReadMemPair* pairp) {
+        UASSERT_OBJ(VN_IS(nodep, ReadMem), nodep, "Only readmem owns paired memory storage");
+        const AstUnpackArrayDType* const arrayp
+            = VN_AS(pairp->dtypep()->skipRefp(), UnpackArrayDType);
+        const AstReadMemFile* const filep = VN_CAST(nodep->filenamep(), ReadMemFile);
+        putns(nodep, "VL_READMEM_FOURSTATE_N(");
+        puts(nodep->isHex() ? "true" : "false");
+        putbs(", " + cvtToStr(arrayp->subDTypep()->widthMin()));
+        putbs(", " + cvtToStr(arrayp->lo()));
+        putbs(", ");
+        iterateConst(filep ? filep->filenamep() : nodep->filenamep());
+        putbs(", ");
+        iterateConst(pairp->valuep());
+        putbs(", ");
+        iterateConst(pairp->xzp());
+        putbs(", ");
+        emitReadMemBound(nodep->lsbp());
+        putbs(", ");
+        emitReadMemBound(nodep->msbp());
+        putbs(", ");
+        if (filep) {
+            iterateConst(filep->knownp());
+        } else {
+            puts("true");
+        }
+        puts(");\n");
+    }
     void visit(AstNodeReadWriteMem* nodep) override {
+        if (const AstReadMemPair* const pairp = VN_CAST(nodep->memp(), ReadMemPair)) {
+            emitReadMemFourstate(nodep, pairp);
+            return;
+        }
         putns(nodep, nodep->cFuncPrefixp());
         puts("N(");
         puts(nodep->isHex() ? "true" : "false");

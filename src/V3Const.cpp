@@ -2027,6 +2027,11 @@ class ConstVisitor final : public VNVisitor {
         oldp->replaceWithKeepDType(newp);
         VL_DO_DANGLING(pushDeletep(oldp), oldp);
     }
+    bool operandPackedStringKnown(AstCvtPackString* const nodep) const {
+        // Four-state filenames need their original X/Z bits until readmem validates them.
+        // V3Number::toString only accepts known packed data.
+        return !v3Global.opt.fourstate() || !VN_AS(nodep->lhsp(), Const)->num().isAnyXZ();
+    }
     //----------------------------------------
     // Replacement functions.
     // These all take a node and replace it with something else
@@ -4403,10 +4408,11 @@ class ConstVisitor final : public VNVisitor {
     TREEOPS("AstCond{$condp.isZero}",           "replaceWIteratedThs(nodep)");
     TREEOPS("AstCond{$condp.isNeqZero}",        "replaceWIteratedRhs(nodep)");
     TREEOP ("AstCond{$condp.castNot, $thenp, $elsep}", "AstCond{$condp->castNot()->lhsp(), $elsep, $thenp}");
-    TREEOP ("AstCond{$condp.width1, $thenp.width1, $thenp.isAllOnes, $elsep}", "AstLogOr {$condp, $elsep}");  // a?1:b == a||b
-    TREEOP ("AstCond{$condp.width1, $thenp.width1, $thenp, $elsep.isZero, !$elsep.isClassHandleValue}", "AstLogAnd{$condp, $thenp}");  // a?b:0 == a&&b
-    TREEOP ("AstCond{$condp.width1, $thenp.width1, $thenp, $elsep.isAllOnes}", "AstLogOr {AstNot{$condp}, $thenp}");  // a?b:1 == ~a||b
-    TREEOP ("AstCond{$condp.width1, $thenp.width1, $thenp.isZero, !$thenp.isClassHandleValue, $elsep}", "AstLogAnd{AstNot{$condp}, $elsep}");  // a?0:b == ~a&&b
+    // A selected Z branch remains Z, whereas logical operators convert it to X.
+    TREEOP ("AstCond{!v3Global.opt.fourstate(), $condp.width1, $thenp.width1, $thenp.isAllOnes, $elsep}", "AstLogOr {$condp, $elsep}");  // a?1:b == a||b
+    TREEOP ("AstCond{!v3Global.opt.fourstate(), $condp.width1, $thenp.width1, $thenp, $elsep.isZero, !$elsep.isClassHandleValue}", "AstLogAnd{$condp, $thenp}");  // a?b:0 == a&&b
+    TREEOP ("AstCond{!v3Global.opt.fourstate(), $condp.width1, $thenp.width1, $thenp, $elsep.isAllOnes}", "AstLogOr {AstNot{$condp}, $thenp}");  // a?b:1 == ~a||b
+    TREEOP ("AstCond{!v3Global.opt.fourstate(), $condp.width1, $thenp.width1, $thenp.isZero, !$thenp.isClassHandleValue, $elsep}", "AstLogAnd{AstNot{$condp}, $elsep}");  // a?0:b == ~a&&b
     TREEOP ("AstCond{!$condp.width1, operandBoolShift(nodep->condp())}", "replaceBoolShift(nodep->condp())");
     // Prefer constants on left, since that often needs a shift, it lets
     // constant red remove the shift
@@ -4617,7 +4623,7 @@ class ConstVisitor final : public VNVisitor {
     // Strings
     TREEOPA("AstPutcN{$lhsp.castConst, $rhsp.castConst, $thsp.castConst}",  "replaceConst(nodep)");
     TREEOPA("AstSubstrN{$lhsp.castConst, $rhsp.castConst, $thsp.castConst}",  "replaceConst(nodep)");
-    TREEOPA("AstCvtPackString{$lhsp.castConst}", "replaceConstString(nodep, VN_AS(nodep->lhsp(), Const)->num().toString())");
+    TREEOPA("AstCvtPackString{$lhsp.castConst, operandPackedStringKnown(nodep)}", "replaceConstString(nodep, VN_AS(nodep->lhsp(), Const)->num().toString())");
     TREEOP ("AstToStringN{DISABLE_BASE}", "DONE");  // Avoid uniop(const); use matchToStringNConst
     TREEOP ("AstToStringN{matchToStringNConst(nodep)}", "DONE");
     // Custom
