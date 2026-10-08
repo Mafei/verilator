@@ -1,6 +1,6 @@
-%Error-UNSUPPORTED: t/t_fourstate_pull_release_unsup.v:81:61: Unsupported: Driven tri0/tri1 net 'pulled' with --fourstate: nonlocal or nonpacked variable.
+%Error-UNSUPPORTED: t/t_fourstate_pull_release_unsup.v:92:61: Unsupported: Driven tri0/tri1 net 'pulled' with --fourstate: nonlocal or nonpacked variable.
                                                             : ... note: In instance 't.child'
-   81 | module pull_port(input wire [6:0] source, output tri1 [6:0] pulled);
+   92 | module pull_port(input wire [6:0] source, output tri1 [6:0] pulled);
       |                                                             ^~~~~~
                     ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
 %Error: Exiting due to

@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_pull_release_unsup.v:68:14: Unsupported: Driven tri0/tri1 net 'pulled' with --fourstate: force or external write access.
+                                                            : ... note: In instance 't'
+   68 |   tri1 [6:0] pulled /*verilator public_flat_rw*/  /**/;
+      |              ^~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

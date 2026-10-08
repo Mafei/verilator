@@ -1,6 +1,6 @@
-%Error-UNSUPPORTED: t/t_fourstate_pull_release_unsup.v:78:14: Unsupported: Driven tri0/tri1 net 'pulled' with --fourstate: hierarchical writer.
+%Error-UNSUPPORTED: t/t_fourstate_pull_release_unsup.v:89:14: Unsupported: Driven tri0/tri1 net 'pulled' with --fourstate: hierarchical writer.
                                                             : ... note: In instance 't.child'
-   78 |   tri0 [6:0] pulled;
+   89 |   tri0 [6:0] pulled;
       |              ^~~~~~
                     ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
 %Error: Exiting due to

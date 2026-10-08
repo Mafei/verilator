@@ -56,6 +56,17 @@ module t;
 `elsif PULL_CASE_12
   tri0 [6:0] pulled [0:1];
   assign pulled[0] = source;
+`elsif PULL_CASE_13
+  bit [31:0] calls = 0;
+  function automatic logic [6:0] counted(input logic [6:0] value);
+    calls++;
+    return value;
+  endfunction
+  tri1 [6:0] pulled;
+  assign pulled = counted(source);
+`elsif PULL_CASE_14
+  tri1 [6:0] pulled /* verilator public_flat_rw */;
+  assign pulled = source;
 `else
   initial $fatal(1, "Select one PULL_CASE for the unsupported test");
 `endif
