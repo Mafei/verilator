@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 Mafei
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+# Test method names describe the assertions; fixture helpers stay concise.
+# pylint: disable=missing-function-docstring
 """Exercise actual subprocess failures, provenance, logs, and the Bash gate."""
 
 import copy
@@ -23,13 +25,30 @@ GROUPS = run_regressions.GROUPS
 
 
 def summary(count, status="PASSED", extras=""):
+    """Build a completed harness summary for subprocess and log fixtures."""
     return f"==TESTS DONE, {status}: Passed {count}  Failed 0{extras}  Time 0:01\n"
 
 
+def pass_records(names):
+    """Build individual harness pass records separately from summary counts."""
+    return "".join("vlt/t_" + name + ": Self PASSED\n" for name in names)
+
+
+def incorrect_name_logs(names):
+    """Keep a green summary while omitting, substituting or repeating names."""
+    return [
+        pass_records(actual) + summary(len(names))
+        for actual in ([], names[:-1], [*names[:-1], "unselected_fixture"], [*names, names[0]],
+                       [*names[:-1], names[0]])
+    ]
+
+
 class ResultsTest(unittest.TestCase):
+    """Check strict results validation using an isolated Git checkout."""
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
+        # unittest cleanups run even when setUp fails before a test starts.
+        self.temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         for directory in ("logs", "out", "test_regress/t"):
@@ -57,8 +76,18 @@ class ResultsTest(unittest.TestCase):
                 "summary_status": "PASSED",
                 "success": True
             }
-            self.log(group).write_text(summary(count))
-            self.config["t/t_" + names[0] + ".py"] = {"output": summary(count), "returncode": 0}
+            output = pass_records(names) + summary(count)
+            self.log(group).write_text(output)
+            self.config["t/t_" + names[0] + ".py"] = {
+                "arguments": [
+                    "--vlt", "-j2", "--no-skip-identical",
+                    *["t/t_" + name + ".py" for name in names]
+                ],
+                "output":
+                output,
+                "returncode":
+                0
+            }
             for name in names:
                 (self.root / "test_regress/t" / ("t_" + name + ".py")).touch()
         # These processes really exit with the selected status, just as the
@@ -69,6 +98,9 @@ class ResultsTest(unittest.TestCase):
             "config = json.loads(Path('fixture-config.json').read_text())\n"
             "driver = next(arg for arg in sys.argv[1:] if arg.startswith('t/'))\n"
             "result = config[driver]\n"
+            "if sys.argv[1:] != result['arguments']:\n"
+            "    print('Unexpected regression driver arguments: ' + repr(sys.argv[1:]))\n"
+            "    sys.exit(98)\n"
             "print(result['output'], end='')\n"
             "sys.exit(result['returncode'])\n")
 
@@ -95,6 +127,31 @@ class ResultsTest(unittest.TestCase):
         self.assertEqual(self.run_fixture(), 0)
         self.assertEqual(sum(result["counts"]["passed"] for result in self.results.values()),
                          sum(map(len, GROUPS.values())))
+        self.verify()
+        # Parallel harness completion order need not match selection order.
+        first = "t/t_" + GROUPS["upstream"][0] + ".py"
+        original = copy.deepcopy(self.config[first])
+        self.config[first]["output"] = pass_records(list(reversed(GROUPS["upstream"]))) + summary(
+            len(GROUPS["upstream"]))
+        self.assertEqual(self.run_fixture(), 0)
+        self.verify()
+        # The real fake-driver subprocess also rejects a wrong full argv.
+        arguments = original["arguments"]
+        for wrong in ([arg for arg in arguments if arg != "--no-skip-identical"], arguments[:-1],
+                      [*arguments[:3], *reversed(arguments[3:])]):
+            with self.subTest(arguments=wrong):
+                self.config[first]["arguments"] = wrong
+                self.assertEqual(self.run_fixture(), 1)
+                self.assertEqual(self.results["upstream"]["returncode"], 98)
+                self.rejected()
+        self.config[first] = original
+        # An ordinary cloud checkout has neither build-created output directory.
+        shutil.rmtree(self.root / "logs")
+        shutil.rmtree(self.root / "out")
+        self.assertEqual(self.run_fixture(), 0)
+        self.assertTrue((self.root / "logs").is_dir())
+        self.assertTrue((self.root / "out").is_dir())
+        (self.root / "out/provenance.txt").write_text(self.head + "\n")
         self.verify()
 
     def test_missing_extra_and_empty_groups(self):
@@ -161,15 +218,24 @@ class ResultsTest(unittest.TestCase):
                 self.rejected()
 
     def test_actual_logs_override_recorded_success(self):
-        count = len(GROUPS["upstream"])
-        for output in (summary(count - 1), summary(count,
-                                                   "FAILED"), summary(count) + summary(count),
-                       "No final summary\n", summary(count, extras="  Skipped 1")):
-            with self.subTest(output=output):
-                self.log("upstream").write_text(output)
-                self.rejected()
-        self.log("upstream").unlink()
-        self.rejected()
+        groups = ["upstream"] + (["followup"] if "followup" in GROUPS else [])
+        for group in groups:
+            names = GROUPS[group]
+            count = len(names)
+            prefix = pass_records(names)
+            outputs = [
+                prefix + output
+                for output in (summary(count - 1), summary(count, "FAILED"),
+                               summary(count) + summary(count), "No final summary\n",
+                               summary(count, extras="  Skipped 1"))
+            ]
+            for output in outputs + incorrect_name_logs(names):
+                with self.subTest(group=group, output=output):
+                    self.log(group).write_text(output)
+                    self.rejected()
+            self.log(group).unlink()
+            self.rejected()
+            self.log(group).write_text(prefix + summary(count))
 
     def test_subprocess_nonzero_despite_green_summary(self):
         self.config["t/t_" + GROUPS["fourstate"][0] + ".py"]["returncode"] = 7
@@ -181,32 +247,61 @@ class ResultsTest(unittest.TestCase):
         self.rejected()
 
     def test_zero_exit_does_not_hide_failed_or_partial_summary(self):
-        first = "t/t_" + GROUPS["fourstate"][0] + ".py"
-        count = len(GROUPS["fourstate"])
-        for output in (summary(count, "FAILED"), summary(count - 1),
-                       summary(count,
-                               extras="  Failed-First 1"), summary(count, extras="  Skipped 1"),
-                       summary(count, extras="  Left 1"), summary(count, extras="  Running 1"),
-                       summary(count) + summary(count), "No final summary\n"):
-            with self.subTest(output=output):
-                self.config[first]["output"] = output
-                self.assertEqual(self.run_fixture(), 1)
-                self.assertFalse(self.results["fourstate"]["success"])
-                self.rejected()
+        groups = ["fourstate"] + (["followup"] if "followup" in GROUPS else [])
+        for group in groups:
+            names = GROUPS[group]
+            first = "t/t_" + names[0] + ".py"
+            original = self.config[first]["output"]
+            count = len(names)
+            prefix = pass_records(names)
+            outputs = [
+                prefix + output
+                for output in (summary(count, "FAILED"), summary(count - 1),
+                               summary(count, extras="  Failed-First 1"),
+                               summary(count, extras="  Skipped 1"),
+                               summary(count, extras="  Left 1"),
+                               summary(count, extras="  Running 1"),
+                               summary(count) + summary(count), "No final summary\n")
+            ]
+            for output in outputs + incorrect_name_logs(names):
+                with self.subTest(group=group, output=output):
+                    self.config[first]["output"] = output
+                    self.assertEqual(self.run_fixture(), 1)
+                    self.assertEqual(self.results[group]["returncode"], 0)
+                    self.assertFalse(self.results[group]["success"])
+                    self.rejected()
+            self.config[first]["output"] = original
 
     def test_invalid_group_selection(self):
         for groups in ([], ["unknown"], ["fourstate", "fourstate"]):
             with self.subTest(groups=groups), self.assertRaises(ValueError):
                 run_regressions.run_groups(self.root, groups)
+        original = GROUPS["upstream"]
+        for duplicate in (original[0], GROUPS["fourstate"][0]):
+            with self.subTest(duplicate=duplicate):
+                GROUPS["upstream"] = [*original, duplicate]
+                try:
+                    with self.assertRaisesRegex(ValueError, "duplicate test names"):
+                        run_regressions.run_groups(self.root, list(GROUPS))
+                    with self.assertRaisesRegex(SystemExit, "duplicate test names"):
+                        self.verify()
+                finally:
+                    GROUPS["upstream"] = original
 
 
 class BashGateTest(unittest.TestCase):
+    """Exercise the build's actual shell gate with each failing subprocess."""
 
     def test_build_gate_propagates_smoke_regression_and_checker_failures(self):
         source = (SOURCE_ROOT / "ci/portable/build.bash").read_text()
         smoke = source[source.index("    smoke_status=0\n"):source.index("\nfi\n# The harness")]
         gate = source[source.index("regress_status=0\n"):source.
                       index("\npython3 - <<'PY'\nimport hashlib,pathlib")]
+        command = next(line for line in gate.splitlines()
+                       if line.startswith("python3 ci/portable/run_regressions.py "))
+        selected = command.split(" || ", 1)[0].split()[2:]
+        self.assertEqual(len(selected), len(set(selected)))
+        self.assertEqual(set(selected), set(GROUPS))
         shell = os.environ.get("BASH_BIN") or shutil.which("bash")
         version = subprocess.check_output([shell, "--version"], text=True).splitlines()[0]
         print("Validation gate shell: " + version)
@@ -235,6 +330,7 @@ python3() {
 
 
 class EnumHashTest(unittest.TestCase):
+    """Ensure enum hash normalization preserves identity and structure."""
 
     @classmethod
     def setUpClass(cls):
@@ -248,6 +344,8 @@ class EnumHashTest(unittest.TestCase):
         errors = []
         test.error_keep_going = errors.append
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            # Isolate the comparison engine without compiler or filesystem setup.
+            # pylint: disable=protected-access
             test._files_identical_reader(io.StringIO(actual),
                                          io.StringIO(expected),
                                          fn1="actual",
@@ -256,6 +354,7 @@ class EnumHashTest(unittest.TestCase):
                                          strip_hex=False,
                                          normalize_enum_hash=normalize,
                                          moretry=False)
+            # pylint: enable=protected-access
         return not errors
 
     def test_only_generated_enum_hash_is_normalized(self):

@@ -4,32 +4,45 @@
 """Run explicit cloud regression groups and record their actual test counts."""
 
 import json
-import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 GROUPS = {
+    "capabilities":
+    ["fourstate_mac_model", "fourstate_mem_index", "fourstate_shiftrs", "fourstate_supplies"],
+    "followup": [
+        "fourstate_case", "fourstate_case_const", "fourstate_case_inside", "fourstate_case_onehot",
+        "fourstate_delay", "fourstate_delay_int", "fourstate_demo_json", "fourstate_iface_array",
+        "fourstate_inst", "fourstate_membersel_sideeffect", "fourstate_pull_default",
+        "fourstate_queue2", "fourstate_real_conv", "fourstate_saif_time", "fourstate_trace_saif"
+    ],
+    "extended": [
+        "fourstate_arithmetics", "fourstate_assign_complex", "fourstate_assign_sel_lhs",
+        "fourstate_comparison", "fourstate_complex_pin", "fourstate_concat", "fourstate_countbits",
+        "fourstate_eqwild", "fourstate_event_detection", "fourstate_extend", "fourstate_logand",
+        "fourstate_logor", "fourstate_neqwild", "fourstate_redand", "fourstate_redor",
+        "fourstate_redxor", "fourstate_replicate", "fourstate_sel", "fourstate_shift"
+    ],
     "integration": ["fourstate_coverage"],
-    "fourstate": """
-        fourstate_api fourstate_cond fourstate_countones fourstate_dynarray
-        fourstate_format fourstate_format_bin fourstate_format_hex
-        fourstate_format_octal fourstate_isunknown fourstate_lognot
-        fourstate_modport fourstate_noapi fourstate_packed_array
-        fourstate_portable fourstate_sampled_expr fourstate_struct
-        fourstate_trace_fst fourstate_trace_vcd fourstate_vpi vpi_get
-        vpi_get_value_array
-    """.split(),
-    "upstream": """
-        class_param_enum class_static_default_arg class_type_param_upcast_chain
-        debug_emitv fork_join_none_any_nested fork_join_none_nested_triggered
-        inst_array_partial inst_sv math_shift math_shift_extend math_shiftls
-        math_shiftrs mem mem_fifo mem_multi_io param_array param_shift param_type
-        paramgraph_iface_template_mismatch process_kill sampled_sensitivity
-        struct_pat struct_unpacked_clean struct_unpacked_init_param
-        timing_always timing_intra_assign_func
-    """.split(),
+    "fourstate": [
+        "fourstate_api", "fourstate_cond", "fourstate_countones", "fourstate_dynarray",
+        "fourstate_format", "fourstate_format_bin", "fourstate_format_hex",
+        "fourstate_format_octal", "fourstate_isunknown", "fourstate_lognot", "fourstate_modport",
+        "fourstate_noapi", "fourstate_packed_array", "fourstate_portable",
+        "fourstate_sampled_expr", "fourstate_struct", "fourstate_trace_fst", "fourstate_trace_vcd",
+        "fourstate_vpi", "vpi_get", "vpi_get_value_array"
+    ],
+    "upstream": [
+        "class_param_enum", "class_static_default_arg", "class_type_param_upcast_chain",
+        "debug_emitv", "fork_join_none_any_nested", "fork_join_none_nested_triggered",
+        "inst_array_partial", "inst_sv", "math_shift", "math_shift_extend", "math_shiftls",
+        "math_shiftrs", "mem", "mem_fifo", "mem_multi_io", "param_array", "param_shift",
+        "param_type", "paramgraph_iface_template_mismatch", "process_kill", "sampled_sensitivity",
+        "struct_pat", "struct_unpacked_clean", "struct_unpacked_init_param", "timing_always",
+        "timing_intra_assign_func"
+    ]
 }
 
 
@@ -49,17 +62,31 @@ def parse_summary(log_text):
 
 
 def passed_counts(status, counts, expected):
+    """Accept only a completed selection with no failures or skipped tests."""
     return (status == "PASSED" and counts.get("passed") == expected and counts.get("failed") == 0
             and all(
                 counts.get(key, 0) == 0 for key in ("failed-first", "skipped", "left", "running")))
 
 
-def run_groups(root, groups):
+def passed_names(log_text, selected):
+    """Require one actual harness pass record for each selected driver."""
+    actual = re.findall(r"^vlt/(t_[A-Za-z0-9_]+): Self PASSED$", log_text, re.MULTILINE)
+    expected = {"t_" + name for name in selected}
+    return len(actual) == len(selected) == len(set(actual)) and set(actual) == expected
+
+
+# Keep per-group execution, exit status, and result recording together for auditing.
+def run_groups(root, groups):  # pylint: disable=too-many-locals
     """Record every selected group even when an earlier subprocess fails."""
     if not groups or len(set(groups)) != len(groups) or any(group not in GROUPS
                                                             for group in groups):
         raise ValueError("Select distinct, known regression groups")
+    selected = [name for group in groups for name in GROUPS[group]]
+    if len(selected) != len(set(selected)):
+        raise ValueError("Regression groups select duplicate test names")
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    for directory in ("logs", "out"):
+        (root / directory).mkdir(exist_ok=True)
     results = {}
     failed = False
     for group in groups:
@@ -68,13 +95,13 @@ def run_groups(root, groups):
         for driver in drivers:
             if not (root / "test_regress" / driver).is_file():
                 raise FileNotFoundError(driver)
-        command = [sys.executable, "driver.py", "--vlt", "-j2", *drivers]
-        with (root / "logs" / (group + "-regressions.log")).open("w") as log:
-            process = subprocess.Popen(command,
-                                       cwd=root / "test_regress",
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.STDOUT,
-                                       text=True)
+        command = [sys.executable, "driver.py", "--vlt", "-j2", "--no-skip-identical", *drivers]
+        with (root / "logs" / (group + "-regressions.log")).open("w") as log, subprocess.Popen(
+                command,
+                cwd=root / "test_regress",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True) as process:
             for line in process.stdout:
                 log.write(line)
                 print(line, end="", flush=True)
@@ -86,7 +113,8 @@ def run_groups(root, groups):
             status, counts = parse_summary(log_text)
         except ValueError as error:
             print(group + ": " + str(error), file=sys.stderr)
-        passed = returncode == 0 and passed_counts(status, counts, len(names))
+        passed = (returncode == 0 and passed_counts(status, counts, len(names))
+                  and passed_names(log_text, names))
         results[group] = {
             "commit": head,
             "selected": names,
@@ -102,8 +130,7 @@ def run_groups(root, groups):
 
 
 def main():
-    if os.environ.get("GITHUB_ACTIONS") != "true":
-        raise SystemExit("Run regressions in GitHub Actions")
+    """Run the named regression groups in this checkout."""
     root = Path(__file__).resolve().parents[2]
     try:
         return run_groups(root, sys.argv[1:])

@@ -360,6 +360,7 @@ void EmitCFunc::displayNode(AstNode* nodep, AstSFormatF* fmtp,  // fmtp is nullp
                 nodep);  // This has to be done here because streamR doesn't know what it returns
         else if (const AstFourstateExpr* const fourstate = VN_CAST(subargp, FourstateExpr)) {
             iterateConst(fourstate->valuep());
+            if (!addrof) emitDatap(fourstate->valuep());
             if (addrof) {
                 puts("), &(");
             } else {

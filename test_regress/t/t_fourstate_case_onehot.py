@@ -9,12 +9,12 @@
 
 import vltest_bootstrap
 
-test.scenarios('linter')
+test.scenarios('simulator')
 
-test.top_filename = 't/t_inst_sv.v'
+test.top_filename = 't/t_case_onehot.v'
 
-test.lint(verilator_flags2=['--fourstate', '-Wno-FUTURE'],
-          fails=True,
-          expect_filename=test.golden_filename)
+test.compile(verilator_flags2=['--fourstate', '-Wno-FUTURE', '-Wno-LOGICCAST'])
+
+test.execute()
 
 test.passes()

@@ -13,4 +13,6 @@ test.scenarios('simulator')
 
 test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE'])
 
+test.execute()
+
 test.passes()

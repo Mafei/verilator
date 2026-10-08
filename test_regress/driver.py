@@ -2487,7 +2487,7 @@ class VlTest:
                 break
 
     def _files_identical_try(self, fn1: str, fn2: str, is_logfile: bool, strip_hex: bool,
-                             normalize_enum_hash: bool, moretry: bool) -> bool:
+                             moretry: bool, *, normalize_enum_hash: bool) -> bool:
         # If moretry, then return true to try again
         try:
             f1 = open(  # pylint: disable=consider-using-with
@@ -2521,7 +2521,8 @@ class VlTest:
         return again
 
     def _files_identical_reader(self, f1, f2, fn1: str, fn2: str, is_logfile: bool,
-                                strip_hex: bool, normalize_enum_hash: bool, moretry: bool) -> bool:
+                                strip_hex: bool, moretry: bool, *,
+                                normalize_enum_hash: bool) -> bool:
         # If moretry, then return true to try again
         l1s = f1.readlines()
         l2s = f2.readlines() if f2 else []

@@ -1,0 +1,26 @@
+%Error-UNSUPPORTED: t/t_fourstate_delay_expr_unsup.v:11:14: Unsupported: Impure net delay expression with --fourstate
+                                                          : ... note: In instance 't'
+   11 |   wire [6:0] #(delay_value()) delayed = source;
+      |              ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error-UNSUPPORTED: t/t_fourstate_delay_expr_unsup.v:13:14: Unsupported: Impure net delay expression with --fourstate
+                                                          : ... note: In instance 't'
+   13 |   wire [6:0] #(two_state_delay()) delayed_two_state = source;
+      |              ^
+%Error-UNSUPPORTED: t/t_fourstate_delay_expr_unsup.v:15:14: Unsupported: Impure net delay expression with --fourstate
+                                                          : ... note: In instance 't'
+   15 |   wire [6:0] #(two_state_delay()) separate;
+      |              ^
+%Error-UNSUPPORTED: t/t_fourstate_delay_expr_unsup.v:18:14: Unsupported: Impure net delay expression with --fourstate
+                                                          : ... note: In instance 't'
+   18 |   wire [6:0] #(2, two_state_delay()) falling = source;
+      |              ^
+%Error-UNSUPPORTED: t/t_fourstate_delay_expr_unsup.v:19:14: Unsupported: Impure net delay expression with --fourstate
+                                                          : ... note: In instance 't'
+   19 |   wire [6:0] #(2, delay_value()) separate_falling;
+      |              ^
+%Error-UNSUPPORTED: t/t_fourstate_delay_expr_unsup.v:34:12: Unsupported: Blocking intra-assignment delay with --fourstate
+                                                          : ... note: In instance 't'
+   34 |     target = #(2) source;
+      |            ^
+%Error: Exiting due to
