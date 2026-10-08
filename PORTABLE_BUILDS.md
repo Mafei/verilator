@@ -118,12 +118,56 @@ associative arrays, EOF without a newline, malformed addresses and digits,
 short or missing files, and unsupported associative-array types. These use their
 original sources and goldens. In particular, the historical name
 `t_sys_readmem_4state` denotes a compatibility test of two-state random-reset
-behavior; it is not evidence of preserved X/Z data. The new readmem candidate
-still requires compiler, runtime and portable-platform validation. Its selection
-does not establish support for all memory types or original vendor RAM models.
+behavior; it is not evidence of preserved X/Z data. The readmem checkpoint
+passed all 102 selected checks on Linux cloud, macOS ARM64 and Rocky Linux
+8.10 at `0ae4471d1bd0db9c0b1cdf31a500b66f8502615a`. That checkpoint remains
+preserved. This selection does not establish support for all memory types or
+original vendor RAM models.
 Range inputs are committed `.mem` files; the width and runtime-negative drivers
 generate their inputs beneath `TEST_OBJ_DIR`. All drivers retain the forced
 generation option and their independent names, counts and exit-status checks.
+
+The `fourstate-nba-20261008` candidate retains all 102 checks and adds
+an independent `nba` group with 23 executable checks, for **125 explicitly
+selected checks**. Nineteen unchanged upstream drivers exercise delayed
+assignments, dynamic and deep array references, packed partial updates,
+forks, waits and disable-fork behavior. Two new independent drivers compare
+two-state and four-state delayed packed updates at 7/33/65/95/129 bits, including
+RHS/index side effects, repeated clocks, nested forks, word-boundary selects and
+same-writer ordering. They check execution counts, values, update times and
+eleven exact VCD histories per driver. A third new driver independently checks
+packed-vector change events, X/Z-only changes, repeated values, mixed sensitivity
+and LSB edge controls. An independent time-observer test uses blocking updates
+without NBA queues and checks `$time` and fractional `$realtime` event bodies.
+The original readmem checks and failure-propagation gate remain part of the
+same selection.
+
+The delayed NBA loss also reproduces with an actual optimized build of the
+unmodified official `4a2989705657d506d50dee5772bc17b3f689d9d5` baseline.
+It is not introduced by the four-state integration. The bounded fix captures
+each delayed assignment's RHS and target before its asynchronous fork, using
+the existing by-value coroutine remapping, then preserves each pending packed
+update in the existing commit queue. Zero-dimensional queues use standard
+`std::array`, including strict C++14 builds; unpacked-array queues keep their
+existing behavior. The fix does not certify arbitrary class targets, clocking
+blocks or all NBA ordering cases. The separate, open upstream
+[PR 8488](https://github.com/verilator/verilator/pull/8488) addresses a broader
+NBA scope and remains a follow-up candidate rather than an automatically merged
+dependency.
+
+Original RAM probes also exposed an inherited four-state packed-vector event
+defect: change detection inspected only bit zero. The bounded event fix reduces
+all value/XZ bit differences for change sensitivity. `posedge`, `negedge` and
+both-edge controls retain their LSB behavior. This event fix does not implement
+continuous-driver resolution or driven-Z pull fallback.
+
+An additional inherited optimization defect moved an explicit change-sensitive
+process with a time-only body into initialization. It reproduces with blocking
+updates and no NBA queue, in both two-state and four-state builds. The bounded
+fix keeps explicit event sensitivity when the body reads `$time` or `$realtime`;
+it retains their existing purity classification in other compiler passes.
+Non-inlined temporal helper functions and broader implicit sensitivity remain
+outside the listed direct-observer checks.
 
 The four-state file reader keeps X and Z distinct, masks unused storage bits,
 zero-extends short words, truncates oversized words with a warning, preserves
@@ -197,14 +241,22 @@ original `RAMB18E2` and `RAMB36E2` fail compilation because their retained
 INIT-file branches use `$readmemh` on a four-state unpacked memory, even when
 the functional probe selects an empty INIT file. Their unchanged reference
 probes run initialization, parity, write-first, unknown-address recovery and
-synchronous reset checks. A passing public memory regression does not replace
-this original-model gap. The readmem candidate must rerun both unchanged models,
-`glbl` and the bounded `DSP48E2` profile, and additionally exercise actual
-`INIT_FILE` loading for both RAM models. Public INIT fixtures include known, X,
-Z and parity bits. Internal memory checks distinguish stored Z from a subsequent
-model output expression that converts Z to X. Completion markers, runtime exits
-and selected waveform samples must all agree with the independent reference.
-The six-profile probe exits nonzero when any profile fails.
+synchronous reset checks. The preserved readmem checkpoint compiles all six
+profiles but only `glbl` and the bounded DSP profile finish: both RAMs lose their
+delayed initialization updates. The official two-state baseline reproduces that
+NBA loss with an independent public program.
+
+The bounded NBA candidate also repairs an inherited packed-vector change-event
+defect, exposed after RAM initialization began to work. Its Linux cloud probe
+then completes all six unchanged profiles: `glbl`, combinational `DSP48E2`,
+`RAMB18E2` and `RAMB36E2` each with an empty or actual INIT file. Compilation,
+model builds and runtime exits are zero, with one completion marker per profile.
+All **92 selected VCD samples** match the independent Icarus reference: 15 for
+`glbl`, five for DSP, 12 for each empty-file RAM and 24 for each actual-file RAM.
+The latter include known, X, Z and parity bits. Internal memory checks distinguish
+stored Z from a subsequent model output expression that converts Z to X.
+Original vendor sources, public testbenches, fixtures and expectations remain
+unchanged. The six-profile probe exits nonzero when any profile fails.
 
 These original-model checks use `--timing` and keep warnings, including ignored
 specify/timing constructs; they certify a functional subset rather than SDF.
