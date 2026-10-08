@@ -1,0 +1,30 @@
+%Error-UNSUPPORTED: t/t_fourstate_readmem_unsup.v:23:5: Unsupported: Four-state $readmem into automatic, aliased, port or forceable memory.
+                                                      : ... note: In instance 't'
+   23 |     $readmemh("t/t_fourstate_readmem_2h.mem", local_mem);
+      |     ^~~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error-UNSUPPORTED: t/t_fourstate_readmem_unsup.v:27:5: Unsupported: Four-state $readmem address wider than 64 bits.
+                                                      : ... note: In instance 't'
+   27 |     $readmemh("t/t_fourstate_readmem_2h.mem", mem, wide_address, 1);
+      |     ^~~~~~~~~
+%Error-UNSUPPORTED: t/t_fourstate_readmem_unsup.v:28:5: Unsupported: Four-state $readmem requires a whole fixed one-dimensional integral memory.
+                                                      : ... note: In instance 't'
+   28 |     $readmemh("t/t_fourstate_readmem_2h.mem", multidim);
+      |     ^~~~~~~~~
+%Error-UNSUPPORTED: t/t_fourstate_readmem_unsup.v:29:5: Unsupported: Four-state $readmem requires a whole fixed one-dimensional integral memory.
+                                                      : ... note: In instance 't'
+   29 |     $readmemh("t/t_fourstate_readmem_2h.mem", packed_multidim);
+      |     ^~~~~~~~~
+%Error-UNSUPPORTED: t/t_fourstate_readmem_unsup.v:30:5: Unsupported: Four-state $readmem requires a whole fixed one-dimensional integral memory.
+                                                      : ... note: In instance 't'
+   30 |     $readmemh("t/t_fourstate_readmem_2h.mem", structs);
+      |     ^~~~~~~~~
+%Error-UNSUPPORTED: t/t_fourstate_readmem_unsup.v:31:5: Unsupported: Four-state $readmem into automatic, aliased, port or forceable memory.
+                                                      : ... note: In instance 't'
+   31 |     $readmemh("t/t_fourstate_readmem_2h.mem", forced);
+      |     ^~~~~~~~~
+%Error-UNSUPPORTED: t/t_fourstate_readmem_unsup.v:37:11: Unsupported: Four-state $readmem into automatic, aliased, port or forceable memory.
+                                                       : ... note: In instance 't.port_check'
+   37 |   initial $readmemh("t/t_fourstate_readmem_2h.mem", mem);
+      |           ^~~~~~~~~
+%Error: Exiting due to

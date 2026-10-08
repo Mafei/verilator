@@ -7,6 +7,7 @@
 # SPDX-FileCopyrightText: 2026 Wilson Snyder
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
+import os
 import re
 
 import vltest_bootstrap
@@ -44,12 +45,14 @@ for number in range(11):
     golden = test.golden_filename.removesuffix('.out') + f'_{number}.out'
     test.execute(logfile=log,
                  fails=number < 6,
-                 check_finished=number >= 6,
-                 expect_filename=golden)
+                 check_finished=number >= 6)
     test.file_grep_not(log, r'Internal Error')
     if number < 6:
         test.file_grep_not(log, r'Malformed readmem input unexpectedly returned')
         test.file_grep(log, re.escape(errors[number]))
     if number >= 6:
         test.file_grep(log, r'Readmem diagnostic checks: (\d+)', 156 if number == 6 else 12)
+    if not os.path.exists(golden):
+        test.copy_if_golden(log, golden)
+    test.files_identical(log, golden, is_logfile=True)
 test.passes()

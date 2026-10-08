@@ -1,0 +1,12 @@
+%Warning: $readmem four-state filename contains X/Z; no data loaded
+%Warning: $readmem four-state filename contains X/Z; no data loaded
+%Warning: $readmem four-state filename contains X/Z; no data loaded
+%Warning: $readmem four-state filename contains X/Z; no data loaded
+%Warning: t/t_fourstate_readmem_h.mem:0: $readmem four-state bound contains X/Z; no data loaded
+%Warning: t/t_fourstate_readmem_h.mem:0: $readmem four-state bound contains X/Z; no data loaded
+%Warning: t/t_fourstate_readmem_h.mem:0: $readmem four-state bound out of range; no data loaded
+%Warning: t/t_fourstate_readmem_h.mem:0: $readmem four-state bound out of range; no data loaded
+%Warning: t/t_fourstate_readmem_h.mem:0: $readmem four-state bound out of range; no data loaded
+%Warning: t/t_fourstate_readmem_missing.mem:0: $readmem file not found
+Readmem diagnostic checks: 156
+*-* All Finished *-*
