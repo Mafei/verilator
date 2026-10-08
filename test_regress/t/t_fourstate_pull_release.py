@@ -16,7 +16,7 @@ test.scenarios('simulator')
 test.compile(verilator_flags2=['--binary', '--fourstate', '--trace', '-Wno-FUTURE',
                               '-Wno-ASCRANGE'])
 test.execute(logfile=test.run_log_filename)
-test.file_grep(test.run_log_filename, r'Pull release checks: (\d+)', 3840)
+test.file_grep(test.run_log_filename, r'Pull release checks: (\d+)', 4032)
 test.file_grep_not(test.run_log_filename, r'%Error|ERROR:|WARNING:')
 
 
@@ -82,6 +82,42 @@ for instance, width in instances.items():
                 if expected[key + '_time'][-1][1] != time_bits:
                     expected[key + '_time'].append((timestamp, time_bits))
                 expected[key + '_realtime'].append((timestamp, str(timestamp / 1000).removesuffix('.0')))
+
+# A ninth same-scope instance has independent, staggered RHS signals.
+# This catches accidental capture sharing between separate assignments.
+for source in ('source_a', 'source_b'):
+    key = 'distinct.' + source
+    widths[key] = 65
+    expected[key] = [(0, '0' * 65)]
+for stem in ('down', 'up'):
+    for name, width in ((stem, 65), (stem + '_snapshot', 65), (stem + '_events', 32),
+                        (stem + '_time', 64), (stem + '_realtime', 0)):
+        key = 'distinct.' + name
+        widths[key] = width
+        expected[key] = [(0, '0' * width if width else '0')]
+for phase in range(8):
+    for stage, stem, source_name, pull in ((0, 'down', 'source_a', '0'),
+                                           (1, 'up', 'source_b', '1')):
+        timestamp = 1125 + phase * 125 + stage * 50
+        if phase == 3:
+            source = ''.join('01xz'[(bit + stage * 2) % 4] for bit in reversed(range(65)))
+        else:
+            source = ('zx1?0zzx' if stage == 0 else 'xz0?1xxz')[phase] * 65
+        key = 'distinct.' + source_name
+        if source != expected[key][-1][1]:
+            expected[key].append((timestamp, source))
+        key = 'distinct.' + stem
+        resolved = source.replace('z', pull)
+        if resolved != expected[key][-1][1]:
+            expected[key].append((timestamp, resolved))
+            expected[key + '_snapshot'].append((timestamp, resolved))
+            count = len(expected[key]) - 1
+            expected[key + '_events'].append((timestamp, format(count, '032b')))
+            time_bits = format((timestamp + 500) // 1000, '064b')
+            if expected[key + '_time'][-1][1] != time_bits:
+                expected[key + '_time'].append((timestamp, time_bits))
+            expected[key + '_realtime'].append((timestamp, str(timestamp / 1000).removesuffix('.0')))
+instances['distinct'] = 65
 
 with open(test.trace_filename, encoding='ascii') as stream:
     trace = stream.read()

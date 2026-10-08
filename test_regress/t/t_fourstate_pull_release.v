@@ -24,16 +24,137 @@ module t;
   pull_check #(129) w129(done[5]);
   pull_check #(7, 3, 9) ascending(done[6]);
   pull_check #(33, 40, 8) nonzero(done[7]);
+  wire distinct_done;
+  distinct_pull distinct(distinct_done);
 
   initial begin
     $dumpfile(`STRINGIFY(`TEST_DUMPFILE));
     $dumpvars(0, t);
     #6;
     if (done !== '1) $fatal(1, "Pull release checks did not finish");
+    if (!distinct_done) $fatal(1, "Distinct pull checks did not finish");
     $display("Pull release checks: %0d", w1.checks + w7.checks + w33.checks
-             + w65.checks + w95.checks + w129.checks + ascending.checks + nonzero.checks);
+             + w65.checks + w95.checks + w129.checks + ascending.checks + nonzero.checks
+             + distinct.checks);
     $write("*-* All Finished *-*\n");
     $finish;
+  end
+endmodule
+
+module distinct_pull(output bit done = 0);
+  // Different RHS signals in the same scope must retain separate captured
+  // value and X/Z halves. Staggering the changes also checks retained values.
+  typedef logic [64:0] word_t;
+  word_t source_a = '0, source_b = '0;
+  tri0 word_t down;
+  assign down = source_a;
+  tri1 word_t up = source_b;
+  word_t down_snapshot = '0, up_snapshot = '0;
+  bit armed = 0;
+  bit [31:0] checks = 0, down_events = 0, up_events = 0;
+  time down_time = 0, up_time = 0;
+  realtime down_realtime = 0.0, up_realtime = 0.0;
+
+  always @(down) begin
+    if (armed) begin
+      down_events++;
+      down_time = $time;
+      down_realtime = $realtime;
+      down_snapshot = down;
+    end
+  end
+  always @(up) begin
+    if (armed) begin
+      up_events++;
+      up_time = $time;
+      up_realtime = $realtime;
+      up_snapshot = up;
+    end
+  end
+
+  function automatic word_t stimulus(input int phase, input bit second);
+    word_t result;
+    case (phase)
+      0, 5, 6: result = second ? 'x : 'z;
+      1, 7: result = second ? 'z : 'x;
+      2: result = second ? '0 : '1;
+      3: begin
+        for (int bitno = 0; bitno < 65; bitno++) begin
+          case ((bitno + (second ? 2 : 0)) % 4)
+            0: result[bitno] = 1'b0;
+            1: result[bitno] = 1'b1;
+            2: result[bitno] = 1'bx;
+            3: result[bitno] = 1'bz;
+          endcase
+        end
+      end
+      4: result = second ? '1 : '0;
+      default: result = 'x;
+    endcase
+    return result;
+  endfunction
+
+  function automatic word_t resolve_pull(input word_t source, input bit pull_value);
+    word_t result;
+    for (int bitno = 0; bitno < 65; bitno++) begin
+      if (source[bitno] === 1'bz) result[bitno] = pull_value;
+      else result[bitno] = source[bitno];
+    end
+    return result;
+  endfunction
+
+  initial begin
+    word_t want_down, want_up, previous_down, previous_up;
+    bit [31:0] count_down, count_up;
+    time want_down_time, want_up_time;
+    realtime want_down_realtime, want_up_realtime;
+    previous_down = '0;
+    previous_up = '0;
+    count_down = 0;
+    count_up = 0;
+    want_down_time = 0;
+    want_up_time = 0;
+    want_down_realtime = 0.0;
+    want_up_realtime = 0.0;
+    #1;
+    armed = 1;
+    #0.125;
+    for (int phase = 0; phase < 8; phase++) begin
+      for (int stage = 0; stage < 2; stage++) begin
+        if (stage == 0) source_a = stimulus(phase, 0);
+        else source_b = stimulus(phase, 1);
+        want_down = resolve_pull(source_a, 0);
+        want_up = resolve_pull(source_b, 1);
+        if (want_down !== previous_down) begin
+          count_down++;
+          want_down_time = $time;
+          want_down_realtime = $realtime;
+        end
+        if (want_up !== previous_up) begin
+          count_up++;
+          want_up_time = $time;
+          want_up_realtime = $realtime;
+        end
+        #0.001;
+        `checkh(down, want_down);
+        `checkh(up, want_up);
+        `checkh(down_snapshot, want_down);
+        `checkh(up_snapshot, want_up);
+        `checkd(down_events, count_down);
+        `checkd(up_events, count_up);
+        `checkd(down_time, want_down_time);
+        `checkd(up_time, want_up_time);
+        `checkr(down_realtime, want_down_realtime);
+        `checkr(up_realtime, want_up_realtime);
+        `checkd($isunknown(down), $isunknown(want_down));
+        `checkd($isunknown(up), $isunknown(want_up));
+        previous_down = want_down;
+        previous_up = want_up;
+        if (stage == 0) #0.049;
+        else #0.074;
+      end
+    end
+    done = 1;
   end
 endmodule
 
