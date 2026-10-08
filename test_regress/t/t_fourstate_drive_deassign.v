@@ -34,9 +34,19 @@ module deassign_width #(
 );
   bit [31:0] checks = 0;
   `include "t_fourstate_drive_common.vh"
+  bit armed = 0;
+  bit [31:0] events = 0;
+  time last_change = 0;
   reg clock = 0;
   reg [WIDTH-1:0] source = '0, nba_value = '0, q = '0;
   wire [WIDTH-1:0] observed = q;
+  initial #1 armed = 1;
+  always @(observed) begin
+    if (armed) begin
+      events++;
+      last_change = $time;
+    end
+  end
   always @(posedge clock) q <= nba_value;
   initial begin
     #10;
@@ -65,6 +75,8 @@ module deassign_width #(
     source = '0;
     #1;
     `checkh(observed, 'z)
+    `checkd(events, 3)
+    `checkd(last_change, 15)
     clock = 0;
     #1;
     clock = 1;
@@ -87,6 +99,8 @@ module deassign_width #(
     q = 'z;
     #1;
     `checkh(observed, 'z)
+    `checkd(events, 7)
+    `checkd(last_change, 24)
     done = 1;
   end
 endmodule
