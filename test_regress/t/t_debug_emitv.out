@@ -71,20 +71,20 @@ module Vt_debug_emitv_t;
             else begin
                 $display("+TEST= not found");
             end
-            if (downto_32[33]) begin
+            if (downto_32[('sh21 - 32'h20) + 32+:1]) begin
                 $write("");
             end
-            if (downto_32[(ident('sh21) - 'h20)[5:0] + 32
+            if (downto_32[(ident('sh21) - 32'h20) + 32
                 +:1]) begin
                 $write("");
             end
-            if ((| downto_32[48:40])) begin
+            if ((| downto_32[('sh28 - 32'h20) + 32+:9])) begin
                 $write("");
             end
-            if ((| downto_32[57:55])) begin
+            if ((| downto_32[('sh37 - 32'h20) + 32+:3])) begin
                 $write("");
             end
-            if ((| downto_32[60:54])) begin
+            if ((| downto_32[('sh3c - 32'h26) + 32+:7])) begin
                 $write("");
             end
             if (the_ifaces[2].ifsig) begin
