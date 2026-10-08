@@ -1875,6 +1875,9 @@ struct VlReadMemFourstateStorage<VlWide<N_Words>> final {
 
 /// Read one fixed integral memory in a single traversal, preserving distinct X/Z bits.
 /// Bounds carry their signedness and knownness; omitted bounds use the declared low/high.
+/// Present signed bounds must be sign-extended to 64 bits. Unknown filename/bounds
+/// and bounds outside the declaration warn and load nothing. File @ addresses are
+/// checked 32-bit hexadecimal encodings of signed declaration indices.
 /// Value and XZ writes are synchronous; callers must protect concurrent model observers.
 template <typename T_Value, std::size_t N_Depth>
 void VL_READMEM_FOURSTATE_N(bool hex, int bits, int arrayLsb, const std::string& filename,
