@@ -8,13 +8,19 @@
 module t;
   bit [31:0] checks = 0;
   `include "t_fourstate_drive_common.vh"
-  wire [5:0] done;
+  wire [11:0] done;
   buffer_width #(1) w1 (done[0]);
   buffer_width #(7) w7 (done[1]);
   buffer_width #(17) w17 (done[2]);
   buffer_width #(33) w33 (done[3]);
   buffer_width #(65) w65 (done[4]);
   buffer_width #(129) w129 (done[5]);
+  buffer_expression #(17) x17 (done[6]);
+  buffer_expression #(24) x24 (done[7]);
+  buffer_expression #(31) x31 (done[8]);
+  buffer_expression #(32) x32 (done[9]);
+  buffer_expression #(63) x63 (done[10]);
+  buffer_expression #(64) x64 (done[11]);
   wire [63:0] constants;
   for (genvar kind = 0; kind < 4; kind++) begin : k
     for (genvar en = 0; en < 4; en++) begin : e
@@ -35,10 +41,12 @@ module t;
       end
     end
     #200;
-    `checkh(done, 6'b111111)
+    `checkh(done, 12'hfff)
     $display("Buffer dynamic checks: %0d",
              w1.checks + w7.checks + w17.checks + w33.checks + w65.checks + w129.checks);
     $display("Buffer constant checks: %0d", checks - 1);
+    $display("Buffer expression checks: %0d",
+             x17.checks + x24.checks + x31.checks + x32.checks + x63.checks + x64.checks);
     $write("*-* All Finished *-*\n");
     $finish;
   end
@@ -99,4 +107,69 @@ module buffer_constant #(
   else if (KIND == 1) bufif0 b (result, D, E);
   else if (KIND == 2) notif1 n (result, D, E);
   else notif0 n (result, D, E);
+endmodule
+
+module buffer_expression #(
+    parameter int WIDTH = 17
+) (
+    output bit done = 0
+);
+  bit [31:0] checks = 0;
+  `include "t_fourstate_drive_common.vh"
+  reg [WIDTH-1:0] enable_a = '0, data_a = '0;
+  reg [WIDTH-1:0] enable_b = '0, data_b = '0, data_c = '0;
+  reg branch = 0;
+  bit [WIDTH-1:0] known_enable = '0;
+  wire [WIDTH-1:0] result_a, result_b, result_known;
+  function automatic logic [WIDTH-1:0] rotate(input logic [WIDTH-1:0] value);
+    // verilator no_inline_task
+    return {value[WIDTH-2:0], value[WIDTH-1]};
+  endfunction
+  function automatic bit [WIDTH-1:0] rotate_known(input bit [WIDTH-1:0] value);
+    // verilator no_inline_task
+    return {value[WIDTH-2:0], value[WIDTH-1]};
+  endfunction
+  bufif1 a[WIDTH-1:0] (result_a, rotate (data_a), rotate (enable_a));
+  notif0 b[WIDTH-1:0] (result_b, branch ? data_b : data_c, enable_b);
+  bufif1 known[WIDTH-1:0] (result_known, rotate (data_c), rotate_known (known_enable));
+  initial begin
+    #10;
+    for (int phase = 0; phase < 32; phase++) begin
+      for (int bitno = 0; bitno < WIDTH; bitno++) begin
+        enable_a[bitno] = drive_state((phase % 4 + bitno) % 4);
+        data_a[bitno] = drive_state((phase / 4 + bitno) % 4);
+        if (phase % 2 == 0) begin
+          enable_b[bitno] = drive_state((phase % 4 + bitno + 1) % 4);
+          data_b[bitno] = drive_state((phase / 4 + bitno + 1) % 4);
+          data_c[bitno] = drive_state((phase / 8 + 3 * bitno + 1) % 4);
+          known_enable[bitno] = ((phase / 2 + bitno) % 2) != 0;
+        end
+      end
+      if (phase % 2 == 0) branch = drive_state((phase / 4) % 4);
+      #2;
+      for (int bitno = 0; bitno < WIDTH; bitno++) begin
+        `checkh(result_a[bitno], drive_literal(
+                0,
+                4 * drive_code(
+                    enable_a[(bitno+WIDTH-1)%WIDTH]
+                ) + drive_code(
+                    data_a[(bitno+WIDTH-1)%WIDTH])
+                ))
+        `checkh(result_b[bitno], drive_literal(
+                3,
+                4 * drive_code(
+                    enable_b[bitno]
+                ) + drive_code(
+                    drive_merge(branch, data_b[bitno], data_c[bitno]))
+                ))
+        `checkh(result_known[bitno], drive_literal(
+                0,
+                4 * int'(known_enable[(bitno+WIDTH-1)%WIDTH]) + drive_code(
+                    data_c[(bitno+WIDTH-1)%WIDTH])
+                ))
+      end
+      #1;
+    end
+    done = 1;
+  end
 endmodule

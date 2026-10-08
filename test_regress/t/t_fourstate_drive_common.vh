@@ -21,6 +21,23 @@ function automatic logic drive_state(input int code);
   endcase
 endfunction
 
+function automatic int drive_code(input logic value);
+  case (value)
+    1'b0: return 0;
+    1'b1: return 1;
+    1'bx: return 2;
+    1'bz: return 3;
+  endcase
+endfunction
+
+function automatic logic drive_merge(input logic select_bit, input logic a, input logic b);
+  case (select_bit)
+    1'b0: return b;
+    1'b1: return a;
+    default: return a === b ? a : 1'bx;
+  endcase
+endfunction
+
 // Literal primitive tables: enable row and data column, state order 0/1/X/Z.
 function automatic logic drive_literal(input int kind, input int index);
   case (kind)
