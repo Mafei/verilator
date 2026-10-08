@@ -260,7 +260,7 @@ private:
             return new AstVarRef{flp, getPrev(fourstateExpr->xzp()), VAccess::READ};
         };
 
-        // All event signals should be 1-bit at this point
+        // Change events compare whole signals; edge events inspect the least significant bit.
         switch (senItemp->edgeType()) {
         case VEdgeType::ET_CHANGED:
         case VEdgeType::ET_HYBRID:  //
@@ -278,8 +278,9 @@ private:
                 }
                 return {wrapExprWithNullCheck(
                             flp,
-                            lsb(new AstOr{flp, new AstXor{flp, prevValp(), currValp()},
-                                          new AstXor{flp, prevXZp(), currXZp()}}),
+                            new AstRedOr{flp,
+                                         new AstOr{flp, new AstXor{flp, prevValp(), currValp()},
+                                                   new AstXor{flp, prevXZp(), currXZp()}}},
                             baseClassRefp),
                         true};
             }
