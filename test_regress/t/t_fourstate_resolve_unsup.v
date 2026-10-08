@@ -156,3 +156,25 @@ module resolver_nonansi(source_a, source_b, resolved);
   assign resolved = source_b;
 endmodule
 `endif
+
+`ifdef RESOLVE_CASE_17
+// A declaration fallback does not excuse a real hierarchical continuous writer.
+module t_default_writer;
+  logic [6:0] source_a = '0, source_b = '1;
+  wire [6:0] result;
+  resolver_default_writer child(.i(source_b), .o(result));
+  assign child.i = source_a;
+  initial begin
+    #1;
+    source_a = 'z;
+    #1;
+    $display("Default input with real writer: %b", result);
+    $finish;
+  end
+endmodule
+
+module resolver_default_writer(input wire [6:0] i = 7'b10zx101,
+                               output wire [6:0] o);
+  assign o = i;
+endmodule
+`endif

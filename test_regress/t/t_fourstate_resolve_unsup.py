@@ -32,12 +32,13 @@ reasons = {
     14: 'nonlocal target',
     15: 'nonlocal target',
     16: 'nonlocal target',
+    17: 'nonlocal target',
 }
 
 for number, reason in reasons.items():
     log = f'{test.obj_dir}/case_{number}.log'
     golden = test.golden_filename.removesuffix('.out') + f'_{number}.out'
-    top = {15: 't_ansi', 16: 't_nonansi'}.get(number, 't')
+    top = {15: 't_ansi', 16: 't_nonansi', 17: 't_default_writer'}.get(number, 't')
     test.compile(verilator_flags2=['--fourstate', '--timing', '-Wno-FUTURE', '--top-module', top,
                                   f'-DRESOLVE_CASE_{number}'],
                  fails=True)
