@@ -12,6 +12,9 @@ import sys
 
 
 GROUPS = {
+    "capabilities": """
+        fourstate_mem_index fourstate_shiftrs
+    """.split(),
     "fourstate": """
         fourstate_api fourstate_cond fourstate_countones fourstate_dynarray
         fourstate_format fourstate_format_bin fourstate_format_hex
