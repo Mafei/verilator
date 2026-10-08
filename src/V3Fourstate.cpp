@@ -3473,7 +3473,6 @@ class FourstateVisitor final : public VNVisitor {
         // Each invocation owns the snapshots across its wait, including repeated executions
         // of one source statement in a fork. The C scope also protects jumps around locals.
         VL_RESTORER_CLEAR(m_tmpUnusedVarps);
-        VL_RESTORER(m_currentTmpSpotp);
         VL_RESTORER(m_tmpFuncLocal);
         m_tmpFuncLocal = true;
         AstNodeDType* const dtypep = getTwoStateDtype(nodep->rhsp()->dtypep());
@@ -3487,6 +3486,10 @@ class FourstateVisitor final : public VNVisitor {
         AstCLocalScope* const scopep = new AstCLocalScope{flp, valueVarp};
         scopep->addStmtsp(xzVarp);
         nodep->replaceWith(scopep);
+        // A task's first statement can also be its declaration insertion anchor. Keep later
+        // temporaries outside this new scope rather than restoring the relocated assignment.
+        if (m_currentTmpSpotp == nodep) m_currentTmpSpotp = scopep;
+        VL_RESTORER(m_currentTmpSpotp);
         m_currentTmpSpotp = valueVarp;
         {
             StatementPlaceHolder placeholder{*this, flp};
