@@ -54,7 +54,7 @@ TimingKit::remapDomains(const std::unordered_map<const AstSenTree*, AstSenTree*>
         for (AstSenTree* const domainp : domains) {
             remappedDomains.push_back(trigMap.at(domainp));
             const AstCMethodHard* const methodp
-                = VN_CAST(domainp->sensesp()->exprp(), CMethodHard);
+                = VN_CAST(domainp->sensesp()->sensp(), CMethodHard);
             if (methodp && methodp->method() == VCMethod::SCHED_AWAITING_CURRENT_TIME) {
                 usesDelayDomain = true;
             }
