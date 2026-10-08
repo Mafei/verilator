@@ -447,7 +447,7 @@ physical VCD histories must all be checked at the final candidate SHA.
 | Conditional expressions | Lower each branch once under guarded value/mask snapshots. Known predicates evaluate only the selected branch; ambiguous predicates evaluate both. The inherited merge formula remains; common-Z ambiguous branches are a known unvalidated semantic boundary. |
 | Single tristate buffers | Accept a whole local net or output with default strength, one qualified driver and no delay. Unknown enables are checked independently of data X/Z. MOS primitives, multiple contributions, explicit strengths and externally driven targets remain unsupported. |
 | Procedural assign/deassign | Accept whole module-owned packed variables with a constant or direct local-variable RHS. Compound live expressions, aliases, partial/hierarchical targets and external writes remain unsupported. |
-| Blocking intra-assignment delay | Capture value/mask before one suspension using activation-local storage. Concurrent task invocations, zero/X/Z delays and wide values require the independent delay regression; this feature remains pending until that regression passes. |
+| Blocking intra-assignment delay | Capture value/mask before one suspension using activation-local storage for whole module-owned packed targets. The independent regression checks concurrent task invocations, zero/X/Z delays and widths through 129 bits. Partial/hierarchical, automatic/local, port and externally written targets remain unsupported. |
 | Clock/IO and glbl | Recheck the original models after each applicable repair. General strength resolution, bidirectional IO and hierarchical multiwriter nets require further implementation; passing functional profiles does not certify SDF or vendor timing models. |
 
 Boundary-index regressions intentionally retain ascending declarations and
@@ -470,7 +470,8 @@ Keep both differing cases in the full comparison and complete failure list.
 The immediate event-controlled NBA observation and default value of an undriven
 packed variable require language-semantics adjudication rather than an output
 rewrite. IEEE 1800-2017 sections 4.9.4, 6.8, 7.2.1 and 10.4.2, and Table 6-7
-provide relevant scheduling, declaration and default-value rules; the current
+provide relevant scheduling, declaration and default-value rules in the
+[2017 text](https://rfsoc.mit.edu/6S965/_static/F24/documentation/1800-2017.pdf); the current
 1800-2023 text has not been independently retrieved for this investigation.
 A stable applicable CI subset must state any exclusion and its basis explicitly,
 while retaining the full selection's raw outcomes.
