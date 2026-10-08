@@ -2302,6 +2302,14 @@ void AstNodeArrayDType::dumpSmall(std::ostream& str) const {
     }
     str << declRange();
 }
+void AstAssign::dump(std::ostream& str) const {
+    Super::dump(str);
+    if (forceRetention()) str << " [FORCE_RETENTION]";
+}
+void AstAssign::dumpJson(std::ostream& str) const {
+    dumpJsonBoolFuncIf(str, forceRetention);
+    dumpJsonGen(str);
+}
 void AstNodeAssign::dump(std::ostream& str) const {
     Super::dump(str);
     if (timingControlp()) str << " [TIMING=" << nodeAddr(timingControlp()) << "]";

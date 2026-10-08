@@ -237,11 +237,13 @@ class DelayedVisitor final : public VNVisitor {
         AstVarRef* m_refp = nullptr;  // The reference
         bool m_isNBA = false;  // True if an NBA write
         bool m_inNonComb = false;  // True if reference is known to be in non-combinational logic
+        bool m_forceRetention = false;  // Synthetic release-retention write
         WriteReference() = default;
-        WriteReference(AstVarRef* refp, bool isNBA, bool inNonComb)
+        WriteReference(AstVarRef* refp, bool isNBA, bool inNonComb, bool forceRetention)
             : m_refp{refp}
             , m_isNBA{isNBA}
-            , m_inNonComb{inNonComb} {}
+            , m_inNonComb{inNonComb}
+            , m_forceRetention{forceRetention} {}
     };
 
     // Data required to lower AstAssignDelay later
@@ -302,6 +304,7 @@ class DelayedVisitor final : public VNVisitor {
     bool m_inLoop = false;  // True in for loops
     bool m_inSuspendableOrFork = false;  // True in suspendable processes and forks
     bool m_ignoreBlkAndNBlk = false;  // Suppress delayed assignment BLKANDNBLK
+    bool m_inForceRetention = false;  // Visiting a synthetic release-retention assignment
     bool m_inNonCombLogic = false;  // We are in non-combinational logic
     bool m_needsInitialTrigger = false;  // Whether a NodeProcedure needs a initial trigger
     std::vector<AstSenTree*> m_nbaEventSenTreeps;  // Sensitivities of '->>' in the process
@@ -336,11 +339,13 @@ class DelayedVisitor final : public VNVisitor {
         struct Ref final {
             AstVarRef* m_refp;  // The reference
             bool m_inNonComb;  // True if known to be in non-combinational logic
+            bool m_forceRetention;  // Synthetic release retains the last overridden value
             int m_lsb;  // LSB of accessed range
             int m_msb;  // MSB of accessed range
-            Ref(AstVarRef* refp, bool inNonComb, int lsb, int msb)
+            Ref(AstVarRef* refp, bool inNonComb, bool forceRetention, int lsb, int msb)
                 : m_refp{refp}
                 , m_inNonComb{inNonComb}
+                , m_forceRetention{forceRetention}
                 , m_lsb{lsb}
                 , m_msb{msb} {}
         };
@@ -360,9 +365,11 @@ class DelayedVisitor final : public VNVisitor {
                 }
             }
             if (writeRef.m_isNBA) {
-                nbaRefs.emplace_back(writeRef.m_refp, writeRef.m_inNonComb, lsb, msb);
+                nbaRefs.emplace_back(writeRef.m_refp, writeRef.m_inNonComb,
+                                     writeRef.m_forceRetention, lsb, msb);
             } else {
-                blkRefs.emplace_back(writeRef.m_refp, writeRef.m_inNonComb, lsb, msb);
+                blkRefs.emplace_back(writeRef.m_refp, writeRef.m_inNonComb,
+                                     writeRef.m_forceRetention, lsb, msb);
             }
         }
         // We only run this function on targets of NBAs, so there should be at least one...
@@ -374,8 +381,12 @@ class DelayedVisitor final : public VNVisitor {
         // in logic that has an explicit trigger), then we can safely
         // implement it (there is no race between clocked logic and post
         // scheduled logic), so need not error
+        // A release's synthetic write must retain the overridden value immediately. Keep
+        // mixed usage for the masked NBA scheme, but do not diagnose it as user comb logic.
         blkRefs.erase(std::remove_if(blkRefs.begin(), blkRefs.end(),
-                                     [](const Ref& ref) { return ref.m_inNonComb; }),
+                                     [](const Ref& ref) {
+                                         return ref.m_inNonComb || ref.m_forceRetention;
+                                     }),
                       blkRefs.end());
 
         // If nothing left, then we need not error
@@ -1006,7 +1017,8 @@ class DelayedVisitor final : public VNVisitor {
         //       arrays that use the ShadowVar scheme don't work...
         if (VN_IS(nodep->varScopep()->dtypep()->skipRefp(), UnpackArrayDType)) return;
 
-        m_writeRefs(nodep->varScopep()).emplace_back(nodep, nonBlocking, m_inNonCombLogic);
+        m_writeRefs(nodep->varScopep())
+            .emplace_back(nodep, nonBlocking, m_inNonCombLogic, m_inForceRetention);
     }
 
     template <typename Procedure_T>
@@ -1293,6 +1305,11 @@ class DelayedVisitor final : public VNVisitor {
         }
         nodep->replaceWith(newp);
         VL_DO_DANGLING(nodep->deleteTree(), nodep);
+    }
+    void visit(AstAssign* nodep) override {
+        VL_RESTORER(m_inForceRetention);
+        m_inForceRetention = nodep->forceRetention();
+        iterateChildren(nodep);
     }
     void visit(AstAssignDly* nodep) override {
         // Prevent double processing due to AstExprStmt being moved before this node

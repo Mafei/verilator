@@ -1465,6 +1465,8 @@ public:
 
 // === AstNodeAssign ===
 class AstAssign final : public AstNodeAssign {
+    bool m_forceRetention = false;  // Synthetic release copies the last overridden variable value
+
 public:
     AstAssign(FileLine* fl, AstNodeExpr* lhsp, AstNodeExpr* rhsp,
               AstNode* timingControlp = nullptr)
@@ -1472,9 +1474,18 @@ public:
         dtypeFrom(lhsp);
     }
     ASTGEN_MEMBERS_AstAssign;
+    bool forceRetention() const { return m_forceRetention; }
+    void forceRetention(const bool flag) { m_forceRetention = flag; }
+    bool sameNode(const AstNode* const samep) const override {
+        return forceRetention() == VN_DBG_AS(samep, Assign)->forceRetention();
+    }
+    void dump(std::ostream& str) const override;
+    void dumpJson(std::ostream& str) const override;
     AstNodeAssign* cloneType(AstNodeExpr* lhsp, AstNodeExpr* rhsp) override {
         AstNode* const controlp = timingControlp() ? timingControlp()->cloneTree(false) : nullptr;
-        return new AstAssign{fileline(), lhsp, rhsp, controlp};
+        AstAssign* const newp = new AstAssign{fileline(), lhsp, rhsp, controlp};
+        newp->forceRetention(forceRetention());
+        return newp;
     }
 };
 class AstAssignCompound final : public AstNodeAssign {
