@@ -23,6 +23,8 @@ test.compile(
     ]
 )
 test.execute(logfile=test.run_log_filename, iv_run_flags=['-N'])
+if test.vlt_all:
+    test.file_grep(test.stats, r'Fourstate, Local procedural deassigns\s+(\d+)', 12)
 test.file_grep(test.run_log_filename, r'Deassign checks: (\d+)', 102)
 expected = {}
 widths = {}

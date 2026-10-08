@@ -23,6 +23,8 @@ test.compile(
     ]
 )
 test.execute(logfile=test.run_log_filename, iv_run_flags=['-N'])
+if test.vlt_all:
+    test.file_grep(test.stats, r'Fourstate, Isolated tristate buffers\s+(\d+)', 106)
 test.file_grep(test.run_log_filename, r'Buffer dynamic checks: (\d+)', 16128)
 test.file_grep(test.run_log_filename, r'Buffer constant checks: (\d+)', 64)
 test.file_grep(test.run_log_filename, r'Buffer expression checks: (\d+)', 22176)
