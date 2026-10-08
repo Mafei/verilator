@@ -597,6 +597,22 @@ class FourstateDriveAudit final : public VNVisitorConst {
         m_assignp = nodep;
         iterateChildrenConst(nodep);
     }
+    void visit(AstAssign* nodep) override {
+        if (needsSplitting(nodep->lhsp()->dtypep())) {
+            if (const AstDelay* const delayp = VN_CAST(nodep->timingControlp(), Delay)) {
+                string reason = proceduralReason(nodep->lhsp());
+                if (reason.empty() && (delayp->isCycleDelay() || delayp->fallDelay())) {
+                    reason = "nonprocedural delay control";
+                }
+                if (!reason.empty()) {
+                    nodep->v3warn(E_UNSUPPORTED,
+                                  "Unsupported: Blocking intra-assignment delay with --fourstate: "
+                                      << reason << ".");
+                }
+            }
+        }
+        visit(static_cast<AstNodeAssign*>(nodep));
+    }
     void visit(AstAssignCont* nodep) override {
         if (needsSplitting(nodep->lhsp()->dtypep())) {
             string reason = proceduralReason(nodep->lhsp());
@@ -1239,6 +1255,7 @@ class FourstateVisitor final : public VNVisitor {
     uint32_t m_statDriverSlots = 0;
     uint32_t m_statTristateBuffers = 0;  // Isolated buffer-gate expressions lowered
     uint32_t m_statDeassigns = 0;  // Whole local deassign statements split into both halves
+    uint32_t m_statBlockingDelays = 0;  // Activation-local blocking delay snapshots
 
     static AstConst* createZeroOrOnesp(const AstNodeExpr* const exprp, const bool ones = false) {
         AstConst* const resultp
@@ -3423,6 +3440,14 @@ class FourstateVisitor final : public VNVisitor {
     }
 
     void visit(AstNodeAssign* const nodep) override {
+        if (AstAssign* const assignp = VN_CAST(nodep, Assign)) {
+            if (isFourstate(nodep->lhsp())) {
+                if (AstDelay* const delayp = VN_CAST(nodep->timingControlp(), Delay)) {
+                    lowerBlockingDelay(assignp, delayp);
+                    return;
+                }
+            }
+        }
         if (const auto it = m_driverSlots.find(nodep); it != m_driverSlots.end()) {
             // Independent continuous processes cannot share statement-pool temporaries.
             // Destroy the statement helper before restoring the outer module's pool.
@@ -3443,6 +3468,56 @@ class FourstateVisitor final : public VNVisitor {
         lowerOrdinaryAssignment(nodep);
     }
 
+    void lowerBlockingDelay(AstAssign* const nodep, AstDelay* const delayp) {
+        FileLine* const flp = nodep->fileline();
+        // Each invocation owns the snapshots across its wait, including repeated executions
+        // of one source statement in a fork. The C scope also protects jumps around locals.
+        VL_RESTORER_CLEAR(m_tmpUnusedVarps);
+        VL_RESTORER(m_currentTmpSpotp);
+        VL_RESTORER(m_tmpFuncLocal);
+        m_tmpFuncLocal = true;
+        AstNodeDType* const dtypep = getTwoStateDtype(nodep->rhsp()->dtypep());
+        AstVar* const valueVarp
+            = new AstVar{flp, VVarType::BLOCKTEMP, m_tmpNames.get(nodep), dtypep};
+        AstVar* const xzVarp = new AstVar{flp, VVarType::BLOCKTEMP, m_tmpNames.get(nodep), dtypep};
+        valueVarp->funcLocal(true);
+        xzVarp->funcLocal(true);
+        valueVarp->noSubst(true);
+        xzVarp->noSubst(true);
+        AstCLocalScope* const scopep = new AstCLocalScope{flp, valueVarp};
+        scopep->addStmtsp(xzVarp);
+        nodep->replaceWith(scopep);
+        m_currentTmpSpotp = valueVarp;
+        {
+            StatementPlaceHolder placeholder{*this, flp};
+            scopep->addStmtsp(placeholder.stmtp());
+            AstNodeExpr* const rhsp = nodep->rhsp()->unlinkFrBack();
+            addPrecalculation(new AstAssign{flp, new AstVarRef{flp, valueVarp, VAccess::WRITE},
+                                            getOnceExpressionValue(rhsp)});
+            addPrecalculation(new AstAssign{flp, new AstVarRef{flp, xzVarp, VAccess::WRITE},
+                                            getFourstateExpressionXZ(rhsp)});
+            pushDeletep(rhsp);
+            // Normalize X/Z delays and consume any delay-function outputs before waiting.
+            // Only the original control remains, so the procedure suspends exactly once.
+            delayp->unlinkFrBack();
+            lowerFourstateDelay(delayp);
+            AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+            AstNodeExpr* const valueLhsp = getFourstateExpressionValue(lhsp);
+            AstNodeExpr* const xzLhsp = getFourstateExpressionXZ(lhsp);
+            pushDeletep(lhsp);
+            nodep->lhsp(valueLhsp);
+            nodep->rhsp(new AstVarRef{flp, valueVarp, VAccess::READ});
+            nodep->dtypeFrom(valueLhsp);
+            delayp->addStmtsp(nodep);
+            delayp->addStmtsp(
+                new AstAssign{flp, xzLhsp, new AstVarRef{flp, xzVarp, VAccess::READ}});
+            scopep->addStmtsp(delayp);
+        }
+        ++m_statBlockingDelays;
+        FourstateLogicTypePropagator{scopep};
+        iterateChildren(scopep);
+    }
+
     void lowerOrdinaryAssignment(AstNodeAssign* const nodep) {
         StmtHelper stmtHelper{*this, nodep};
         if (AstDelay* const delayp = VN_CAST(nodep->timingControlp(), Delay)) {
@@ -3453,10 +3528,6 @@ class FourstateVisitor final : public VNVisitor {
                                "Unsupported: Impure net delay expression with --fourstate");
                 pushDeletep(delayp->unlinkFrBack());
             } else {
-                if (VN_IS(nodep, Assign) && isFourstate(nodep->lhsp())) {
-                    nodep->v3warn(E_UNSUPPORTED,
-                                  "Unsupported: Blocking intra-assignment delay with --fourstate");
-                }
                 // Both split assignments must use the same captured delay. Lower
                 // it before cloning, with calculations owned by the assignment.
                 lowerFourstateDelay(delayp);
@@ -4511,6 +4582,7 @@ public:
         V3Stats::addStat("Fourstate, Persistent driver packets", m_statDriverSlots);
         V3Stats::addStat("Fourstate, Isolated tristate buffers", m_statTristateBuffers);
         V3Stats::addStat("Fourstate, Local procedural deassigns", m_statDeassigns);
+        V3Stats::addStat("Fourstate, Blocking delay snapshots", m_statBlockingDelays);
     }
 };
 
