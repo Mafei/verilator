@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_resolve_unsup.v:14:14: Unsupported: Multiple-driver net 'resolved' with --fourstate: more than three contributions.
+                                                       : ... note: In instance 't'
+   14 |   wire [6:0] resolved;
+      |              ^~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

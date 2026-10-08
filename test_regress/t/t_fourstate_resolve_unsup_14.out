@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_resolve_unsup.v:111:40: Unsupported: Multiple-driver net 'resolved' with --fourstate: nonlocal target.
+                                                        : ... note: In instance 't.child'
+  111 |                      output wire [6:0] resolved);
+      |                                        ^~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

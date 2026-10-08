@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_resolve_unsup.v:20:14: Unsupported: Multiple-driver net 'resolved' with --fourstate: partial continuous LHS.
+                                                       : ... note: In instance 't'
+   20 |   wire [6:0] resolved;
+      |              ^~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_resolve_unsup.v:55:14: Unsupported: Multiple-driver net 'resolved' with --fourstate: alias.
+                                                       : ... note: In instance 't'
+   55 |   wire [6:0] resolved, other;
+      |              ^~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_resolve_unsup.v:70:14: Unsupported: Multiple-driver net 'resolved' with --fourstate: force or external write access.
+                                                       : ... note: In instance 't'
+   70 |   wire [6:0] resolved /*verilator public_flat_rw*/  /**/;
+      |              ^~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

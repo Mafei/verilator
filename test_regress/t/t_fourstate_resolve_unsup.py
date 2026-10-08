@@ -29,7 +29,7 @@ reasons = {
     11: 'force or external write access',
     12: 'force or external write access',
     13: 'impure continuous RHS',
-    14: 'port or pin writer',
+    14: 'nonlocal target',
 }
 
 for number, reason in reasons.items():
