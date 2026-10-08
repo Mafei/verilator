@@ -407,7 +407,7 @@ public:
     }
     VL_ATTR_ALWINLINE void chgLogic(uint32_t* oldp, CData newval, CData newvalXZ) {
         CData* oldcp = reinterpret_cast<CData*>(oldp);
-        const uint32_t diff = (oldcp[0] ^ newval) | (oldcp[1] ^ newvalXZ);
+        const uint32_t diff = ((oldcp[0] ^ newval) | (oldcp[1] ^ newvalXZ)) & 1U;
         if (VL_UNLIKELY(diff)) fullLogic(oldp, newval, newvalXZ);
     }
     VL_ATTR_ALWINLINE void chgCData(uint32_t* oldp, CData newval, int bits) {
