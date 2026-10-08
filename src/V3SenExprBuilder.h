@@ -276,13 +276,13 @@ private:
                                                   baseClassRefp),
                             true};
                 }
-                return {wrapExprWithNullCheck(
-                            flp,
-                            new AstRedOr{flp,
-                                         new AstOr{flp, new AstXor{flp, prevValp(), currValp()},
-                                                   new AstXor{flp, prevXZp(), currXZp()}}},
-                            baseClassRefp),
-                        true};
+                return {
+                    wrapExprWithNullCheck(
+                        flp,
+                        new AstRedOr{flp, new AstOr{flp, new AstXor{flp, prevValp(), currValp()},
+                                                    new AstXor{flp, prevXZp(), currXZp()}}},
+                        baseClassRefp),
+                    true};
             }
             if (VN_IS(senp->dtypep()->skipRefp(), UnpackArrayDType)) {
                 // operand order reversed to avoid calling neq() method on non-VlUnpacked type, see
