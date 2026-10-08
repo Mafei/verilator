@@ -217,15 +217,15 @@ static void process() {
 
         V3Error::abortIfErrors();
 
+        if (v3Global.opt.timing().isSetTrue()) {
+            // Capture @* before WidthCommit removes it, and before helper reads are inserted.
+            V3Timing::prepareImplicit(v3Global.rootp());
+        }
+
         // Commit to the widths we've chosen; Make widthMin==width
         V3WidthCommit::widthCommit(v3Global.rootp());
         v3Global.assertDTypesResolved(true);
         v3Global.widthMinUsage(VWidthMinUsage::MATCHES_WIDTH);
-
-        if (v3Global.opt.timing().isSetTrue()) {
-            // Preserve source-level @* dependencies before function inlining and timing lowering.
-            V3Timing::prepareImplicit(v3Global.rootp());
-        }
 
         // End of elaboration
         V3Stats::addStatPerf(V3Stats::STAT_WALLTIME_ELAB, elabWallTime.deltaTime());

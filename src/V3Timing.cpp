@@ -137,6 +137,9 @@ class TimingImplicitVisitor final : public VNVisitor {
         { TimingImplicitReadsVisitor{nodep->stmtsp(), sentreep}; }
         if (!sentreep->sensesp()) {
             // With no read dependencies the implicit event control never triggers.
+            nodep->v3warn(ALWNEVER, "'always @*' will never execute as expression list is "
+                                    "empty (no variables read)\n"
+                                        << nodep->warnMore() << "... Suggest use 'always_comb'");
             sentreep->addSensesp(new AstSenItem{sentreep->fileline(), AstSenItem::Never{}});
         }
         oldSentreep->replaceWith(sentreep);
