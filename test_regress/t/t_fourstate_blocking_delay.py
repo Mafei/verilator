@@ -7,6 +7,8 @@
 # SPDX-FileCopyrightText: 2026 Wilson Snyder
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
+import shutil
+
 import vltest_bootstrap
 from fourstate_resolve_oracle import add, append, check_trace
 
@@ -111,6 +113,7 @@ check_trace(test, expected, widths)
 test.file_grep_not(test.run_log_filename, r'%Error|ERROR:|WARNING:')
 if test.vlt_all:
     # Keep the existing non-inline external-reference boundary; no IMPURE waiver.
+    shutil.copyfile(test.obj_dir + '/vlt_compile.log', test.obj_dir + '/inline_compile.log')
     test.compile(
         verilator_flags2=[
             '--fourstate',
