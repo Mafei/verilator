@@ -104,7 +104,7 @@ class TimingImplicitReadsVisitor final : public VNVisitorConst {
         }
     }
     void visit(AstVar* nodep) override {
-        if (nodep->lifetime().isAutomatic()) iterateConst(nodep->valuep());
+        if (nodep->lifetime().isAutomatic()) iterateConstNull(nodep->valuep());
     }
     void visit(AstNodeDType*) override {}
     void visit(AstSenTree*) override {
