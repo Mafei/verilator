@@ -15,7 +15,8 @@ GROUPS = {
         "fourstate_cond_scale", "fourstate_drive_buffer", "fourstate_drive_deassign",
         "fourstate_drive_unsup", "fourstate_implicit_delay", "fourstate_monitor_postponed",
         "fourstate_negate", "fourstate_negate_mask", "fourstate_packed_index",
-        "fourstate_slice_bounds", "timing_implicit_delay", "timing_monitor_postponed"
+        "fourstate_slice_bounds", "fourstate_zero_domain", "timing_implicit_delay",
+        "timing_monitor_postponed", "timing_zero_domain"
     ],
     "capabilities":
     ["fourstate_mac_model", "fourstate_mem_index", "fourstate_shiftrs", "fourstate_supplies"],

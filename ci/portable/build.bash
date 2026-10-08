@@ -135,7 +135,7 @@ fi
 python3 ci/portable/check_results.py
 python3 ci/portable/log_evidence.py results
 # Official inputs and expectations stay pinned and unchanged. All 18 execute;
-# the documented 16 applicable cases have a separate gate from the 145 above.
+# the documented 16 applicable cases have a separate gate from the 147 above.
 icarus_head=$(git rev-parse HEAD)
 icarus_run_status=0
 icarus_check_status=0
