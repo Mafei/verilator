@@ -7,7 +7,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from run_regressions import GROUPS, parse_summary, passed_counts
+from run_regressions import GROUPS, parse_summary, passed_counts, passed_names
 
 
 def check_results(root):
@@ -20,6 +20,9 @@ def check_results(root):
     results = json.loads((root / "out" / "regression-results.json").read_text())
     if not isinstance(results, dict) or set(results) != set(GROUPS):
         raise SystemExit("Missing or unexpected regression groups")
+    selected_names = [name for names in GROUPS.values() for name in names]
+    if len(selected_names) != len(set(selected_names)):
+        raise SystemExit("Regression groups select duplicate test names")
     for group, result in results.items():
         selected = GROUPS[group]
         if not isinstance(result, dict):
@@ -38,12 +41,14 @@ def check_results(root):
             raise SystemExit("Failed or incomplete regression group: " + group)
         # pylint: enable=too-many-boolean-expressions,unidiomatic-typecheck
         try:
-            status, actual_counts = parse_summary(
-                (root / "logs" / (group + "-regressions.log")).read_text())
+            log_text = (root / "logs" / (group + "-regressions.log")).read_text()
+            status, actual_counts = parse_summary(log_text)
         except (OSError, ValueError) as error:
             raise SystemExit("Missing or invalid regression log: " + group) from error
         if status != result["summary_status"] or actual_counts != counts:
             raise SystemExit("Recorded counts do not match the regression log: " + group)
+        if not passed_names(log_text, selected):
+            raise SystemExit("Passed test names do not match the selected drivers: " + group)
     print("Verified regression counts for " + head)
 
 

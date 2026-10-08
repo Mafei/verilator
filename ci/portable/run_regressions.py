@@ -12,6 +12,12 @@ from pathlib import Path
 GROUPS = {
     "capabilities":
     ["fourstate_mac_model", "fourstate_mem_index", "fourstate_shiftrs", "fourstate_supplies"],
+    "followup": [
+        "fourstate_case", "fourstate_case_const", "fourstate_case_inside", "fourstate_delay",
+        "fourstate_delay_int", "fourstate_demo_json", "fourstate_iface_array", "fourstate_inst",
+        "fourstate_membersel_sideeffect", "fourstate_pull_default", "fourstate_queue2",
+        "fourstate_real_conv", "fourstate_saif_time", "fourstate_trace_saif"
+    ],
     "extended": [
         "fourstate_arithmetics", "fourstate_assign_complex", "fourstate_assign_sel_lhs",
         "fourstate_comparison", "fourstate_complex_pin", "fourstate_concat", "fourstate_countbits",
@@ -62,12 +68,22 @@ def passed_counts(status, counts, expected):
                 counts.get(key, 0) == 0 for key in ("failed-first", "skipped", "left", "running")))
 
 
+def passed_names(log_text, selected):
+    """Require one actual harness pass record for each selected driver."""
+    actual = re.findall(r"^vlt/(t_[A-Za-z0-9_]+): Self PASSED$", log_text, re.MULTILINE)
+    expected = {"t_" + name for name in selected}
+    return len(actual) == len(selected) == len(set(actual)) and set(actual) == expected
+
+
 # Keep per-group execution, exit status, and result recording together for auditing.
 def run_groups(root, groups):  # pylint: disable=too-many-locals
     """Record every selected group even when an earlier subprocess fails."""
     if not groups or len(set(groups)) != len(groups) or any(group not in GROUPS
                                                             for group in groups):
         raise ValueError("Select distinct, known regression groups")
+    selected = [name for group in groups for name in GROUPS[group]]
+    if len(selected) != len(set(selected)):
+        raise ValueError("Regression groups select duplicate test names")
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     for directory in ("logs", "out"):
         (root / directory).mkdir(exist_ok=True)
@@ -79,7 +95,7 @@ def run_groups(root, groups):  # pylint: disable=too-many-locals
         for driver in drivers:
             if not (root / "test_regress" / driver).is_file():
                 raise FileNotFoundError(driver)
-        command = [sys.executable, "driver.py", "--vlt", "-j2", *drivers]
+        command = [sys.executable, "driver.py", "--vlt", "-j2", "--no-skip-identical", *drivers]
         with (root / "logs" / (group + "-regressions.log")).open("w") as log, subprocess.Popen(
                 command,
                 cwd=root / "test_regress",
@@ -97,7 +113,8 @@ def run_groups(root, groups):  # pylint: disable=too-many-locals
             status, counts = parse_summary(log_text)
         except ValueError as error:
             print(group + ": " + str(error), file=sys.stderr)
-        passed = returncode == 0 and passed_counts(status, counts, len(names))
+        passed = (returncode == 0 and passed_counts(status, counts, len(names))
+                  and passed_names(log_text, names))
         results[group] = {
             "commit": head,
             "selected": names,
