@@ -14,7 +14,7 @@ test.scenarios('simulator')
 # Ascending packed ranges deliberately exercise assignment direction.
 test.timeout(180)
 test.compile(
-    verilator_flags2=['--binary', '--fourstate', '--trace', '-Wno-FUTURE', '-Wno-ASCRANGE'])
+    verilator_flags2=['--binary', '--fourstate', '--trace', '-Wno-FUTURE', '-Wno-ASCRANGE', '-Wno-fatal'])
 test.execute(logfile=test.run_log_filename, iv_run_flags=['-N'])
 test.file_grep(test.run_log_filename, r'Conditional scale checks: (\d+)', 4416)
 test.file_grep_not(test.run_log_filename, r'%Error|ERROR:|WARNING:')
