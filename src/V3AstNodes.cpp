@@ -737,7 +737,7 @@ void AstBufIf1::dump(std::ostream& str) const {
     if (!isBuffer()) str << " [MOS]";
 }
 void AstBufIf1::dumpJson(std::ostream& str) const {
-    dumpJsonBoolFunc(str, isBuffer);
+    dumpJsonBoolFuncIf(str, isBuffer);
     dumpJsonGen(str);
 }
 void AstCCast::dump(std::ostream& str) const {
