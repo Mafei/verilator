@@ -28,9 +28,9 @@ independently squashed copies, without changing Git ancestry.
 - Adopt feature's temporary ownership handling, top-level port metadata,
   64-bit trace comparison fixes, corrected VCD X/Z encoding, new FST writer,
   and its newer upstream compiler/runtime changes.
-- Continuous-driver conflict registration is currently disabled, including
-  simple nets. Bus contention and drive-strength resolution remain experimental
-  limitations and require explicit semantic tests before they can be enabled.
+- Whole local two/three-driver nets use the bounded resolver described below.
+  General drive strengths, port resolution and bidirectional switches remain
+  outside that implementation.
 - Route paired public variables through residual VPI registration rather than
   the newer value-only table; preserve X/Z comparisons in value callbacks.
 - Preserve dev four-state test fixtures and feature generic JSON fixtures.
@@ -190,8 +190,10 @@ checks retained unsupported contexts against diagnostic goldens. The shared
 public header and oracle helper
 are tracked test inputs, not extra drivers. All groups retain forced generation,
 exact unique test names, counts, exits and commit provenance. This candidate's
-runtime and portable platform verification remain pending until their actual
-logs have been checked.
+132 selected checks passed on Linux cloud and both portable platforms at the
+preserved `e834ca82b607871ee3f9a4a09a252f5cdc4aa5aa` checkpoint. The broader
+108-case collection passed 107 with its one existing explicit DFG skip. These
+results do not certify later candidate commits.
 
 The resolver accepts exactly two or three whole continuous assignments to a
 local four-state packed integral `wire`, `tri`, `wor` or `wand`. Each contribution
@@ -375,6 +377,9 @@ acceptance failures.
 Independent reference comparison finds incorrect wired-OR and 129-bit contention
 values. Re-enabling the old resolver is insufficient: its `triand` truth table
 also produced a wrong, driver-order-dependent result for X and 1.
+The preserved resolver checkpoint repairs these cases; the original VCD/FST
+goldens passed there. Later candidates must rerun them without changing the
+inherited expectations.
 
 The resolver candidate covers whole local two/three-driver `wire`, `tri`, `wor`
 and `wand` nets as described above. Its broader demo VCD/FST acceptance must be
@@ -424,3 +429,48 @@ are additional gates and must not replace, silently filter or resize these
 existing contracts. Full Icarus, SystemVerilog or SDF compatibility is not
 claimed when only a bounded selection has run. Candidate branches and pull
 requests remain drafts; acceptance results do not authorize merging or release.
+
+## Bounded AMD repair candidate
+
+The `fourstate-amd-repair-20261008` branch continues from the preserved resolver
+checkpoint. Its separate `amd-repair` group adds public minimal regressions;
+it retains the original ten groups and all 132 selected drivers. The unchanged
+34-profile public AMD selection and broader 108-case collection remain separate
+acceptance contracts. Compiler generation, C++ builds, runtime outputs and
+physical VCD histories must all be checked at the final candidate SHA.
+
+| Area | Candidate behavior and boundary |
+| --- | --- |
+| Integral unary minus | Preserve signed/context widths and evaluate each operand once. Any X/Z operand produces an all-X result. |
+| Packed bit indexes | Keep DFG enabled, normalize invalid-index predicates to one bit, preserve signed bounds and reject invalid writes before indexing storage. |
+| Packed partial reads | Preserve in-range bits and return X for out-of-range bits for the qualified normalized, at most 32-bit index domain. Oversized selections and wider index domains retain their existing behavior and need further validation. |
+| Conditional expressions | Lower each branch once under guarded value/mask snapshots. Known predicates evaluate only the selected branch; ambiguous predicates evaluate both. The inherited merge formula remains; common-Z ambiguous branches are a known unvalidated semantic boundary. |
+| Single tristate buffers | Accept a whole local net or output with default strength, one qualified driver and no delay. Unknown enables are checked independently of data X/Z. MOS primitives, multiple contributions, explicit strengths and externally driven targets remain unsupported. |
+| Procedural assign/deassign | Accept whole module-owned packed variables with a constant or direct local-variable RHS. Compound live expressions, aliases, partial/hierarchical targets and external writes remain unsupported. |
+| Blocking intra-assignment delay | Capture value/mask before one suspension using activation-local storage. Concurrent task invocations, zero/X/Z delays and wide values require the independent delay regression; this feature remains pending until that regression passes. |
+| Clock/IO and glbl | Recheck the original models after each applicable repair. General strength resolution, bidirectional IO and hierarchical multiwriter nets require further implementation; passing functional profiles does not certify SDF or vendor timing models. |
+
+Boundary-index regressions intentionally retain ascending declarations and
+narrow/wide index expressions. They use `-Wno-fatal` to keep the actual width
+diagnostics visible without narrowing away the inputs that triggered the bugs.
+Compile-negative goldens are generated by the native compiler and verified in
+a fresh run with golden updating disabled. The input-net drive diagnostic probe
+bypasses the earlier `ASSIGNIN` guard only for that probe so four-state lowering's
+independent unsupported-context diagnostic is exercised.
+
+The first Icarus inventory is pinned to
+`f45ffabed3212a106f01cb362ef42c5d293f4513`. It contains 5,156 raw collection rows
+and 3,932 literal unique keys; aliases and option variants must not be counted
+as distinct runnable programs. The bounded first selection preserves 18
+original sources and expectations. The preserved resolver baseline passes 14,
+rejects two unary-minus cases, and differs on `nb_ec_concat` and
+`sv_packed_port1`. The remaining 5,138 raw rows have not run in this phase.
+
+Keep both differing cases in the full comparison and complete failure list.
+The immediate event-controlled NBA observation and default value of an undriven
+packed variable require language-semantics adjudication rather than an output
+rewrite. IEEE 1800-2017 sections 4.9.4, 6.8, 7.2.1 and 10.4.2, and Table 6-7
+provide relevant scheduling, declaration and default-value rules; the current
+1800-2023 text has not been independently retrieved for this investigation.
+A stable applicable CI subset must state any exclusion and its basis explicitly,
+while retaining the full selection's raw outcomes.
