@@ -1302,6 +1302,7 @@ class ForceConvertVisitor final : public VNVisitor {
                            : m_state.createForceReadExpression(*varInfo, lhsVarRefp);
             }
             AstAssign* const assignp = new AstAssign{flp, lhsp->cloneTreePure(false), forceReadp};
+            assignp->forceRetention(true);
             assignp->addNextHere(stmtListp);
             stmtListp = assignp;
         }

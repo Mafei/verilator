@@ -112,11 +112,26 @@ class WidthSelVisitor final : public VNVisitor {
         return FromData(errp, ddtypep, fromRange);
     }
 
+    static AstConst* newRangeConst(AstNodeExpr* const indexp, int32_t value) {
+        // Preserve a signed source index through range normalization. An
+        // unsigned constant would make the arithmetic unsigned, allowing Width
+        // to truncate the index before Unknown checks the complete bounds.
+        if (!v3Global.opt.fourstate() && indexp->isSigned()) {
+            return new AstConst{indexp->fileline(), AstConst::Signed32{}, value};
+        }
+        return new AstConst{indexp->fileline(), AstConst::Unsized32{},
+                            static_cast<uint32_t>(value)};
+    }
+
     AstNodeExpr* newSubNeg(AstNodeExpr* lhsp, int32_t rhs) {
-        // Return lhs-rhs, but if rhs is negative use an add, so we won't
-        // have to deal with signed math and related 32bit sign extension problems
+        // Return lhs-rhs. Preserve signed range arithmetic without negating rhs,
+        // which may be INT32_MIN. The legacy path uses an add for negative rhs.
         if (rhs == 0) {
             return lhsp;
+        } else if (!v3Global.opt.fourstate() && lhsp->isSigned()) {
+            AstNodeExpr* const newp = new AstSub{lhsp->fileline(), lhsp, newRangeConst(lhsp, rhs)};
+            newp->dtypeFrom(lhsp);
+            return newp;
         } else if (VN_IS(lhsp, Const)) {
             // Optional vs just making add/sub below, but saves constification some work
             V3Number num(lhsp, lhsp->width());
@@ -124,16 +139,13 @@ class WidthSelVisitor final : public VNVisitor {
             num.isSigned(lhsp->isSigned());
             return new AstConst{lhsp->fileline(), num};
         } else if (rhs > 0) {
-            AstNodeExpr* const newp
-                = new AstSub{lhsp->fileline(), lhsp,
-                             new AstConst(lhsp->fileline(), AstConst::Unsized32{}, rhs)};
+            AstNodeExpr* const newp = new AstSub{lhsp->fileline(), lhsp, newRangeConst(lhsp, rhs)};
             // We must make sure sub gets sign of original value, not from the constant
             newp->dtypeFrom(lhsp);
             return newp;
         } else {  // rhs < 0;
             AstNodeExpr* const newp
-                = new AstAdd{lhsp->fileline(), lhsp,
-                             new AstConst(lhsp->fileline(), AstConst::Unsized32{}, -rhs)};
+                = new AstAdd{lhsp->fileline(), lhsp, newRangeConst(lhsp, -rhs)};
             // We must make sure sub gets sign of original value, not from the constant
             newp->dtypeFrom(lhsp);
             return newp;
@@ -142,8 +154,7 @@ class WidthSelVisitor final : public VNVisitor {
     AstNodeExpr* newSubNeg(int32_t lhs, AstNodeExpr* rhsp) {
         // Return lhs-rhs
         // We must make sure sub gets sign of original value
-        AstNodeExpr* const newp = new AstSub{
-            rhsp->fileline(), new AstConst(rhsp->fileline(), AstConst::Unsized32{}, lhs), rhsp};
+        AstNodeExpr* const newp = new AstSub{rhsp->fileline(), newRangeConst(rhsp, lhs), rhsp};
         newp->dtypeFrom(rhsp);  // Important as AstSub default is lhs's sign
         return newp;
     }

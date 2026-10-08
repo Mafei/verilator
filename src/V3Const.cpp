@@ -1996,6 +1996,11 @@ class ConstVisitor final : public VNVisitor {
         UINFO(4, "UNICONST -> " << num);
         VL_DO_DANGLING(replaceNum(nodep, num), nodep);
     }
+    static bool canFoldBiop(const AstNodeBiop* const nodep) {
+        // Unknown enables retain H/L alternatives until the four-state driver audit.
+        return nodep->isPredictOptimizable()
+               && (!v3Global.opt.fourstate() || !VN_IS(nodep, BufIf1));
+    }
     void replaceConst(AstNodeBiop* nodep) {
         V3Number numv{nodep, nodep->widthMinV()};
         nodep->numberOperate(numv, constNumV(nodep->lhsp()), constNumV(nodep->rhsp()));
@@ -4332,7 +4337,9 @@ class ConstVisitor final : public VNVisitor {
 
     TREEOP1("AstSel{warnSelect(nodep)}",        "NEVER");
     // Generic constants on both side.  Do this first to avoid other replacements
-    TREEOPA("AstNodeBiop {$lhsp.castConst, $rhsp.castConst, nodep->isPredictOptimizable()}",  "replaceConst(nodep)");
+    // Preserve conditional-drive provenance until the four-state driver audit. Unknown
+    // enables encode H/L strength alternatives that cannot become an ordinary X driver.
+    TREEOPA("AstNodeBiop {$lhsp.castConst, $rhsp.castConst, canFoldBiop(nodep)}",  "replaceConst(nodep)");
     TREEOPA("AstNodeUniop{$lhsp.castConst, !nodep->isOpaque(), nodep->isPredictOptimizable()}",  "replaceConst(nodep)");
     TREEOPA("AstNodeQuadop{$lhsp.castConst, $rhsp.castConst, $thsp.castConst, $fhsp.castConst}",  "replaceConst(nodep)");
     // Zero on one side or the other

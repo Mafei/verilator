@@ -217,6 +217,11 @@ static void process() {
 
         V3Error::abortIfErrors();
 
+        if (v3Global.opt.timing().isSetTrue()) {
+            // Capture @* before WidthCommit removes it, and before helper reads are inserted.
+            V3Timing::prepareImplicit(v3Global.rootp());
+        }
+
         // Commit to the widths we've chosen; Make widthMin==width
         V3WidthCommit::widthCommit(v3Global.rootp());
         v3Global.assertDTypesResolved(true);

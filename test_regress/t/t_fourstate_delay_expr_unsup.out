@@ -19,8 +19,4 @@
                                                           : ... note: In instance 't'
    19 |   wire [6:0] #(2, delay_value()) separate_falling;
       |              ^
-%Error-UNSUPPORTED: t/t_fourstate_delay_expr_unsup.v:34:12: Unsupported: Blocking intra-assignment delay with --fourstate
-                                                          : ... note: In instance 't'
-   34 |     target = #(2) source;
-      |            ^
 %Error: Exiting due to

@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_drive_unsup.v:66:9: Unsupported: Blocking intra-assignment delay with --fourstate: partial or hierarchical target.
+                                                    : ... note: In instance 't'
+   66 |     u.q = #1 data;
+      |         ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

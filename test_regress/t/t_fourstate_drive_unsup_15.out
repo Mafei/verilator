@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_drive_unsup.v:59:13: Unsupported: Blocking intra-assignment delay with --fourstate: nonlocal or nonpacked variable.
+                                                     : ... note: In instance 't'
+   59 |     local_q = #1 data;
+      |             ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

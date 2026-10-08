@@ -416,6 +416,33 @@ struct TaskDpiUtils final {
 //######################################################################
 // Task state, as a visitor of each AstNode
 
+// Compiler-created C-scope temporaries retain their declaration and storage within the
+// scope across task expansion. Their VarScopes must follow each cloned declaration.
+class TaskCLocalVarVisitor final : public VNVisitorConst {
+    bool m_underCLocalScope = false;
+    std::vector<AstVar*> m_varps;
+
+    void visit(AstCLocalScope* nodep) override {
+        VL_RESTORER(m_underCLocalScope);
+        m_underCLocalScope = true;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstVar* nodep) override {
+        if (m_underCLocalScope && nodep->isFuncLocal() && nodep->isTemp() && !nodep->isIO()) {
+            m_varps.push_back(nodep);
+        }
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
+
+public:
+    static std::vector<AstVar*> collect(AstNode* const nodep) {
+        TaskCLocalVarVisitor visitor;
+        visitor.iterateAndNextConstNull(nodep);
+        return std::move(visitor.m_varps);
+    }
+};
+
 class TaskVisitor final : public VNVisitor {
     // NODE STATE
     // Each module:
@@ -447,6 +474,7 @@ class TaskVisitor final : public VNVisitor {
     // STATE - across all visitors
     DpiCFuncs m_dpiNames;  // Map of all created DPI functions
     VDouble0 m_statInlines;  // Statistic tracking
+    VDouble0 m_statCLocals;  // Fresh scopes for compiler-created C-scope locals
     VDouble0 m_statHierDpisWithCosts;  // Statistic tracking
 
     // METHODS
@@ -508,6 +536,15 @@ class TaskVisitor final : public VNVisitor {
                 refp->varp(refp->varScopep()->varp());
             }
         });
+    }
+
+    void scopeCLocals(AstNode* const bodyp) {
+        for (AstVar* const varp : TaskCLocalVarVisitor::collect(bodyp)) {
+            AstVarScope* const vscp = new AstVarScope{varp->fileline(), m_scopep, varp};
+            m_scopep->addVarsp(vscp);
+            varp->user2p(vscp);
+            ++m_statCLocals;
+        }
     }
 
     AstAssign* connectPortMakeInAssign(AstNodeExpr* pinp, AstVarScope* newvscp, bool pureCheck) {
@@ -758,6 +795,8 @@ class TaskVisitor final : public VNVisitor {
             // UINFO(0, "setflag on " << funcp->fvarp() << " to " << outvscp);
             refp->taskp()->fvarp()->user2p(outvscp);
         }
+        // Nested compiler locals stay in their C scopes, rather than shared module storage.
+        scopeCLocals(beginp);
         // Replace variable refs
         relink(beginp);
         //
@@ -1490,6 +1529,8 @@ class TaskVisitor final : public VNVisitor {
             cfuncp->addStmtsp(new AstCReturn{
                 rtnvscp->fileline(), new AstVarRef{rtnvscp->fileline(), rtnvscp, VAccess::READ}});
         }
+        // Non-inline bodies also own new declarations after the function body is cloned.
+        scopeCLocals(cfuncp);
         // Replace variable refs
         relink(cfuncp);
 
@@ -1834,6 +1875,10 @@ class TaskVisitor final : public VNVisitor {
                     VL_DO_DANGLING(pushDeletep(vscp->unlinkFrBack()), vscp);
                 }
             }
+            for (AstVar* const varp : TaskCLocalVarVisitor::collect(nodep->stmtsp())) {
+                AstVarScope* const vscp = m_statep->findVarScope(m_scopep, varp);
+                VL_DO_DANGLING(pushDeletep(vscp->unlinkFrBack()), vscp);
+            }
             // Just push for deletion, as other references to func may
             // remain until visitor exits
             nodep->unlinkFrBack();
@@ -1907,6 +1952,7 @@ public:
     }
     ~TaskVisitor() {
         V3Stats::addStat("Optimizations, Functions inlined", m_statInlines);
+        V3Stats::addStat("Optimizations, Task C-scope locals", m_statCLocals);
         V3Stats::addStat("Optimizations, Hierarchical DPI wrappers with costs",
                          m_statHierDpisWithCosts);
     }

@@ -370,21 +370,21 @@ class WidthVisitor final : public VNVisitor {
     // These have different node types, as they operate differently
     // Must add to case statement below,
     // Widths: 1 bit out, lhs width == rhs width.  real if lhs|rhs real
-    void visit(AstEq* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstNeq* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstGt* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstGte* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstLt* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstLte* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstGtS* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstGteS* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstLtS* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstLteS* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstEqCase* nodep) override { visit_cmp_eq_gt(nodep, true); }
-    void visit(AstNeqCase* nodep) override { visit_cmp_eq_gt(nodep, true); }
+    void visit(AstEq* nodep) override { visit_cmp_eq_gt(nodep, true, true); }
+    void visit(AstNeq* nodep) override { visit_cmp_eq_gt(nodep, true, true); }
+    void visit(AstGt* nodep) override { visit_cmp_eq_gt(nodep, true, false); }
+    void visit(AstGte* nodep) override { visit_cmp_eq_gt(nodep, true, false); }
+    void visit(AstLt* nodep) override { visit_cmp_eq_gt(nodep, true, false); }
+    void visit(AstLte* nodep) override { visit_cmp_eq_gt(nodep, true, false); }
+    void visit(AstGtS* nodep) override { visit_cmp_eq_gt(nodep, true, false); }
+    void visit(AstGteS* nodep) override { visit_cmp_eq_gt(nodep, true, false); }
+    void visit(AstLtS* nodep) override { visit_cmp_eq_gt(nodep, true, false); }
+    void visit(AstLteS* nodep) override { visit_cmp_eq_gt(nodep, true, false); }
+    void visit(AstEqCase* nodep) override { visit_cmp_eq_gt(nodep, true, true); }
+    void visit(AstNeqCase* nodep) override { visit_cmp_eq_gt(nodep, true, true); }
     // ...    These comparisons don't allow reals
-    void visit(AstEqWild* nodep) override { visit_cmp_eq_gt(nodep, false); }
-    void visit(AstNeqWild* nodep) override { visit_cmp_eq_gt(nodep, false); }
+    void visit(AstEqWild* nodep) override { visit_cmp_eq_gt(nodep, false, false); }
+    void visit(AstNeqWild* nodep) override { visit_cmp_eq_gt(nodep, false, false); }
     // ...    Real compares
     void visit(AstEqD* nodep) override { visit_cmp_real(nodep); }
     void visit(AstNeqD* nodep) override { visit_cmp_real(nodep); }
@@ -1288,7 +1288,16 @@ class WidthVisitor final : public VNVisitor {
                 // we want the select to be truncated to fit within the
                 // maximum select range, e.g. turn Xs outside of the select
                 // into something fast which pulls from within the array.
-                widthCheckSized(nodep, "Extract Range", nodep->lsbp(), selwidthDTypep, EXTEND_EXP,
+                // Preserve the full signed domain until V3Unknown checks bounds.
+                // Otherwise valid high indices become negative, or large positive
+                // and negative indices alias an in-range low-bit index. Narrow
+                // signed indices still need room for the unsigned upper bound.
+                const int indexWidth = nodep->lsbp()->isSigned()
+                                           ? std::max(nodep->lsbp()->width(), selwidth + 1)
+                                           : selwidth;
+                AstNodeDType* const indexDTypep = nodep->findLogicDType(
+                    indexWidth, indexWidth, nodep->lsbp()->dtypep()->numeric());
+                widthCheckSized(nodep, "Extract Range", nodep->lsbp(), indexDTypep, EXTEND_EXP,
                                 false /*NOWARN*/);
             }
             // UINFOTREE(9, nodep, "", "seldone");
@@ -1373,8 +1382,15 @@ class WidthVisitor final : public VNVisitor {
                 }
                 // Four-state bounds checks need every address bit, including high X/Z bits.
                 if (!v3Global.opt.fourstate()) {
-                    widthCheckSized(nodep, "Extract Range", nodep->bitp(), selwidthDTypep,
-                                    EXTEND_EXP, false /*NOWARN*/);
+                    // Keep signed indices intact for V3Unknown's bounds check, and
+                    // keep the upper bound representable for narrow signed types.
+                    const int indexWidth = nodep->bitp()->isSigned()
+                                               ? std::max(nodep->bitp()->width(), selwidth + 1)
+                                               : selwidth;
+                    AstNodeDType* const indexDTypep = nodep->findLogicDType(
+                        indexWidth, indexWidth, nodep->bitp()->dtypep()->numeric());
+                    widthCheckSized(nodep, "Extract Range", nodep->bitp(), indexDTypep, EXTEND_EXP,
+                                    false /*NOWARN*/);
                 }
             }
         }
@@ -1523,13 +1539,105 @@ class WidthVisitor final : public VNVisitor {
         }
     }
 
+    bool isCheckedPackedSelect(AstNodePreSel* nodep) const {
+        // Generate-only evaluation and inactive or uninstantiated template modules do not
+        // have the final packed dimensions needed for a range warning.
+        return !m_doGenerate && !(m_modep && (m_modep->dead() || m_modep->parameterizedTemplate()))
+               && VN_IS(nodep->fromp()->dtypep()->skipRefp(), PackArrayDType);
+    }
+    static bool packedSelectIndexValue(const AstConst* nodep, int& value) {
+        if (!nodep || nodep->num().isFourState()) return false;
+        if (nodep->num().width() > 32) {
+            // A wide index may still be a zero or sign extension of a 32-bit coordinate.
+            // Leave other wide values to the normal selection width checks.
+            const bool sign = nodep->dtypep()->isSigned() && nodep->num().bitIs1(31);
+            if (!nodep->dtypep()->isSigned() && nodep->num().bitIs1(31)) return false;
+            for (int bit = 32; bit < nodep->num().width(); ++bit) {
+                if (nodep->num().bitIs1(bit) != sign) return false;
+            }
+            value = static_cast<int>(nodep->num().edataWord(0));
+            return true;
+        }
+        value = nodep->dtypep()->isSigned() && nodep->num().width() < 32
+                    ? nodep->num().toSInt()
+                    : static_cast<int>(nodep->num().toUInt());
+        return true;
+    }
+    bool warnPackedSelectRange(AstNodePreSel* nodep, const VNumRange& selected) const {
+        const AstPackArrayDType* const dtypep
+            = VN_AS(nodep->fromp()->dtypep()->skipRefp(), PackArrayDType);
+        const VNumRange range = dtypep->declRange();
+        if (selected.lo() < range.lo() || selected.hi() > range.hi()) {
+            nodep->v3warn(SELRANGE, "Selection index out of range: "
+                                        << (selected.lo() == selected.hi()
+                                                ? std::to_string(selected.lo())
+                                                : std::to_string(selected.hi()) + ":"
+                                                      + std::to_string(selected.lo()))
+                                        << " outside " << range.hi() << ":" << range.lo());
+            return true;
+        }
+        return false;
+    }
+    static AstNodeExpr* packedSelectIndexp(AstNodePreSel* nodep) {
+        if (AstSelBit* const bitp = VN_CAST(nodep, SelBit)) return bitp->bitp();
+        if (AstSelExtract* const extractp = VN_CAST(nodep, SelExtract)) return extractp->leftp();
+        if (AstSelPlus* const plusp = VN_CAST(nodep, SelPlus)) return plusp->bitp();
+        return VN_AS(nodep, SelMinus)->bitp();
+    }
+    bool checkPackedSelectRange(AstNodePreSel* nodep) const {
+        if (!isCheckedPackedSelect(nodep)) return false;
+        // Try folding every index after its width check. Dynamic references stay
+        // nonconstant; V3WidthSel lowers the resulting expression as usual.
+        V3Const::constifyParamsNoWarnEdit(packedSelectIndexp(nodep));
+        int first = 0;
+        bool valid = packedSelectIndexValue(VN_CAST(packedSelectIndexp(nodep), Const), first);
+        int last = first;
+        if (AstSelExtract* const extractp = VN_CAST(nodep, SelExtract)) {
+            V3Const::constifyParamsNoWarnEdit(extractp->rightp());
+            valid = packedSelectIndexValue(VN_CAST(extractp->rightp(), Const), last) && valid;
+        } else if (AstSelPlus* const plusp = VN_CAST(nodep, SelPlus)) {
+            V3Const::constifyParamsNoWarnEdit(plusp->widthp());
+            int width = 0;
+            valid = packedSelectIndexValue(VN_CAST(plusp->widthp(), Const), width) && valid;
+            if (valid) {
+                valid = width > 0 && first <= std::numeric_limits<int>::max() - (width - 1);
+                if (valid) last = first + width - 1;
+            }
+        } else if (AstSelMinus* const minusp = VN_CAST(nodep, SelMinus)) {
+            V3Const::constifyParamsNoWarnEdit(minusp->widthp());
+            int width = 0;
+            valid = packedSelectIndexValue(VN_CAST(minusp->widthp(), Const), width) && valid;
+            if (valid) {
+                valid = width > 0 && first >= std::numeric_limits<int>::min() + (width - 1);
+                if (valid) last = first - width + 1;
+            }
+        }
+        return valid && warnPackedSelectRange(nodep, VNumRange{first, last});
+    }
+    AstNode* widthPackedSelect(AstNodePreSel* nodep) const {
+        const bool warned = checkPackedSelectRange(nodep);
+        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
+        if (warned) {
+            // The transformed AstSel uses flattened bit offsets. Keep its later range
+            // check from reporting the same selection in misleading bit units.
+            if (AstSel* const bitSelp = VN_CAST(selp, Sel)) {
+                FileLine* const flp = new FileLine{bitSelp->fileline()};
+                flp->warnOff(V3ErrorCode::SELRANGE, true);
+                bitSelp->fileline(flp);
+            }
+        }
+        return selp;
+    }
     void visit(AstSelBit* nodep) override {
         // Just a quick check as after V3Param these nodes instead are AstSel's
         userIterateAndNext(nodep->fromp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->bitp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->thsp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->attrp(), WidthVP{SELF, BOTH}.p());
-        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
+        // Packed-array indices become flattened bit offsets in V3WidthSel. A constant index
+        // above the declared range (or below it for ascending ranges) may wrap when that
+        // offset is narrowed, before the later AstSel range checks can see it.
+        AstNode* const selp = widthPackedSelect(nodep);
         if (selp != nodep) {
             VL_DANGLING(nodep);
             userIterate(selp, m_vup);
@@ -1543,7 +1651,7 @@ class WidthVisitor final : public VNVisitor {
         userIterateAndNext(nodep->leftp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->rightp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->attrp(), WidthVP{SELF, BOTH}.p());
-        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
+        AstNode* const selp = widthPackedSelect(nodep);
         if (selp != nodep) {
             nodep = nullptr;
             userIterate(selp, m_vup);
@@ -1556,7 +1664,7 @@ class WidthVisitor final : public VNVisitor {
         userIterateAndNext(nodep->bitp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->widthp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->attrp(), WidthVP{SELF, BOTH}.p());
-        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
+        AstNode* const selp = widthPackedSelect(nodep);
         if (selp != nodep) {
             nodep = nullptr;
             userIterate(selp, m_vup);
@@ -1569,7 +1677,7 @@ class WidthVisitor final : public VNVisitor {
         userIterateAndNext(nodep->bitp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->widthp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->attrp(), WidthVP{SELF, BOTH}.p());
-        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
+        AstNode* const selp = widthPackedSelect(nodep);
         if (selp != nodep) {
             nodep = nullptr;
             userIterate(selp, m_vup);
@@ -2316,7 +2424,6 @@ class WidthVisitor final : public VNVisitor {
                 VL_DO_DANGLING(replaceWithDVersion(nodep), nodep);
                 return;
             }
-
             checkCvtUS(nodep->lhsp(), false);
             iterateCheckSizedSelf(nodep, "RHS", nodep->rhsp(), SELF, BOTH);
             nodep->dtypeFrom(nodep->lhsp());
@@ -3951,7 +4058,7 @@ class WidthVisitor final : public VNVisitor {
             nextip = itemp->nextp();  // iterate may cause the node to get replaced
             if (VN_IS(itemp, InsideRange)) {
                 userIterate(itemp, WidthVP{expDTypep, FINAL}.p());
-            } else if (!itemp->dtypep()->isNonPackedArray()) {
+            } else if (!itemp->dtypep()->skipRefp()->isNonPackedArray()) {
                 iterateCheck(nodep, "Inside Item", itemp, CONTEXT_DET, FINAL, expDTypep,
                              EXTEND_EXP);
             }
@@ -7959,6 +8066,9 @@ class WidthVisitor final : public VNVisitor {
                     handle.relink(newp);
                     pinp = newp;
                 }
+                if (portp->isWritable()) {
+                    V3LinkLValue::linkLValueSet(pinp, portp->direction().pinAccess());
+                }
                 // AstPattern requires assignments to pass datatype on PRELIM
                 VL_DO_DANGLING(userIterate(pinp, WidthVP{portp->dtypep(), PRELIM}.p()), pinp);
             }
@@ -8051,9 +8161,6 @@ class WidthVisitor final : public VNVisitor {
                     pinp->unlinkFrBack(&relinkHandle);
                     AstNodeExpr* const newp = new AstResizeLValue{pinp->fileline(), pinp};
                     relinkHandle.relink(newp);
-                }
-                if (portp->isWritable()) {
-                    V3LinkLValue::linkLValueSet(pinp, portp->direction().pinAccess());
                 }
                 if (portp->direction() != VDirection::REF
                     && !(portp->basicp()
@@ -8693,7 +8800,7 @@ class WidthVisitor final : public VNVisitor {
         return dtypep->isAggregateType();
     }
 
-    void visit_cmp_eq_gt(AstNodeBiop* nodep, bool realok) {
+    void visit_cmp_eq_gt(AstNodeBiop* nodep, bool realok, bool nonNumericOk) {
         // CALLER: AstEq, AstGt, ..., AstLtS
         // Real allowed if and only if real_lhs set
         // See IEEE-2012 11.4.4, and 11.8.1:
@@ -8728,7 +8835,7 @@ class WidthVisitor final : public VNVisitor {
             const bool isAggrLhs = isAggregateType(nodep->lhsp());
             const bool isAggrRhs = isAggregateType(nodep->rhsp());
 
-            if ((isAggrLhs || isAggrRhs) && nodep->lhsp() && nodep->rhsp()) {
+            if ((isAggrLhs || isAggrRhs) && nonNumericOk) {
                 const AstNodeDType* const lhsDType = nodep->lhsp()->dtypep();
                 const AstNodeDType* const rhsDType = nodep->rhsp()->dtypep();
 
@@ -9677,8 +9784,9 @@ class WidthVisitor final : public VNVisitor {
         // V3AssertPre checks the actual type after property argument substitution.
         if (!checkDtp->isIntegralOrPacked()
             && !(deferUntyped && checkDtp->basicp() && checkDtp->basicp()->untyped())) {
-            parentp->v3error("Expected numeric type, but got a " << checkDtp->prettyDTypeNameQ()
-                                                                 << " data type");
+            parentp->v3error(ucfirst(parentp->prettyOperatorName())
+                             << " expects a numeric " << side << " operand, but it has data type "
+                             << checkDtp->prettyDTypeNameQ() << " (IEEE 1800-2023 11.3)");
         }
         (void)underp;  // cppcheck
     }
@@ -9757,10 +9865,10 @@ class WidthVisitor final : public VNVisitor {
                        && VN_AS(underVDTypep, BasicDType)->isCHandle())) {
             // Allow warning-free "if (handle)"
             VL_DO_DANGLING(fixWidthReduce(VN_AS(underp, NodeExpr)), underp);  // Changed
-        } else if (!underVDTypep->basicp()) {
-            parentp->v3error("Logical operator " << parentp->prettyTypeName()
-                                                 << " expects a non-complex data type on the "
-                                                 << side << ".");
+        } else if (!underVDTypep->basicp() || underVDTypep->isAggregateType()) {
+            parentp->v3error(ucfirst(parentp->prettyOperatorName())
+                             << " expects a numeric " << side << " operand, but it has data type "
+                             << underVDTypep->prettyDTypeNameQ() << " (IEEE 1800-2023 11.3)");
             underp->replaceWith(new AstConst{parentp->fileline(), AstConst::BitFalseErroring{}});
             VL_DO_DANGLING(pushDeletep(underp), underp);
         } else {
@@ -9831,6 +9939,19 @@ class WidthVisitor final : public VNVisitor {
             spliceCvtString(VN_AS(underp, NodeExpr));
             underp = userIterateSubtreeReturnEdits(oldp, WidthVP{SELF, FINAL, childStreamUse}.p());
         } else {
+            const AstNodeDType* const underDtp = underp->dtypep()->skipRefp();
+            if (determ != ASSIGN && expDTypep->skipRefp()->isIntegralOrPacked()
+                && underDtp->isAggregateType()) {
+                parentp->v3error(ucfirst(parentp->prettyOperatorName())
+                                 << " expects a numeric " << side
+                                 << " operand, but it has data type "
+                                 << underDtp->prettyDTypeNameQ() << " (IEEE 1800-2023 11.3)");
+                AstNode* const newp
+                    = new AstConst{underp->fileline(), AstConst::BitFalseErroring{}};
+                underp->replaceWith(newp);
+                VL_DO_DANGLING(pushDeletep(underp), underp);
+                underp = newp;
+            }
             const AstBasicDType* const expBasicp = expDTypep->basicp();
             const AstBasicDType* const underBasicp = underp->dtypep()->basicp();
             if (expBasicp && underBasicp) {
@@ -9839,8 +9960,7 @@ class WidthVisitor final : public VNVisitor {
                     const auto castable
                         = AstNode::computeCastable(expEnump, underp->dtypep(), underp);
                     if (castable != VCastable::SAMEISH && castable != VCastable::COMPATIBLE
-                        && castable != VCastable::ENUM_IMPLICIT && !VN_IS(underp, Cast)
-                        && !VN_IS(underp, CastDynamic) && !m_enumItemp
+                        && castable != VCastable::ENUM_IMPLICIT && !m_enumItemp
                         && !parentp->fileline()->warnIsOff(V3ErrorCode::ENUMVALUE) && warnOn) {
                         underp->v3warn(ENUMVALUE,
                                        "Implicit conversion to enum "

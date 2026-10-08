@@ -77,8 +77,83 @@
 
 #include <limits>
 #include <queue>
+#include <unordered_set>
 
 VL_DEFINE_DEBUG_FUNCTIONS;
+
+// ######################################################################
+
+// An implicit event control in a suspendable always needs an explicit sensitivity list.
+// Otherwise TimingControlVisitor moves the COMBO process into initial scheduling and the
+// coroutine repeats its delays without waiting for another input event. Collect the source
+// reads before task inlining or expression lowering adds reads of helper variables. In
+// particular, @* includes function arguments, but not reads inside the called function.
+class TimingImplicitReadsVisitor final : public VNVisitorConst {
+    AstSenTree* const m_sentreep;
+    std::unordered_set<VNRef<AstNode>> m_refs;  // Unique read expressions, in encounter order
+
+    void visit(AstNodeVarRef* nodep) override {
+        if (!nodep->access().isReadOrRW() || nodep->varp()->lifetime().isAutomatic()) return;
+        AstNodeVarRef* const refp = nodep->cloneTree(false);
+        refp->access(VAccess::READ);
+        if (m_refs.emplace(*refp).second) {
+            m_sentreep->addSensesp(new AstSenItem{refp->fileline(), VEdgeType::ET_CHANGED, refp});
+        } else {
+            // This clone has never been attached to the AST.
+            refp->deleteTree();
+        }
+    }
+    void visit(AstVar* nodep) override {
+        if (nodep->lifetime().isAutomatic()) iterateConstNull(nodep->valuep());
+    }
+    void visit(AstNodeDType*) override {}
+    void visit(AstSenTree*) override {
+    }  // A nested event expression is not an outer @* dependency.
+    void visit(AstWait* nodep) override {
+        // A wait-only read is also excluded, but reads in its controlled statement are included.
+        iterateAndNextConstNull(nodep->stmtsp());
+    }
+    void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
+
+public:
+    TimingImplicitReadsVisitor(AstNode* stmtsp, AstSenTree* sentreep)
+        : m_sentreep{sentreep} {
+        iterateAndNextConstNull(stmtsp);
+    }
+};
+
+class TimingImplicitVisitor final : public VNVisitor {
+    size_t m_statImplicit = 0;  // Timed always @* processes with expanded sensitivity
+
+    void visit(AstAlways* nodep) override {
+        AstSenTree* const oldSentreep = nodep->sentreep();
+        if (nodep->keyword() != VAlwaysKwd::ALWAYS || !oldSentreep
+            || !oldSentreep->sensesp()->isComboStar() || !nodep->stmtsp()
+            || !nodep->stmtsp()->existsAndNext(
+                [](const AstNode* const stmtp) { return stmtp->isTimingControl(); })) {
+            return;
+        }
+        AstSenTree* const sentreep = new AstSenTree{oldSentreep->fileline(), nullptr};
+        { TimingImplicitReadsVisitor{nodep->stmtsp(), sentreep}; }
+        if (!sentreep->sensesp()) {
+            // With no read dependencies the implicit event control never triggers.
+            nodep->v3warn(ALWNEVER, "'always @*' will never execute as expression list is "
+                                    "empty (no variables read)\n"
+                                        << nodep->warnMore() << "... Suggest use 'always_comb'");
+            sentreep->addSensesp(new AstSenItem{sentreep->fileline(), AstSenItem::Never{}});
+        }
+        oldSentreep->replaceWith(sentreep);
+        VL_DO_DANGLING(pushDeletep(oldSentreep), oldSentreep);
+        ++m_statImplicit;
+    }
+    void visit(AstNode* nodep) override { iterateChildren(nodep); }
+
+public:
+    explicit TimingImplicitVisitor(AstNetlist* nodep) { iterate(nodep); }
+    ~TimingImplicitVisitor() override {
+        V3Stats::addStat("Timing, implicit timed sensitivities", m_statImplicit);
+    }
+};
 
 // ######################################################################
 
@@ -1564,6 +1639,12 @@ public:
 
 //######################################################################
 // Timing class functions
+
+void V3Timing::prepareImplicit(AstNetlist* nodep) {
+    UINFO(2, __FUNCTION__ << ":");
+    { TimingImplicitVisitor{nodep}; }
+    V3Global::dumpCheckGlobalTree("timingimplicit", 0, dumpTreeEitherLevel() >= 3);
+}
 
 void V3Timing::timingAll(AstNetlist* nodep) {
     UINFO(2, __FUNCTION__ << ":");

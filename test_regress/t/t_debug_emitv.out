@@ -1,6 +1,12 @@
 module Vt_debug_emitv_t;
     input logic clk;
     input logic in;
+    logic debug_buffer;
+    logic debug_nmos;
+    logic debug_pmos;
+    assign debug_buffer = bufif(in,clk);
+    assign debug_nmos = bufif(in,clk);
+    assign debug_pmos = bufif(in,(~ clk));
     typedef enum logic [2:0] {
         ZERO = 3'h0,
         ONE = 3'h1
@@ -65,20 +71,20 @@ module Vt_debug_emitv_t;
             else begin
                 $display("+TEST= not found");
             end
-            if (downto_32[33]) begin
+            if (downto_32[('sh21 - 32'h20) + 32+:1]) begin
                 $write("");
             end
-            if (downto_32[(ident('sh21) - 'h20)[5:0] + 32
+            if (downto_32[(ident('sh21) - 32'h20) + 32
                 +:1]) begin
                 $write("");
             end
-            if ((| downto_32[48:40])) begin
+            if ((| downto_32[('sh28 - 32'h20) + 32+:9])) begin
                 $write("");
             end
-            if ((| downto_32[57:55])) begin
+            if ((| downto_32[('sh37 - 32'h20) + 32+:3])) begin
                 $write("");
             end
-            if ((| downto_32[60:54])) begin
+            if ((| downto_32[('sh3c - 32'h26) + 32+:7])) begin
                 $write("");
             end
             if (the_ifaces[2].ifsig) begin
@@ -312,7 +318,7 @@ module Vt_debug_emitv_t;
                     begin
                         $write("%%Error: %s:%0d:  got=%0d exp=%0d\n", 
                                136'h742f745f64656275675f656d6974762e76, 
-                               'sh105, SUB_B, 2'h1);
+                               'sh10b, SUB_B, 2'h1);
                         $stop;
                     end
                 end
@@ -1266,8 +1272,15 @@ package Vt_debug_emitv_std;
             Vt_debug_emitv_process pVt_debug_emitv_process;
             begin : label4
                 self = /*CRESET*/;
-                p = new();
-                $c(p.m_process = vlProcess;);
+                p = /*CRESET*/;
+                $c(vlProcess->initFromSelf(p););
+                if ((p == null)) begin
+                    begin
+                        p = new();
+                        $c(p.m_process = vlProcess;);
+                        $c(vlProcess->setSelf(&*p););
+                    end
+                end
                 self = p;
                 disable label4;
             end
@@ -1314,42 +1327,6 @@ package Vt_debug_emitv_std;
                 end
             end
         endtask
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
-
-        ???? // SYSTEMCSECTION
         function get_randstate;
             string s;
             begin : label6
@@ -1366,7 +1343,9 @@ package Vt_debug_emitv_std;
         endtask
         function new;
         endfunction
-        process::FINISHEDprocess::KILLEDprocess::RUNNINGprocess::SUSPENDEDprocess::WAITINGendclass
+        process::FINISHEDprocess::KILLEDprocess::RUNNINGprocess::SUSPENDEDprocess::WAITING
+        ???? // SYSTEMCSECTION
+    endclass
     class Vt_debug_emitv_semaphore;
         typedef struct {
             Vt_debug_emitv_process proc;

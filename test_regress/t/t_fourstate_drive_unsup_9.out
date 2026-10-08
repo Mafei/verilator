@@ -1,0 +1,11 @@
+%Warning-IEEEMAYDEPRECATE: t/t_fourstate_drive_unsup.v:39:11: Feature may be deprecated in future IEEE standard
+   39 |   initial deassign u.q;
+      |           ^~~~~~~~
+                           ... For warning description see https://verilator.org/warn/IEEEMAYDEPRECATE?v=latest
+                           ... Use "/* verilator lint_off IEEEMAYDEPRECATE */" and lint_on around source to disable this message.
+%Error-UNSUPPORTED: t/t_fourstate_drive_unsup.v:39:11: Unsupported: Procedural deassign with --fourstate: partial or hierarchical target.
+                                                     : ... note: In instance 't'
+   39 |   initial deassign u.q;
+      |           ^~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

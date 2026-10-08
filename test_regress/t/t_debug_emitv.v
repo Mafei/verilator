@@ -61,6 +61,12 @@ module t (/*AUTOARG*/
   input clk;
   input in;
 
+  // Exercise the buffer/MOS provenance flag in text and JSON AST dumps.
+  wire debug_buffer, debug_nmos, debug_pmos;
+  bufif1 debug_buffer_gate(debug_buffer, in, clk);
+  nmos debug_nmos_gate(debug_nmos, in, clk);
+  pmos debug_pmos_gate(debug_pmos, in, clk);
+
   // verilator lint_off UNPACKED
 
   typedef enum [2:0] {

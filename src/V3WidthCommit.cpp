@@ -540,7 +540,7 @@ private:
         if (AstClassRefDType* const classrefp = VN_CAST(nodep->fromp()->dtypep(), ClassRefDType)) {
             classEncapCheck(nodep, nodep->varp(), classrefp->classp());
         }  // else might be struct, etc
-        varLifetimeCheck(nodep, nodep->varp());
+        if (nodep->access().isWriteOrRW() || m_contReads) varLifetimeCheck(nodep, nodep->varp());
     }
     void visit(AstVar* nodep) override {
         iterateChildren(nodep);

@@ -732,6 +732,14 @@ void AstCAwait::dump(std::ostream& str) const {
     }
 }
 void AstCAwait::dumpJson(std::ostream& str) const { dumpJsonGen(str); }
+void AstBufIf1::dump(std::ostream& str) const {
+    Super::dump(str);
+    if (!isBuffer()) str << " [MOS]";
+}
+void AstBufIf1::dumpJson(std::ostream& str) const {
+    dumpJsonBoolFuncIf(str, isBuffer);
+    dumpJsonGen(str);
+}
 void AstCCast::dump(std::ostream& str) const {
     Super::dump(str);
     str << " sz" << size();
@@ -2293,6 +2301,14 @@ void AstNodeArrayDType::dumpSmall(std::ostream& str) const {
         str << "p";
     }
     str << declRange();
+}
+void AstAssign::dump(std::ostream& str) const {
+    Super::dump(str);
+    if (forceRetention()) str << " [FORCE_RETENTION]";
+}
+void AstAssign::dumpJson(std::ostream& str) const {
+    dumpJsonBoolFuncIf(str, forceRetention);
+    dumpJsonGen(str);
 }
 void AstNodeAssign::dump(std::ostream& str) const {
     Super::dump(str);

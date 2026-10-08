@@ -26,6 +26,7 @@
 
 class V3Timing final {
 public:
+    static void prepareImplicit(AstNetlist* nodep) VL_MT_DISABLED;
     static void timingAll(AstNetlist* nodep) VL_MT_DISABLED;
 };
 
