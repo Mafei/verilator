@@ -3668,6 +3668,11 @@ public:
         triorTriandReduce(m_assignWToTrior, triorReducer);
         triorTriandReduce(m_assignWToWire, triReducer);
         V3Error::abortIfErrors();
+        // Split variables are obsolete. Audit only their lowered replacements, including
+        // parameter initializers. Keep the originals alive until deferred deletion so
+        // any missed reference is still diagnosed rather than dereferencing freed storage.
+        for (AstVar* const varp : m_varpsToRemove) pushDeletep(varp->unlinkFrBack());
+        m_varpsToRemove.clear();
         { FourstateLogicTypePropagator{netlistp}; }
         netlistp->foreach([](const AstNodeExpr* const nodep) {
             if (VN_IS(nodep, NodeFTaskRef)) {
@@ -3680,7 +3685,6 @@ public:
             }
         });
         V3Error::abortIfErrors();
-        for (AstVar* const varp : m_varpsToRemove) varp->unlinkFrBack()->deleteTree();
         UASSERT_OBJ(m_tmpVarReleaserStack.empty(), m_tmpVarReleaserStack.back().first,
                     "TmpVarsReleaser stack frame has not been consumed");
     }
