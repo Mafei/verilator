@@ -139,6 +139,7 @@
 
 #include "V3Fourstate.h"
 
+#include "V3Stats.h"
 #include "V3UniqueNames.h"
 #include "V3Unknown.h"
 
@@ -558,6 +559,184 @@ public:
     ~FourstateLogicTypePropagator() override = default;
 };
 
+// Audit unsplit implicit-pull nets before any write is transformed. Applying a pull to an
+// individual contribution is only correct for a single whole, untimed continuous driver.
+class FourstatePullVisitor final : public VNVisitorConst {
+    struct DriverInfo final {
+        AstNodeModule* modulep = nullptr;
+        AstNodeModule* assignModulep = nullptr;
+        AstAssignW* assignp = nullptr;
+        unsigned writes = 0;
+        bool knownInitializer = false;
+        string reason;
+    };
+    std::map<AstVar*, DriverInfo> m_drivers;
+    std::vector<AstVar*> m_vars;
+    AstNodeModule* m_modp = nullptr;
+    AstAssignW* m_assignp = nullptr;
+    AstNodeAssign* m_nodeAssignp = nullptr;
+    string m_context;
+    bool m_alias = false;
+    bool m_initial = false;
+
+    static bool isPullNet(const AstVar* const varp) {
+        return varp->isPullup() || varp->isPulldown();
+    }
+    static void reject(DriverInfo& info, const string& reason) {
+        if (info.reason.empty()) info.reason = reason;
+    }
+    void visit(AstNodeModule* nodep) override {
+        VL_RESTORER(m_modp);
+        m_modp = nodep;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstVar* nodep) override {
+        if (isPullNet(nodep)) {
+            DriverInfo& info = m_drivers[nodep];
+            info.modulep = m_modp;
+            m_vars.push_back(nodep);
+            if (!nodep->isNet() || nodep->isIO() || nodep->isClassMember() || nodep->isFuncLocal()
+                || nodep->lifetime().isAutomatic()
+                || !nodep->dtypep()->skipRefp()->isIntegralOrPacked()) {
+                reject(info, "nonlocal or nonpacked variable");
+            } else if (nodep->isForced() || nodep->isSigUserRWPublic()) {
+                reject(info, "force or external write access");
+            } else if (nodep->delayp()) {
+                reject(info, "net delay");
+            } else if (nodep->hasStrengthAssignment()) {
+                reject(info, "explicit drive strength");
+            }
+        }
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNodeAssign* nodep) override {
+        VL_RESTORER(m_assignp);
+        VL_RESTORER(m_nodeAssignp);
+        m_assignp = VN_CAST(nodep, AssignW);
+        m_nodeAssignp = nodep;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstInitial* nodep) override {
+        VL_RESTORER(m_initial);
+        m_initial = true;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNodeVarRef* nodep) override {
+        AstVar* const varp = nodep->varp();
+        if (!isPullNet(varp)) return;
+        DriverInfo& info = m_drivers[varp];
+        if (m_alias) {
+            ++info.writes;
+            reject(info, m_context);
+            return;
+        }
+        if (!nodep->access().isWriteOrRW()) return;
+        ++info.writes;
+        if (!m_context.empty()) {
+            reject(info, m_context);
+            return;
+        } else if (VN_IS(nodep, VarXRef)) {
+            reject(info, "hierarchical writer");
+        } else if (!m_assignp && m_initial && VN_IS(m_nodeAssignp, Assign)
+                   && m_nodeAssignp->lhsp() == nodep && !m_nodeAssignp->timingControlp()
+                   && varp->isConst()) {
+            // V3Const can turn a known constant continuous driver into an initial assignment.
+            // Preserve that optimized form, without admitting general procedural net writes.
+            const AstConst* const constp = VN_CAST(varp->valuep(), Const);
+            if (constp && !constp->num().isFourState()
+                && constp->sameTree(m_nodeAssignp->rhsp())) {
+                info.knownInitializer = true;
+                info.assignModulep = m_modp;
+            } else {
+                reject(info, "write outside a whole continuous assignment");
+            }
+        } else if (!m_assignp || m_assignp->lhsp() != nodep) {
+            reject(info, "write outside a whole continuous assignment");
+        } else if (m_assignp->timingControlp()) {
+            reject(info, "assignment delay");
+        } else if (m_assignp->strengthSpecp()) {
+            reject(info, "explicit drive strength");
+        } else {
+            info.assignp = m_assignp;
+            info.assignModulep = m_modp;
+        }
+    }
+    void visit(AstPin* nodep) override {
+        VL_RESTORER(m_context);
+        if (AstVar* const varp = nodep->modVarp()) {
+            if (isPullNet(varp) && varp->direction().isNonOutput()) {
+                DriverInfo& info = m_drivers[varp];
+                ++info.writes;
+                reject(info, "port or pin writer");
+            }
+            // Input actuals are reads. Only output/inout/ref actuals contribute a driver.
+            if (varp->isWritable()) m_context = "port or pin writer";
+        }
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstAlias* nodep) override {
+        VL_RESTORER(m_context);
+        VL_RESTORER(m_alias);
+        m_context = "alias";
+        m_alias = true;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstAliasScope* nodep) override {
+        VL_RESTORER(m_context);
+        VL_RESTORER(m_alias);
+        m_context = "alias";
+        m_alias = true;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstRelease* nodep) override {
+        VL_RESTORER(m_context);
+        m_context = "force or release";
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstAssignForce* nodep) override {
+        VL_RESTORER(m_context);
+        m_context = "force or release";
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstPull* nodep) override {
+        VL_RESTORER(m_context);
+        m_context = "explicit pull primitive";
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
+
+public:
+    static std::map<const AstNodeAssign*, bool> collect(AstNetlist* const netlistp) {
+        FourstatePullVisitor visitor;
+        visitor.iterateConst(netlistp);
+        std::map<const AstNodeAssign*, bool> assignments;
+        for (AstVar* const varp : visitor.m_vars) {
+            DriverInfo& info = visitor.m_drivers.at(varp);
+            if (!info.writes) continue;  // Preserve the existing undriven pull path.
+            if (info.writes == 1 && info.knownInitializer && info.reason.empty()
+                && info.assignModulep == info.modulep
+                && varp->dtypep()->skipRefp()->isIntegralOrPacked() && !varp->isForced()
+                && !varp->isSigUserRWPublic() && !varp->delayp()
+                && !varp->hasStrengthAssignment()) {
+                continue;  // No Z bits can require a fallback in a known constant driver.
+            }
+            if (info.writes != 1) reject(info, "multiple drivers");
+            if (info.assignp && info.assignModulep != info.modulep) {
+                reject(info, "nonlocal writer");
+            }
+            if (info.reason.empty()) {
+                UASSERT_OBJ(info.assignp, varp, "Pull driver audit lost assignment");
+                assignments.emplace(info.assignp, varp->isPullup());
+            } else {
+                varp->v3warn(E_UNSUPPORTED, "Unsupported: Driven tri0/tri1 net "
+                                                << varp->prettyNameQ()
+                                                << " with --fourstate: " << info.reason << ".");
+            }
+        }
+        return assignments;
+    }
+};
+
 // Splits AstVar of four-state type into two two-states
 // Transforms four-state logic expressions into two-states
 // Handles AssignW conflict resolution
@@ -631,6 +810,9 @@ class FourstateVisitor final : public VNVisitor {
     };
     std::map<const AstArraySel*, ArrayIndexCapture>
         m_arrayIndexCaptures;  // Index snapshots shared by the value and X/Z selections
+    std::map<const AstNodeAssign*, bool>
+        m_pullAssignments;  // Audited whole continuous assignment -> implicit pull value
+    uint32_t m_statPullFallbacks = 0;  // Whole continuous implicit-pull drivers lowered
 
     // Original AstVar* and pair of assignments <value, xz>
     using NetToAssignWps
@@ -1076,6 +1258,38 @@ class FourstateVisitor final : public VNVisitor {
         m_lastCalculationStatp->addNextHere(nodep);
         m_tmpVarReleaserStack.back().first = nodep;
         m_lastCalculationStatp = nodep;
+    }
+
+    AstVar* capturePullPart(AstNodeExpr* const exprp) {
+        AstVar* const varp = new AstVar{exprp->fileline(), VVarType::STMTTEMP,
+                                        m_tmpNames.get(exprp), getTwoStateDtype(exprp->dtypep())};
+        varp->noSubst(true);
+        m_modp->addStmtsp(varp);
+        addPrecalculation(new AstAssign{
+            exprp->fileline(), new AstVarRef{exprp->fileline(), varp, VAccess::WRITE}, exprp});
+        return varp;
+    }
+
+    FourstatePair applyImplicitPull(AstNodeExpr* const rhsp, const bool pullup) {
+        FileLine* const flp = rhsp->fileline();
+        // Both halves and the Z mask must be sampled before either target half is written.
+        // Generating the halves once also preserves calls with side effects in the RHS.
+        AstNodeExpr* const valuep = getOnceExpressionValue(rhsp);
+        AstNodeExpr* const xzp = getFourstateExpressionXZ(rhsp);
+        // Keep captures distinct across continuous processes; these are not statement-pool temps.
+        AstVar* const valueVarp = capturePullPart(valuep);
+        AstVar* const xzVarp = capturePullPart(xzp);
+        AstNodeExpr* const zp
+            = new AstAnd{flp, new AstVarRef{flp, xzVarp, VAccess::READ},
+                         new AstNot{flp, new AstVarRef{flp, valueVarp, VAccess::READ}}};
+        AstVar* const zVarp = capturePullPart(zp);
+        AstNodeExpr* const capturedValuep = new AstVarRef{flp, valueVarp, VAccess::READ};
+        AstNodeExpr* const capturedZp = new AstVarRef{flp, zVarp, VAccess::READ};
+        return {pullup ? static_cast<AstNodeExpr*>(new AstOr{flp, capturedValuep, capturedZp})
+                       : static_cast<AstNodeExpr*>(
+                             new AstAnd{flp, capturedValuep, new AstNot{flp, capturedZp}}),
+                new AstAnd{flp, new AstVarRef{flp, xzVarp, VAccess::READ},
+                           new AstNot{flp, new AstVarRef{flp, zVarp, VAccess::READ}}}};
     }
 
     AstNodeExpr* getOnceExpressionValue(AstNodeExpr* const exprp) {
@@ -2648,6 +2862,11 @@ class FourstateVisitor final : public VNVisitor {
             }
         }
         if (isFourstate(nodep->lhsp())) {
+            const auto pullIt = m_pullAssignments.find(nodep);
+            const bool hasPull = pullIt != m_pullAssignments.end();
+            const FourstatePair pulled = hasPull ? applyImplicitPull(nodep->rhsp(), pullIt->second)
+                                                 : FourstatePair{nullptr, nullptr};
+            if (hasPull) ++m_statPullFallbacks;
             AstNodeExpr* lhsp = nodep->lhsp()->unlinkFrBack();
             pushDeletep(lhsp);
             AstNodeAssign* const assignXZp = nodep->cloneTree(false);
@@ -2655,12 +2874,13 @@ class FourstateVisitor final : public VNVisitor {
                 assignXZp->rhsp()->unlinkFrBack()->deleteTree();
                 AstNodeExpr* const newLhsp = getFourstateExpressionXZ(lhsp);
                 assignXZp->lhsp(newLhsp);
-                assignXZp->rhsp(getFourstateExpressionXZ(nodep->rhsp()));
+                assignXZp->rhsp(hasPull ? pulled.xzp : getFourstateExpressionXZ(nodep->rhsp()));
                 assignXZp->dtypeFrom(newLhsp);
                 addNextCalculation(assignXZp);
             }
             {
-                AstNodeExpr* const newRhsp = getFourstateExpressionValue(nodep->rhsp());
+                AstNodeExpr* const newRhsp
+                    = hasPull ? pulled.valuep : getFourstateExpressionValue(nodep->rhsp());
                 AstNodeExpr* const newLhsp = getFourstateExpressionValue(lhsp);
                 pushDeletep(nodep->rhsp()->unlinkFrBack());
                 nodep->lhsp(newLhsp);
@@ -3661,8 +3881,11 @@ public:
         , m_pinHelpersNames{"__VpinHelper"}
         , m_fourstateGeneratorValueVisitor{*this}
         , m_fourstateGeneratorXZVisitor{*this} {
+        m_pullAssignments = FourstatePullVisitor::collect(netlistp);
+        V3Error::abortIfErrors();
         { FourstateLogicTypePropagator{netlistp}; }
         iterate(netlistp);
+        m_pullAssignments.clear();  // Original assignment pointers are no longer needed.
         V3Error::abortIfErrors();
         triorTriandReduce(m_assignWToTriand, triandReducer);
         triorTriandReduce(m_assignWToTrior, triorReducer);
@@ -3688,7 +3911,9 @@ public:
         UASSERT_OBJ(m_tmpVarReleaserStack.empty(), m_tmpVarReleaserStack.back().first,
                     "TmpVarsReleaser stack frame has not been consumed");
     }
-    ~FourstateVisitor() override = default;
+    ~FourstateVisitor() override {
+        V3Stats::addStat("Fourstate, Implicit pull driver fallbacks", m_statPullFallbacks);
+    }
 };
 
 void V3Fourstate::fourstateAll(AstNetlist* netlistp) {
