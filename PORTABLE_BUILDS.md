@@ -161,7 +161,9 @@ input-pin consumers are allowed. Multiple drivers, partial or hierarchical
 writes, output/inout/ref pin drivers, aliases, force/release or external write
 access, net or assignment delays, explicit driver strengths, and impure
 continuous RHS expressions remain outside
-this implementation and receive an unsupported diagnostic. Existing undriven
+this implementation and receive an unsupported diagnostic. Eligibility requires
+a compiler-classified pure RHS expression; this is a conservative function
+purity boundary, including static-local writes. Existing undriven
 pull defaults and optimized known constant drivers retain their separate paths.
 The fallback is never applied separately to multiple driver contributions.
 An independently checked function that updates a nonlocal call counter causes
