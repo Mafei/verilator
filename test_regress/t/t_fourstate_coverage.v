@@ -19,10 +19,10 @@ module axi_adapter(
         exprstmt_rhs = (exprstmt_lhs += 1);
     end
 
-    interrupt xintr5(.clk(unused_sig));
+    coverage_leaf xintr5(.clk(unused_sig));
 endmodule
 
-module interrupt(
+module coverage_leaf(
     input logic clk
 );
     /*verilator no_inline_module*/
