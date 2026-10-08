@@ -700,11 +700,6 @@ class FourstatePullVisitor final : public VNVisitorConst {
         m_context = "force or release";
         iterateChildrenConst(nodep);
     }
-    void visit(AstPull* nodep) override {
-        VL_RESTORER_COPY(m_context);
-        m_context = "explicit pull primitive";
-        iterateChildrenConst(nodep);
-    }
     void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
 
 public:
