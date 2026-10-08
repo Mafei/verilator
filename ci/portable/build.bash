@@ -71,6 +71,7 @@ if [[ $platform == macos-arm64 ]]; then
     export CPLUS_INCLUDE_PATH="$CPLUS_INCLUDE_PATH:$lz4_prefix/include"
 fi
 python3 ci/portable/test_flexfix.py
+python3 ci/portable/test_regression_results.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
