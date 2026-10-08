@@ -1231,8 +1231,8 @@ class AssertVisitor final : public VNVisitor {
             AstAssign* const newsetp = new AstAssign{
                 fl, newMonitorNumVarRefp(nodep, VAccess::WRITE), new AstConst{fl, monNum}};
             nodep->replaceWith(newsetp);
-            newsetp->addNext(new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
-                                           new AstConst{fl, AstConst::BitTrue{}}});
+            newsetp->addNextHere(new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
+                                               new AstConst{fl, AstConst::BitTrue{}}});
             // Argument events only request output. Read their final values after all
             // Active, Inactive and NBA work, and consume one request per time slot.
             if (monSenItemsp) {
@@ -1303,9 +1303,9 @@ class AssertVisitor final : public VNVisitor {
         nodep->replaceWith(newp);
         if (!nodep->off()) {
             // $monitoron forces output even if the monitor was already enabled.
-            newp->addNext(new AstAssign{nodep->fileline(),
-                                        newMonitorRequestVarRefp(nodep, VAccess::WRITE),
-                                        new AstConst{nodep->fileline(), AstConst::BitTrue{}}});
+            newp->addNextHere(new AstAssign{nodep->fileline(),
+                                            newMonitorRequestVarRefp(nodep, VAccess::WRITE),
+                                            new AstConst{nodep->fileline(), AstConst::BitTrue{}}});
         }
         VL_DO_DANGLING(pushDeletep(nodep), nodep);
     }
