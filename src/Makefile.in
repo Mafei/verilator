@@ -33,7 +33,8 @@ ifneq ($(words $(CURDIR)),1)
   $(error Unsupported: GNU Make cannot build in directories containing spaces, build elsewhere: '$(CURDIR)')
 endif
 
-UNDER_GIT = $(wildcard ${srcdir}/../.git/logs/HEAD)
+# A worktree's .git is a file; its HEAD log lives in the resolved Git directory.
+UNDER_GIT = $(if $(wildcard ${srcdir}/../.git),$(shell git -C ${srcdir} rev-parse --absolute-git-dir 2>/dev/null))
 
 # Use bear if installed, and new enough to support the '--output FILE --' syntax
 BEAR := $(shell bear=$$(which bear 2>/dev/null) && tmp=$$(mktemp -d 2>/dev/null) \
@@ -81,7 +82,7 @@ dbg: ../bin/verilator_bin_dbg$(EXEEXT) ../bin/verilator_coverage_bin_dbg$(EXEEXT
 
 ifneq ($(VERILATOR_NO_OPT_BUILD),1)  # Faster laptop development... don't rebuild each commit
   ifneq ($(UNDER_GIT),)  # If local git tree... else don't burden users
-    GIT_CHANGE_DEP = ${srcdir}/../.git/logs/HEAD
+    GIT_CHANGE_DEP = $(wildcard $(UNDER_GIT)/logs/HEAD)
   endif
 endif
 
