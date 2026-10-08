@@ -12,6 +12,8 @@
 
 module t;
   wire [12:0] done;
+  wire observer_done;
+  readmem_observe observer(observer_done);
   readmem_check #(1) m1(done[0]);
   readmem_check #(7) m7(done[1]);
   readmem_check #(8) m8(done[2]);
@@ -31,11 +33,46 @@ module t;
     $dumpvars(0, m8.probe_h, m8.probe_b, m8.probe_h_z, m8.probe_b_z);
     #10;
     if (done !== '1) $fatal(1, "readmem checks did not finish");
+    if (observer_done !== 1'b1) $fatal(1, "readmem observer did not finish");
     $display("Readmem width checks: %0d", m1.checks + m7.checks + m8.checks + m9.checks
              + m16.checks + m17.checks + m32.checks + m33.checks + m64.checks + m65.checks
              + m95.checks + m128.checks + m176.checks);
+    $display("Readmem observer checks: %0d", observer.checks);
     $write("*-* All Finished *-*\n");
     $finish;
+  end
+endmodule
+
+module readmem_observe(output bit done = 0);
+  logic mem[0:0];
+  logic mirror;
+  bit [31:0] checks = 0;
+
+  // Observe from a separate process: the readmem write must schedule readers of
+  // both encoded halves, including mask-only X->1 and value-only X->Z updates.
+  always_comb mirror = mem[0];
+
+  task automatic check_mirror(input logic wanted);
+    `checkh(mirror, wanted);
+    `checkh($isunknown(mirror), $isunknown(wanted));
+  endtask
+
+  initial begin
+    #1;
+    check_mirror(1'bx);
+    $readmemh({`STRINGIFY(`TEST_OBJ_DIR), "/short_h1.mem"}, mem);
+    #1;
+    check_mirror(1'b1);
+    $readmemh({`STRINGIFY(`TEST_OBJ_DIR), "/short_x_h1.mem"}, mem);
+    #1;
+    check_mirror(1'bx);
+    $readmemh({`STRINGIFY(`TEST_OBJ_DIR), "/short_z_h1.mem"}, mem);
+    #1;
+    check_mirror(1'bz);
+    $readmemh({`STRINGIFY(`TEST_OBJ_DIR), "/short_h1.mem"}, mem);
+    #1;
+    check_mirror(1'b1);
+    done = 1;
   end
 endmodule
 

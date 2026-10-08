@@ -51,6 +51,7 @@ for width in widths:
 test.compile(verilator_flags2=['--binary', '--fourstate', '--trace', '-Wno-FUTURE'])
 test.execute(logfile=test.run_log_filename)
 test.file_grep(test.run_log_filename, r'Readmem width checks: (\d+)', 3510)
+test.file_grep(test.run_log_filename, r'Readmem observer checks: (\d+)', 10)
 test.file_grep_not(test.run_log_filename, r'%Error|ERROR:|WARNING:')
 
 # Parse scalar mirrors directly. Preserve distinct x/z characters instead of
@@ -59,6 +60,7 @@ codes = {}
 histories = {}
 with open(test.trace_filename, encoding='ascii') as stream:
     for line in stream:
+        line = line.lstrip()
         declaration = re.match(r'\$var \w+ 8 (\S+) (probe_\w+) ', line)
         if declaration:
             codes[declaration[1]] = declaration[2]
