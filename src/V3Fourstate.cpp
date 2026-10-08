@@ -1931,6 +1931,47 @@ class FourstateVisitor final : public VNVisitor {
                          valuep};
     }
 
+    AstNodeExpr* getFourstateExpressionSliceHandler(AstSel* const selp,
+                                                    AstNodeExpr* const valueExprp) {
+        FileLine* const flp = selp->fileline();
+        AstNodeExpr* const indexp = selp->lsbp();
+        const int padding = selp->widthConst() - 1;
+        // Declaration normalization already determines the word-sized coordinate. Keep
+        // its signed interpretation, then add padding in a wider type to avoid overflow.
+        AstNodeExpr* valuep = getOnceExpressionValue(indexp);
+        if (valuep->width() < VL_IDATASIZE) {
+            valuep = indexp->isSigned()
+                         ? static_cast<AstNodeExpr*>(new AstExtendS{flp, valuep, VL_IDATASIZE})
+                         : static_cast<AstNodeExpr*>(new AstExtend{flp, valuep, VL_IDATASIZE});
+            valuep->dtypeSetBitSized(VL_IDATASIZE, VSigning::UNSIGNED);
+        }
+        const int indexWidth = VL_IDATASIZE + 1;
+        AstNodeExpr* const extendedp = new AstExtendS{flp, valuep, indexWidth};
+        extendedp->dtypeSetBitSized(indexWidth, VSigning::UNSIGNED);
+        AstNodeExpr* const offsetp
+            = new AstAdd{flp, extendedp,
+                         new AstConst{flp, AstConst::WidthedValue{}, indexWidth,
+                                      static_cast<uint32_t>(padding)}};
+        offsetp->dtypeSetBitSized(indexWidth, VSigning::UNSIGNED);
+        AstNodeExpr* invalidp = newPackedIndexOutOfBounds(offsetp->cloneTree(false),
+                                                          selp->fromp()->width() + padding - 1);
+        if (isFourstate(indexp)) {
+            invalidp
+                = new AstOr{flp, new AstRedOr{flp, getFourstateExpressionXZ(indexp)}, invalidp};
+        }
+        // X uses value=1/mask=1, so both halves receive one-filled padding.
+        AstConst* const padp = new AstConst{flp, AstConst::WidthedValue{}, padding, 0U};
+        padp->num().setAllBits1();
+        AstNodeExpr* const paddedp
+            = new AstConcat{flp, padp->cloneTree(false), new AstConcat{flp, valueExprp, padp}};
+        AstSel* const wordOffsetp = new AstSel{flp, offsetp, 0, VL_IDATASIZE};
+        setSelpHandled(wordOffsetp);
+        AstSel* const resultp = new AstSel{flp, paddedp, wordOffsetp, selp->widthConst()};
+        resultp->dtypep(getTwoStateDtype(selp->dtypep()));
+        setSelpHandled(resultp);
+        return new AstCond{flp, invalidp, createZeroOrOnesp(selp, true), resultp};
+    }
+
     AstNodeExpr* getFourstateExpressionSelHandler(AstSel* const selp,
                                                   AstNodeExpr* const valueExprp,
                                                   const bool defaultsToZero) {
@@ -1977,6 +2018,11 @@ class FourstateVisitor final : public VNVisitor {
             newp->fromp(valueExprp);
             { FourstateLogicTypePropagator{newp}; }
             return newp;
+        }
+        if (isFourstate(selp->fromp()) && selp->widthConst() > 1
+            && selp->widthConst() <= selp->fromp()->width()
+            && selp->lsbp()->width() <= VL_IDATASIZE) {
+            return getFourstateExpressionSliceHandler(selp, valueExprp);
         }
         AstNodeExpr* lsbp = selp->lsbp();
         V3Number maxmsb{flp, 32, static_cast<uint32_t>(selp->fromp()->dtypep()->width() - 1)};
