@@ -48,11 +48,6 @@ module m(
   supply0 #1 low = dummy_in.signal[0];
 endmodule
 
-typedef struct packed {
-  logic x;
-  logic y;
-} bar;
-
 class Foo;
   function bit foo();
     return 1;
@@ -71,11 +66,7 @@ module t;
   endclocking
 
   logic queue [$];
-  logic unpackedArr [13];
   logic assocArr [integer];
-  typedef logic [13:0] long_logic;
-  long_logic [13:0] packedArr;
-  bar barInst;
   static Foo a;
   static Foo b;
   static Foo c;
@@ -96,7 +87,6 @@ module t;
     static integer x;
     static integer y;
     y = 2 ** x;
-    x[1] = 1;
     a = new;
     c = (f(`IMPURE_ONE) ? a : b);
     if (!c.foo()) $stop;

@@ -1,23 +1,28 @@
-%Warning-LOGICCAST: t/t_fourstate_fwrite.v:14:13: Some features are not supported with four-state values - cast it to two-state logic or suppress this warning and it will be done implicitly
-                                                : ... note: In instance 't'
+%Warning-CASTFOURSTATE: t/t_fourstate_fwrite.v:14:13: Unsupported: Implicitly casting to two-state logic
+                                                    : ... note: In instance 't'
+                                                    : ... Suggest cast to two-state logic explicitly
    14 |     $fwrite(fd, "%0d\n", cycles);
       |             ^~
-                    ... For warning description see https://verilator.org/warn/LOGICCAST?v=latest
-                    ... Use "/* verilator lint_off LOGICCAST */" and lint_on around source to disable this message.
-%Warning-LOGICCAST: t/t_fourstate_fwrite.v:16:13: Some features are not supported with four-state values - cast it to two-state logic or suppress this warning and it will be done implicitly
-                                                : ... note: In instance 't'
+                        ... For warning description see https://verilator.org/warn/CASTFOURSTATE?v=latest
+                        ... Use "/* verilator lint_off CASTFOURSTATE */" and lint_on around source to disable this message.
+%Warning-CASTFOURSTATE: t/t_fourstate_fwrite.v:16:13: Unsupported: Implicitly casting to two-state logic
+                                                    : ... note: In instance 't'
+                                                    : ... Suggest cast to two-state logic explicitly
    16 |     $fwrite(fd, "%0d\n", cycles);
       |             ^~
-%Warning-LOGICCAST: t/t_fourstate_fwrite.v:18:13: Some features are not supported with four-state values - cast it to two-state logic or suppress this warning and it will be done implicitly
-                                                : ... note: In instance 't'
+%Warning-CASTFOURSTATE: t/t_fourstate_fwrite.v:18:13: Unsupported: Implicitly casting to two-state logic
+                                                    : ... note: In instance 't'
+                                                    : ... Suggest cast to two-state logic explicitly
    18 |     $fwrite(fd, "%0d\n", cycles);
       |             ^~
-%Warning-LOGICCAST: t/t_fourstate_fwrite.v:20:13: Some features are not supported with four-state values - cast it to two-state logic or suppress this warning and it will be done implicitly
-                                                : ... note: In instance 't'
+%Warning-CASTFOURSTATE: t/t_fourstate_fwrite.v:20:13: Unsupported: Implicitly casting to two-state logic
+                                                    : ... note: In instance 't'
+                                                    : ... Suggest cast to two-state logic explicitly
    20 |     $fwrite(fd, "%0d\n", cycles);
       |             ^~
-%Warning-LOGICCAST: t/t_fourstate_fwrite.v:21:13: Some features are not supported with four-state values - cast it to two-state logic or suppress this warning and it will be done implicitly
-                                                : ... note: In instance 't'
+%Warning-CASTFOURSTATE: t/t_fourstate_fwrite.v:21:13: Unsupported: Implicitly casting to two-state logic
+                                                    : ... note: In instance 't'
+                                                    : ... Suggest cast to two-state logic explicitly
    21 |     $fclose(fd);
       |             ^~
 %Error: Exiting due to
