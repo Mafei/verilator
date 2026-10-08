@@ -854,9 +854,11 @@ private:
                 net.drivers.push_back(
                     Driver{m_modp, nullptr, false, true, "port or pin writer", {}});
             }
-            if (formalp->isWritable() && nodep->exprp()) {
+            if (formalp->isWritable()) {
                 m_context = "port or pin writer";
-                scanLhs(nodep->exprp(), nodep, false, 0, nodep->exprp()->width(), false);
+                if (AstNodeExpr* const exprp = VN_CAST(nodep->exprp(), NodeExpr)) {
+                    scanLhs(exprp, nodep, false, 0, exprp->width(), false);
+                }
             }
         }
         iterateChildrenConst(nodep);
