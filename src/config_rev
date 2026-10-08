@@ -25,7 +25,7 @@ def get_rev() -> str:
         # e.g. Ubuntu package build
         return os.environ['VERILATOR_SRC_VERSION']
 
-    data = os.popen('git describe --always').read()
+    data = os.popen('git describe --always --abbrev=9').read()
 
     if 'SOURCE_DATE_EPOCH' in os.environ:
         # e.g. Package builds that don't set VERILATOR_SRC_VERSION
