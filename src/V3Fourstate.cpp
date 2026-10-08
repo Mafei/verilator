@@ -2100,91 +2100,123 @@ class FourstateVisitor final : public VNVisitor {
             setExprValuep(funcRefp, varRefValuep);
             setExprXZp(funcRefp, varRefXzp);
         }
+        void addConditionalMerge(FileLine* const flp, AstVar* const resultValuep,
+                                 AstVar* const resultXzp, AstVar* const thenValuep,
+                                 AstVar* const thenXzp, AstVar* const elseValuep,
+                                 AstVar* const elseXzp) {
+            // Preserve the existing ambiguous-condition merge. Its common-Z behavior is
+            // deliberately separate from the once-only branch capture below.
+            addPrecalculation(new AstAssign{
+                flp, new AstVarRef{flp, resultXzp, VAccess::WRITE},
+                new AstOr{flp,
+                          new AstXor{flp, new AstVarRef{flp, thenValuep, VAccess::READ},
+                                     new AstVarRef{flp, elseValuep, VAccess::READ}},
+                          new AstOr{flp, new AstVarRef{flp, thenXzp, VAccess::READ},
+                                    new AstVarRef{flp, elseXzp, VAccess::READ}}}});
+            addPrecalculation(
+                new AstAssign{flp, new AstVarRef{flp, resultValuep, VAccess::WRITE},
+                              new AstOr{flp, new AstVarRef{flp, resultXzp, VAccess::READ},
+                                        new AstVarRef{flp, thenValuep, VAccess::READ}}});
+        }
+
         void fourstateExpressionCondHandler(AstCond* const condp) {
-            // a ? b : c
-            // if (a.xz) {
-            //   resultXzp    = (b.value ^ c.value) | (b.xz | c.xz);
-            //   resultValuep = resultXzp | b.value;  // `b.value` is chosen arbitrary - it could
-            //   // be `c.value`
-            //   // `resultXzp | b.value <=> (b.xz | c.xz) | (b.value | c.value)`
-            // } else if (a.value) {
-            //   resultValuep = b.value;
-            //   resultXzp    = b.xz;
-            // } else {
-            //   resultValuep = c.value;
-            //   resultXzp    = c.xz;
-            // }
-            // In case when `a` is a two-state value first `if` is omitted
-            // and its `else` branch is used instead
             UASSERT_OBJ(condp->thenp()->dtypep()->skipRefp()->isIntegralOrPacked(), condp,
                         "This function should only handle conds that result with a integral type");
             UASSERT_OBJ(condp->elsep()->dtypep()->skipRefp()->isIntegralOrPacked(), condp,
                         "This function should only handle conds that result with a integral type");
             FileLine* const flp = condp->fileline();
-            AstVar* const resultValueTmpVarp = m_fourstateVisitor.createTmp(condp->thenp());
-            AstVar* const resultXZTmpVarp = m_fourstateVisitor.createTmp(condp->thenp());
-            AstIf* ifp = new AstIf{flp, isFourstate(condp->condp())
-                                            ? getFourstateExpressionXZ(condp->condp())
-                                            : condp->condp()->cloneTree(false)};
-            // Those must be here so expr is always evaluated fully in the right place
-            AstIf* twoStateIfp = ifp;
-            if (isFourstate(condp->condp())) {
-                // Condition is X/Z
-                AstNodeExpr* conditionValuep = getFourstateExpressionValue(condp->condp());
-                AstNodeExpr* const thenCopyp = condp->thenp()->cloneTree(false);
-                AstNodeExpr* const elseCopyp = condp->elsep()->cloneTree(false);
-                StatementPlaceHolder thenPlaceholder{m_fourstateVisitor, flp};
-                ifp->addThensp(thenPlaceholder.stmtp());
-                addPrecalculation(new AstAssign{
-                    flp, new AstVarRef{flp, resultXZTmpVarp, VAccess::WRITE},
-                    new AstOr{flp,
-                              new AstXor{flp, getFourstateExpressionValue(thenCopyp, true),
-                                         getFourstateExpressionValue(elseCopyp, false)},
-                              new AstOr{flp, getFourstateExpressionXZ(thenCopyp, false),
-                                        getFourstateExpressionXZ(elseCopyp, false)}}});
+            AstNodeExpr* const conditionValuep
+                = m_fourstateVisitor.getOnceExpressionValue(condp->condp());
+            AstNodeExpr* const conditionXzp = getFourstateExpressionXZ(condp->condp());
+            // A known one makes a vector predicate true, even when other bits are X/Z.
+            AstNodeExpr* const truep
+                = new AstRedOr{flp, new AstAnd{flp, conditionValuep,
+                                               new AstNot{flp, conditionXzp->cloneTree(false)}}};
+            AstVar* const trueVarp = m_fourstateVisitor.createTmp(truep);
+            addPrecalculation(
+                new AstAssign{flp, new AstVarRef{flp, trueVarp, VAccess::WRITE}, truep});
+            AstNodeExpr* const ambiguousp = new AstLogAnd{
+                flp, new AstLogNot{flp, new AstVarRef{flp, trueVarp, VAccess::READ}},
+                new AstRedOr{flp, conditionXzp}};
+            AstVar* const ambiguousVarp = m_fourstateVisitor.createTmp(ambiguousp);
+            addPrecalculation(
+                new AstAssign{flp, new AstVarRef{flp, ambiguousVarp, VAccess::WRITE}, ambiguousp});
+
+            // Allocate all captures outside the branch scopes: branch-local temporaries
+            // may be recycled, but both pairs must survive until the final selection.
+            AstVar* const thenValuep = m_fourstateVisitor.createTmp(condp);
+            AstVar* const thenXzp = m_fourstateVisitor.createTmp(condp);
+            AstVar* const elseValuep = m_fourstateVisitor.createTmp(condp);
+            AstVar* const elseXzp = m_fourstateVisitor.createTmp(condp);
+            AstVar* const resultValuep = m_fourstateVisitor.createTmp(condp);
+            AstVar* const resultXzp = m_fourstateVisitor.createTmp(condp);
+            for (AstVar* const varp :
+                 {thenValuep, thenXzp, elseValuep, elseXzp, resultValuep, resultXzp}) {
+                varp->dtypep(getTwoStateDtype(condp->dtypep()));
+            }
+
+            AstIf* const thenIfp = new AstIf{
+                flp, new AstLogOr{flp, new AstVarRef{flp, ambiguousVarp, VAccess::READ},
+                                  new AstVarRef{flp, trueVarp, VAccess::READ}}};
+            addPrecalculation(thenIfp);
+            {
+                StatementPlaceHolder placeholder{m_fourstateVisitor, flp};
+                thenIfp->addThensp(placeholder.stmtp());
                 addPrecalculation(
-                    new AstAssign{flp, new AstVarRef{flp, resultValueTmpVarp, VAccess::WRITE},
-                                  new AstOr{flp, getFourstateExpressionValue(thenCopyp, true),
-                                            new AstVarRef{flp, resultXZTmpVarp, VAccess::READ}}});
-                thenCopyp->deleteTree();
-                elseCopyp->deleteTree();
-                twoStateIfp = new AstIf{flp, conditionValuep};
-                ifp->addElsesp(twoStateIfp);
+                    new AstAssign{flp, new AstVarRef{flp, thenValuep, VAccess::WRITE},
+                                  m_fourstateVisitor.getOnceExpressionValue(condp->thenp())});
+                addPrecalculation(new AstAssign{flp, new AstVarRef{flp, thenXzp, VAccess::WRITE},
+                                                getFourstateExpressionXZ(condp->thenp(), false)});
+            }
+            AstIf* const elseIfp = new AstIf{
+                flp,
+                new AstLogOr{flp, new AstVarRef{flp, ambiguousVarp, VAccess::READ},
+                             new AstLogNot{flp, new AstVarRef{flp, trueVarp, VAccess::READ}}}};
+            addPrecalculation(elseIfp);
+            {
+                StatementPlaceHolder placeholder{m_fourstateVisitor, flp};
+                elseIfp->addThensp(placeholder.stmtp());
+                addPrecalculation(
+                    new AstAssign{flp, new AstVarRef{flp, elseValuep, VAccess::WRITE},
+                                  m_fourstateVisitor.getOnceExpressionValue(condp->elsep())});
+                addPrecalculation(new AstAssign{flp, new AstVarRef{flp, elseXzp, VAccess::WRITE},
+                                                getFourstateExpressionXZ(condp->elsep(), false)});
+            }
+            AstIf* const mergeIfp
+                = new AstIf{flp, new AstVarRef{flp, ambiguousVarp, VAccess::READ}};
+            {
+                StatementPlaceHolder placeholder{m_fourstateVisitor, flp};
+                mergeIfp->addThensp(placeholder.stmtp());
+                addConditionalMerge(flp, resultValuep, resultXzp, thenValuep, thenXzp, elseValuep,
+                                    elseXzp);
+            }
+            AstIf* const knownIfp = new AstIf{flp, new AstVarRef{flp, trueVarp, VAccess::READ}};
+            mergeIfp->addElsesp(knownIfp);
+            {
+                StatementPlaceHolder placeholder{m_fourstateVisitor, flp};
+                knownIfp->addThensp(placeholder.stmtp());
+                addPrecalculation(new AstAssign{flp,
+                                                new AstVarRef{flp, resultValuep, VAccess::WRITE},
+                                                new AstVarRef{flp, thenValuep, VAccess::READ}});
+                addPrecalculation(new AstAssign{flp, new AstVarRef{flp, resultXzp, VAccess::WRITE},
+                                                new AstVarRef{flp, thenXzp, VAccess::READ}});
             }
             {
-                // Condition is 1/0
-                {
-                    // Condition is 1
-                    StatementPlaceHolder thenPlaceholder{m_fourstateVisitor, flp};
-                    twoStateIfp->addThensp(thenPlaceholder.stmtp());
-                    addPrecalculation(
-                        new AstAssign{flp, new AstVarRef{flp, resultValueTmpVarp, VAccess::WRITE},
-                                      getFourstateExpressionValue(condp->thenp(), false)});
-                    addPrecalculation(
-                        new AstAssign{flp, new AstVarRef{flp, resultXZTmpVarp, VAccess::WRITE},
-                                      getFourstateExpressionXZ(condp->thenp(), false)});
-                }
-                {
-                    // Condition is 0
-                    StatementPlaceHolder elsePlaceholder{m_fourstateVisitor, flp};
-                    twoStateIfp->addElsesp(elsePlaceholder.stmtp());
-                    addPrecalculation(
-                        new AstAssign{flp, new AstVarRef{flp, resultValueTmpVarp, VAccess::WRITE},
-                                      getFourstateExpressionValue(condp->elsep(), false)});
-                    addPrecalculation(
-                        new AstAssign{flp, new AstVarRef{flp, resultXZTmpVarp, VAccess::WRITE},
-                                      getFourstateExpressionXZ(condp->elsep(), false)});
-                }
+                StatementPlaceHolder placeholder{m_fourstateVisitor, flp};
+                knownIfp->addElsesp(placeholder.stmtp());
+                addPrecalculation(new AstAssign{flp,
+                                                new AstVarRef{flp, resultValuep, VAccess::WRITE},
+                                                new AstVarRef{flp, elseValuep, VAccess::READ}});
+                addPrecalculation(new AstAssign{flp, new AstVarRef{flp, resultXzp, VAccess::WRITE},
+                                                new AstVarRef{flp, elseXzp, VAccess::READ}});
             }
-            addPrecalculation(ifp);
-            AstVarRef* const resultValueTmpVarRefp
-                = new AstVarRef{flp, resultValueTmpVarp, VAccess::READ};
-            AstVarRef* const resultXZTmpVarRefp
-                = new AstVarRef{flp, resultXZTmpVarp, VAccess::READ};
-            pushDeletep(resultValueTmpVarRefp);
-            pushDeletep(resultXZTmpVarRefp);
-            setExprValuep(condp, resultValueTmpVarRefp);
-            setExprXZp(condp, resultXZTmpVarRefp);
+            addPrecalculation(mergeIfp);
+            AstVarRef* const resultValueRefp = new AstVarRef{flp, resultValuep, VAccess::READ};
+            AstVarRef* const resultXzRefp = new AstVarRef{flp, resultXzp, VAccess::READ};
+            pushDeletep(resultValueRefp);
+            pushDeletep(resultXzRefp);
+            setExprValuep(condp, resultValueRefp);
+            setExprXZp(condp, resultXzRefp);
         }
         void fourstateExpressionLogAndHandler(AstLogAnd* const logAndp) {
             FileLine* const flp = logAndp->fileline();
