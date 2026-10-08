@@ -638,8 +638,9 @@ class FourstateDriveAudit final : public VNVisitorConst {
             const AstVar* const varp = refp->varp();
             const auto owner = m_owners.find(varp);
             if (owner == m_owners.end() || owner->second != m_modp || varp->isInput()
-                || (!varp->isNet() && !varp->isOutput()) || varp->isInout() || varp->isPullup()
-                || varp->isPulldown() || varp->isForced() || varp->isSigUserRWPublic()) {
+                || (!varp->isNet() && !varp->direction().isOutput()) || varp->isInout()
+                || varp->isPullup() || varp->isPulldown() || varp->isForced()
+                || varp->isSigUserRWPublic()) {
                 reason = "nondefault or externally driven target";
             } else if (assignp->strengthSpecp() || varp->hasStrengthAssignment()) {
                 reason = "explicit drive strength";
@@ -3366,6 +3367,18 @@ class FourstateVisitor final : public VNVisitor {
             iterateChildren(newp);
             return;
         }
+        if (VN_IS(nodep, AssignW)
+            && nodep->rhsp()->exists([](const AstBufIf1*) { return true; })) {
+            // Gate getters can create precalculations, including pure function results.
+            // Their storage belongs to this continuous process, not another gate's pool.
+            VL_RESTORER_CLEAR(m_tmpUnusedVarps);
+            lowerOrdinaryAssignment(nodep);
+            return;
+        }
+        lowerOrdinaryAssignment(nodep);
+    }
+
+    void lowerOrdinaryAssignment(AstNodeAssign* const nodep) {
         StmtHelper stmtHelper{*this, nodep};
         if (AstDelay* const delayp = VN_CAST(nodep->timingControlp(), Delay)) {
             if (VN_IS(nodep, AssignW)
