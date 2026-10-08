@@ -112,3 +112,47 @@ module resolver_port(input wire [6:0] source_a, input wire [6:0] source_b,
   assign resolved = source_a;
   assign resolved = source_b;
 endmodule
+
+`ifdef RESOLVE_CASE_15
+// ANSI output without an explicit net keyword has implicit net semantics.
+module t_ansi;
+  logic [6:0] source_a = 7'h15, source_b = 7'h2a;
+  wire [6:0] result;
+  resolver_ansi child(source_a, source_b, result);
+  initial begin
+    #1;
+    source_a = 'z;
+    #1;
+    $display("Implicit ANSI output: %b", result);
+    $finish;
+  end
+endmodule
+
+module resolver_ansi(input [6:0] source_a, source_b, output [6:0] resolved);
+  assign resolved = source_a;
+  assign resolved = source_b;
+endmodule
+`endif
+
+`ifdef RESOLVE_CASE_16
+// The same implicit output net in a non-ANSI declaration must fail closed.
+module t_nonansi;
+  logic [6:0] source_a = 7'h15, source_b = 7'h2a;
+  wire [6:0] result;
+  resolver_nonansi child(source_a, source_b, result);
+  initial begin
+    #1;
+    source_a = 'z;
+    #1;
+    $display("Implicit non-ANSI output: %b", result);
+    $finish;
+  end
+endmodule
+
+module resolver_nonansi(source_a, source_b, resolved);
+  input [6:0] source_a, source_b;
+  output [6:0] resolved;
+  assign resolved = source_a;
+  assign resolved = source_b;
+endmodule
+`endif

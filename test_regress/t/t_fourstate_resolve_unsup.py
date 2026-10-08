@@ -30,12 +30,15 @@ reasons = {
     12: 'force or external write access',
     13: 'impure continuous RHS',
     14: 'nonlocal target',
+    15: 'nonlocal target',
+    16: 'nonlocal target',
 }
 
 for number, reason in reasons.items():
     log = f'{test.obj_dir}/case_{number}.log'
     golden = test.golden_filename.removesuffix('.out') + f'_{number}.out'
-    test.compile(verilator_flags2=['--fourstate', '--timing', '-Wno-FUTURE', '--top-module', 't',
+    top = {15: 't_ansi', 16: 't_nonansi'}.get(number, 't')
+    test.compile(verilator_flags2=['--fourstate', '--timing', '-Wno-FUTURE', '--top-module', top,
                                   f'-DRESOLVE_CASE_{number}'],
                  fails=True)
     shutil.copyfile(test.obj_dir + '/vlt_compile.log', log)
