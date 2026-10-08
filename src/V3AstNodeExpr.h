@@ -3143,14 +3143,23 @@ class AstBufIf1 final : public AstNodeBiop {
     // lhs is enable, rhs is data to drive
     // Note unlike the Verilog bufif1() UDP, this allows any width; each lhsp
     // bit enables respective rhsp bit
+    bool m_isBuffer = true;  // Buffer gates coerce data Z to X; MOS switches pass data Z
+
 public:
     AstBufIf1(FileLine* fl, AstNodeExpr* lhsp, AstNodeExpr* rhsp)
         : ASTGEN_SUPER_BufIf1(fl, lhsp, rhsp) {
         dtypeFrom(lhsp);
     }
     ASTGEN_MEMBERS_AstBufIf1;
+    bool sameNode(const AstNode* const samep) const override {
+        return isBuffer() == VN_DBG_AS(samep, BufIf1)->isBuffer();
+    }
+    bool isBuffer() const { return m_isBuffer; }
+    void isBuffer(const bool flag) { m_isBuffer = flag; }
+    void dump(std::ostream& str) const override;
+    void dumpJson(std::ostream& str) const override;
     void numberOperate(V3Number& out, const V3Number& lhs, const V3Number& rhs) override {
-        out.opBufIf1(lhs, rhs);
+        out.opBufIf1(lhs, rhs, isBuffer());
     }
     string emitVerilog() override { return "bufif(%r,%l)"; }
     string emitC() override { V3ERROR_NA_RETURN(""); }  // Lclean || Rclean

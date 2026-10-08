@@ -66,6 +66,15 @@ static void STRENGTH_LIST(AstNode* listp, AstStrengthSpec* specp) {
         assignp->strengthSpecp(specp->backp() ? specp->cloneTree(false) : specp);
     }
 }
+// Preserve MOS identity when its syntax shares the buffer-gate productions.
+static void MOS_LIST(AstNode* listp) {
+    for (AstNode* nodep = listp; nodep; nodep = nodep->nextp()) {
+        if (VN_IS(nodep, Implicit)) continue;
+        AstAlways* const alwaysp = VN_AS(nodep, Always);
+        AstAssignW* const assignp = VN_AS(alwaysp->stmtsp(), AssignW);
+        VN_AS(assignp->rhsp(), BufIf1)->isBuffer(false);
+    }
+}
 //======================================================================
 // Statics (for here only)
 
@@ -5632,8 +5641,8 @@ gateDecl<nodep>:
         |       yXNOR   driveStrengthE delay_controlE gateXnorList ';'    { $$ = $4; STRENGTH_LIST($4, $2); DELAY_LIST($4, $3); }
         |       yPULLDOWN pulldown_strengthE delay_controlE gatePulldownList ';'   { $$ = $4; DELAY_LIST($4, $3); }
         |       yPULLUP   pullup_strengthE   delay_controlE gatePullupList ';'     { $$ = $4; DELAY_LIST($4, $3); }
-        |       yNMOS     delay_controlE gateBufif1List ';'     { $$ = $3; DELAY_LIST($3, $2); }
-        |       yPMOS     delay_controlE gateBufif0List ';'     { $$ = $3; DELAY_LIST($3, $2); }
+        |       yNMOS     delay_controlE gateBufif1List ';'     { $$ = $3; MOS_LIST($3); DELAY_LIST($3, $2); }
+        |       yPMOS     delay_controlE gateBufif0List ';'     { $$ = $3; MOS_LIST($3); DELAY_LIST($3, $2); }
         //
         |       yTRAN delay_controlE gateUnsupList ';'          { $$ = $3; GATEUNSUP($3, "tran"); }
         |       yRCMOS delay_controlE gateUnsupList ';'         { $$ = $3; GATEUNSUP($3, "rcmos"); }

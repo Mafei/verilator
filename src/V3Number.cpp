@@ -2492,13 +2492,16 @@ V3Number& V3Number::opPowUS(const V3Number& lhs, const V3Number& rhs) {
     return opPow(lhs, rhs, false, true);
 }
 
-V3Number& V3Number::opBufIf1(const V3Number& ens, const V3Number& if1s) {
+V3Number& V3Number::opBufIf1(const V3Number& ens, const V3Number& if1s, const bool isBuffer) {
     NUM_ASSERT_OP_ARGS2(ens, if1s);
     NUM_ASSERT_LOGIC_ARGS2(ens, if1s);
     setZero();
     for (int bit = 0; bit < width(); ++bit) {
         if (ens.bitIs1(bit)) {
-            setBit(bit, if1s.bitIs(bit));
+            // Buffers coerce data Z to X; MOS switches retain their existing pass behavior.
+            setBit(bit, isBuffer && if1s.bitIsXZ(bit) ? 'x' : if1s.bitIs(bit));
+        } else if (isBuffer && ens.bitIsXZ(bit)) {
+            setBit(bit, 'x');
         } else {
             setBit(bit, 'z');
         }
@@ -2872,6 +2875,24 @@ void V3Number::selfTest() {
 
 void V3Number::selfTestThis() {
     // The self test has a "this" so UASSERT_SELFTEST/errorEndFatal works correctly
+
+    // Independent single-driver buffer truth table, enable/data order 0, 1, X, Z.
+    static constexpr char states[] = "01xz";
+    static constexpr char bufferTable[] = "zzzz01xxxxxxxxxx";
+    static constexpr char mosLegacyTable[] = "zzzz01xzzzzzzzzz";
+    for (int enable = 0; enable < 4; ++enable) {
+        for (int data = 0; data < 4; ++data) {
+            V3Number ens{fileline(), 1, 0};
+            V3Number if1s{fileline(), 1, 0};
+            V3Number result{fileline(), 1, 0};
+            ens.setBit(0, states[enable]);
+            if1s.setBit(0, states[data]);
+            result.opBufIf1(ens, if1s, true);
+            UASSERT_SELFTEST(result.bitIs(0), bufferTable[enable * 4 + data]);
+            result.opBufIf1(ens, if1s, false);
+            UASSERT_SELFTEST(result.bitIs(0), mosLegacyTable[enable * 4 + data]);
+        }
+    }
 
     UASSERT_SELFTEST(V3Number::epsilonEqual(0, 0), true);
     UASSERT_SELFTEST(V3Number::epsilonEqual(1e19, 1e19), true);

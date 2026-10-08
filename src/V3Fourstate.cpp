@@ -310,6 +310,12 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         setFourstate(nodep, isFourstate(nodep->lhsp()) || isFourstate(nodep->rhsp()),
                      m_fourstateInSubtree);
     }
+    void visit(AstBufIf1* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        // Disabling a gate produces Z even when both input expressions are two-state.
+        setFourstate(nodep, true, m_fourstateInSubtree);
+        m_fourstateInSubtree = true;
+    }
     void visit(AstEqCase* const nodep) override {
         iterateChildrenSeparately(nodep);
         setFourstate(nodep, false, m_fourstateInSubtree);
@@ -537,6 +543,125 @@ class FourstateLogicTypePropagator final : public VNVisitor {
 public:
     explicit FourstateLogicTypePropagator(AstNode* const nodep) { iterate(nodep); }
     ~FourstateLogicTypePropagator() override = default;
+};
+
+// Audit primitive and procedural drivers before their four-state halves are split.
+class FourstateDriveAudit final : public VNVisitorConst {
+    using Owners = std::map<const AstVar*, const AstNodeModule*>;
+    class DeclarationOwners final : public VNVisitorConst {
+        Owners m_owners;
+        AstNodeModule* m_modp = nullptr;
+        void visit(AstNodeModule* nodep) override {
+            VL_RESTORER(m_modp);
+            m_modp = nodep;
+            iterateChildrenConst(nodep);
+        }
+        void visit(AstVar* nodep) override {
+            m_owners.emplace(nodep, m_modp);
+            iterateChildrenConst(nodep);
+        }
+        void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
+
+    public:
+        static Owners collect(AstNetlist* const netlistp) {
+            DeclarationOwners visitor;
+            visitor.iterateConst(netlistp);
+            return std::move(visitor.m_owners);
+        }
+    };
+    const Owners m_owners;
+    AstNodeModule* m_modp = nullptr;
+    AstNodeAssign* m_assignp = nullptr;
+
+    string proceduralReason(AstNodeExpr* const lhsp) const {
+        const AstVarRef* const refp = VN_CAST(lhsp, VarRef);
+        if (!refp) return "partial or hierarchical target";
+        const AstVar* const varp = refp->varp();
+        const auto owner = m_owners.find(varp);
+        if (owner == m_owners.end() || owner->second != m_modp || !VN_IS(m_modp, Module)
+            || varp->isNet() || varp->isIO() || varp->isClassMember() || varp->isFuncLocal()
+            || varp->lifetime().isAutomatic()
+            || !varp->dtypep()->skipRefp()->isIntegralOrPacked()) {
+            return "nonlocal or nonpacked variable";
+        }
+        if (varp->isForced() || varp->isSigUserRWPublic()) return "force or external write access";
+        return "";
+    }
+    void visit(AstNodeModule* nodep) override {
+        VL_RESTORER(m_modp);
+        m_modp = nodep;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNodeAssign* nodep) override {
+        VL_RESTORER(m_assignp);
+        m_assignp = nodep;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstAssignCont* nodep) override {
+        if (needsSplitting(nodep->lhsp()->dtypep())) {
+            string reason = proceduralReason(nodep->lhsp());
+            if (reason.empty() && nodep->timingControlp()) reason = "assignment delay";
+            if (reason.empty() && !nodep->rhsp()->isPure()) reason = "impure RHS";
+            if (reason.empty() && !VN_IS(nodep->rhsp(), Const)
+                && !VN_IS(nodep->rhsp(), NodeVarRef)) {
+                // Generic expression getters can insert activation-local precalculations.
+                // Those snapshots cannot replace a procedural assignment's live RHS.
+                reason = "compound RHS requiring live expression lowering";
+            }
+            if (!reason.empty()) {
+                nodep->v3warn(E_UNSUPPORTED,
+                              "Unsupported: Procedural continuous assignment with --fourstate: "
+                                  << reason << ".");
+            }
+        }
+        visit(static_cast<AstNodeAssign*>(nodep));
+    }
+    void visit(AstDeassign* nodep) override {
+        if (needsSplitting(nodep->lhsp()->dtypep())) {
+            const string reason = proceduralReason(nodep->lhsp());
+            if (!reason.empty()) {
+                nodep->v3warn(E_UNSUPPORTED, "Unsupported: Procedural deassign with --fourstate: "
+                                                 << reason << ".");
+            }
+        }
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstBufIf1* nodep) override {
+        string reason;
+        const AstAssignW* const assignp = VN_CAST(m_assignp, AssignW);
+        const AstVarRef* const refp = assignp ? VN_CAST(assignp->lhsp(), VarRef) : nullptr;
+        if (!nodep->isBuffer()) {
+            reason = "MOS transistor primitive";
+        } else if (!assignp || !refp) {
+            reason = "partial or hierarchical target";
+        } else {
+            const AstVar* const varp = refp->varp();
+            const auto owner = m_owners.find(varp);
+            if (owner == m_owners.end() || owner->second != m_modp || varp->isInput()
+                || (!varp->isNet() && !varp->isOutput()) || varp->isInout() || varp->isPullup()
+                || varp->isPulldown() || varp->isForced() || varp->isSigUserRWPublic()) {
+                reason = "nondefault or externally driven target";
+            } else if (assignp->strengthSpecp() || varp->hasStrengthAssignment()) {
+                reason = "explicit drive strength";
+            } else if (assignp->timingControlp() || varp->delayp()) {
+                reason = "drive delay";
+            } else if (!nodep->isPure()) {
+                reason = "impure input expression";
+            }
+        }
+        if (!reason.empty()) {
+            nodep->v3warn(E_UNSUPPORTED,
+                          "Unsupported: Tristate buffer with --fourstate: " << reason << ".");
+        }
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
+
+public:
+    explicit FourstateDriveAudit(AstNetlist* const netlistp)
+        : m_owners{DeclarationOwners::collect(netlistp)} {
+        iterateConst(netlistp);
+    }
 };
 
 // Audit unsplit implicit-pull nets before any write is transformed. Applying a pull to an
@@ -1007,6 +1132,10 @@ public:
                     reason = "explicit drive strength";
                 } else if (!driver.assignp->rhsp()->isPure()) {
                     reason = "impure continuous RHS";
+                } else if (driver.assignp->rhsp()->exists([](const AstBufIf1*) { return true; })) {
+                    // H/L from an unknown enable retain asymmetric drive alternatives.
+                    // The bounded value/XZ resolver cannot represent those alternatives.
+                    reason = "tristate primitive contribution";
                 }
             }
             if (reason.empty()) {
@@ -1107,6 +1236,8 @@ class FourstateVisitor final : public VNVisitor {
     V3UniqueNames m_resolverNames{"__VfourstateDriver"};
     uint32_t m_statResolvedNets = 0;
     uint32_t m_statDriverSlots = 0;
+    uint32_t m_statTristateBuffers = 0;  // Isolated buffer-gate expressions lowered
+    uint32_t m_statDeassigns = 0;  // Whole local deassign statements split into both halves
 
     static AstConst* createZeroOrOnesp(const AstNodeExpr* const exprp, const bool ones = false) {
         AstConst* const resultp
@@ -2280,6 +2411,18 @@ class FourstateVisitor final : public VNVisitor {
     // some enclosing namespace and benefit from inheritance
     class FourstateExpressionValueVisitor final : public FourstateExpressionVisitor {
 
+        void visit(AstBufIf1* const nodep) override {
+            // Unknown enable gives X; a known disabled gate gives Z. Enabled buffer
+            // inputs coerce data Z to X, matching the single-driver gate truth table.
+            FileLine* const flp = nodep->fileline();
+            m_resultp
+                = new AstOr{flp, getFourstateExpressionXZ(nodep->lhsp()),
+                            new AstAnd{flp, getFourstateExpressionValue(nodep->lhsp()),
+                                       new AstOr{flp, getFourstateExpressionValue(nodep->rhsp()),
+                                                 getFourstateExpressionXZ(nodep->rhsp())}}};
+            ++m_fourstateVisitor.m_statTristateBuffers;
+        }
+
         void visit(AstAnd* const andp) override {
             // (a.value | a.xz) & (b.value | b.xz)
             FileLine* const flp = andp->fileline();
@@ -2693,6 +2836,14 @@ class FourstateVisitor final : public VNVisitor {
     // This can be thought as a function - but a Visitor was used to be able to use vtable, create
     // some enclosing namespace and benefit from inheritance
     class FourstateExpressionXZVisitor final : public FourstateExpressionVisitor {
+
+        void visit(AstBufIf1* const nodep) override {
+            FileLine* const flp = nodep->fileline();
+            m_resultp = new AstOr{
+                flp, getFourstateExpressionXZ(nodep->lhsp()),
+                new AstOr{flp, new AstNot{flp, getFourstateExpressionValue(nodep->lhsp())},
+                          getFourstateExpressionXZ(nodep->rhsp())}};
+        }
 
         void visit(AstAnd* const andp) override {
             // (a.value & b.xz) | (b.value & a.xz) | (a.xz & b.xz)
@@ -3223,6 +3374,19 @@ class FourstateVisitor final : public VNVisitor {
             AstNodeExpr* const newRhsp = getTwoStateCast(nodep->rhsp());
             pushDeletep(nodep->rhsp()->unlinkFrBack());
             nodep->rhsp(newRhsp);
+        }
+        iterateChildren(nodep);
+    }
+    void visit(AstDeassign* const nodep) override {
+        StmtHelper stmtHelper{*this, nodep};
+        if (isFourstate(nodep->lhsp())) {
+            AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+            // Release both procedural drivers together, preserving their value/XZ pairing.
+            // V3Force performs the existing assign/deassign lowering after this pass.
+            nodep->lhsp(getFourstateExpressionValue(lhsp));
+            addNextCalculation(new AstDeassign{nodep->fileline(), getFourstateExpressionXZ(lhsp)});
+            pushDeletep(lhsp);
+            ++m_statDeassigns;
         }
         iterateChildren(nodep);
     }
@@ -4187,6 +4351,8 @@ public:
         , m_pinHelpersNames{"__VpinHelper"}
         , m_fourstateGeneratorValueVisitor{*this}
         , m_fourstateGeneratorXZVisitor{*this} {
+        { FourstateDriveAudit{netlistp}; }
+        V3Error::abortIfErrors();
         m_pullAssignments = FourstatePullVisitor::collect(netlistp);
         V3Error::abortIfErrors();  // Preserve the pull audit's precise diagnostics and precedence.
         const std::vector<FourstateNetDrivers::Net> nets
@@ -4225,6 +4391,8 @@ public:
         V3Stats::addStat("Fourstate, Implicit pull driver fallbacks", m_statPullFallbacks);
         V3Stats::addStat("Fourstate, Resolved nets", m_statResolvedNets);
         V3Stats::addStat("Fourstate, Persistent driver packets", m_statDriverSlots);
+        V3Stats::addStat("Fourstate, Isolated tristate buffers", m_statTristateBuffers);
+        V3Stats::addStat("Fourstate, Local procedural deassigns", m_statDeassigns);
     }
 };
 

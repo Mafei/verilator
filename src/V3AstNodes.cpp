@@ -732,6 +732,14 @@ void AstCAwait::dump(std::ostream& str) const {
     }
 }
 void AstCAwait::dumpJson(std::ostream& str) const { dumpJsonGen(str); }
+void AstBufIf1::dump(std::ostream& str) const {
+    Super::dump(str);
+    if (!isBuffer()) str << " [MOS]";
+}
+void AstBufIf1::dumpJson(std::ostream& str) const {
+    dumpJsonBoolFunc(str, isBuffer);
+    dumpJsonGen(str);
+}
 void AstCCast::dump(std::ostream& str) const {
     Super::dump(str);
     str << " sz" << size();
