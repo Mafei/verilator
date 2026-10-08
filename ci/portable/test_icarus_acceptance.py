@@ -379,7 +379,7 @@ sys.exit(int(os.environ[action.upper() + '_FIXTURE_STATUS']))
         before = self.output / 'protected-before.json'
         after = self.output / 'protected-after.json'
         hashes = json.loads(before.read_text())
-        hashes.pop(str(self.output / 'quiet_finish.cpp'))
+        hashes.pop(str((self.output / 'quiet_finish.cpp').resolve()))
         acceptance.save(before, hashes)
         acceptance.save(after, hashes)
         self.cli('check', expected=1)
