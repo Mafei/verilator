@@ -67,22 +67,38 @@ class VerilatedSaifActivityBit final {
     bool m_lastVal = false;  // Last emitted activity bit value
     bool m_lastValXZ = false;  // Last emitted activity bit value
     uint64_t m_highTime = 0;  // Total time when bit was high
-    size_t m_transitions = 0;  // Total number of bit transitions
+    uint64_t m_unknownTime = 0;  // Total time when bit was X
+    uint64_t m_highImpedanceTime = 0;  // Total time when bit was Z
+    // Preserve encoded-state change counting, including the initial sample.
+    // Unknown transitions are not weighted as fractional power-analysis toggles.
+    size_t m_transitions = 0;  // Total number of encoded bit transitions
 
 public:
     // METHODS
     VL_ATTR_ALWINLINE
+    void aggregateTime(uint64_t dt) {
+        if (m_lastValXZ) {
+            if (m_lastVal)
+                m_unknownTime += dt;
+            else
+                m_highImpedanceTime += dt;
+        } else if (m_lastVal) {
+            m_highTime += dt;
+        }
+    }
+
+    VL_ATTR_ALWINLINE
     void aggregateVal(uint64_t dt, bool newVal, bool newValXZ = false) {
+        aggregateTime(dt);
         m_transitions += (newVal != m_lastVal || m_lastValXZ != newValXZ) ? 1 : 0;
-        m_highTime += m_lastVal ? dt : 0;
         m_lastVal = newVal;
         m_lastValXZ = newValXZ;
     }
 
     // ACCESSORS
-    VL_ATTR_ALWINLINE bool bitValue() const { return m_lastVal; }
-    VL_ATTR_ALWINLINE bool bitValueXZ() const { return m_lastValXZ; }
     VL_ATTR_ALWINLINE uint64_t highTime() const { return m_highTime; }
+    VL_ATTR_ALWINLINE uint64_t unknownTime() const { return m_unknownTime; }
+    VL_ATTR_ALWINLINE uint64_t highImpedanceTime() const { return m_highImpedanceTime; }
     VL_ATTR_ALWINLINE uint64_t toggleCount() const { return m_transitions; }
 };
 
@@ -444,7 +460,8 @@ bool VerilatedSaif::printActivityStats(VerilatedSaifActivityVar& activity,
     for (size_t i = 0; i < activity.width(); ++i) {
         VerilatedSaifActivityBit& bit = activity.bit(i);
 
-        bit.aggregateVal(currentTime() - activity.lastUpdateTime(), bit.bitValue());
+        // Finish the last residence interval without introducing a value change.
+        bit.aggregateTime(currentTime() - activity.lastUpdateTime());
 
         if (!anyNetWritten) {
             openNetScope();
@@ -460,12 +477,17 @@ bool VerilatedSaif::printActivityStats(VerilatedSaifActivityVar& activity,
             printStr("\\]");
         }
 
-        // We only have two-value logic so TZ, TX and TB will always be 0
         printStr(" (T0 ");
-        printStr(std::to_string(currentTime() - m_startTime - bit.highTime()));
+        printStr(std::to_string(currentTime() - m_startTime - bit.highTime() - bit.unknownTime()
+                                - bit.highImpedanceTime()));
         printStr(") (T1 ");
         printStr(std::to_string(bit.highTime()));
-        printStr(") (TZ 0) (TX 0) (TB 0) (TC ");
+        printStr(") (TZ ");
+        printStr(std::to_string(bit.highImpedanceTime()));
+        printStr(") (TX ");
+        printStr(std::to_string(bit.unknownTime()));
+        // Glitch (TB) duration is not collected.
+        printStr(") (TB 0) (TC ");
         printStr(std::to_string(bit.toggleCount()));
         printStr("))\n");
     }

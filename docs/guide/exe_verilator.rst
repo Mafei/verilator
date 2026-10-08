@@ -2046,6 +2046,12 @@ Summary:
    Specification of this format can be found in `IEEE 1801-2018
    <https://ieeexplore.ieee.org/document/8686430>`_ (see Annex I).
 
+   With experimental :vlopt:`--fourstate`, state residence times are
+   reported separately as T0, T1, TX, and TZ. TC counts changes of the
+   encoded logic state, including a first sample that differs from zero;
+   transitions involving X or Z do not receive fractional weighting.
+   Glitch duration (TB) is not collected.
+
 .. option:: --trace-structs
 
    Enable tracing to show the name of packed structure, union, and packed
