@@ -29,11 +29,15 @@ module packed_index_case #(
   logic signed [31:0] bit_index = 0;
   logic [94:0] wide_index = 0;
   bit [0:0] narrow_index = 0;
+  bit signed [1:0] signed_bit_index = 0;
+  logic signed [1:0] signed_logic_index = 0;
   wire [1:0] pair_desc, pair_asc;
   wire bit_desc = descending[bit_index];
   wire bit_asc = ascending[LOW+WIDTH-1-bit_index];
   wire wide_bit = descending[wide_index];
   wire narrow_bit = descending[narrow_index];
+  wire signed_bit = descending[signed_bit_index];
+  wire signed_logic = descending[signed_logic_index];
 
   always @(address) begin
     low_index = ADDR_WIDTH'(2 * address);
@@ -152,6 +156,31 @@ module packed_index_case #(
     `checkh(descending[1], 1'bx);
     descending[narrow_index] = 1'b0;
     `checkh(descending[1], 1'b0);
+    expected[0] = 1'bz;
+    expected[1] = 1'b0;
+    for (int index = -2; index <= 1; ++index) begin
+      signed_bit_index = 2'(index);
+      signed_logic_index = 2'(index);
+      #50;
+      if (index < 0) begin
+        `checkh(signed_bit, 1'bx);
+        `checkh(signed_logic, 1'bx);
+        descending[signed_bit_index] = 1'b1;
+        `checkh(descending, expected);
+        descending[signed_logic_index] = 1'b0;
+        `checkh(descending, expected);
+      end
+      else begin
+        `checkh(signed_bit, expected[index]);
+        `checkh(signed_logic, expected[index]);
+        descending[signed_bit_index] = 1'bx;
+        expected[index] = 1'bx;
+        `checkh(descending, expected);
+        descending[signed_logic_index] = 1'bz;
+        expected[index] = 1'bz;
+        `checkh(descending, expected);
+      end
+    end
     $display("CHECKS %m %0d", checks);
     done = 1;
   end

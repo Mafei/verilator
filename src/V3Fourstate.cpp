@@ -1920,11 +1920,19 @@ class FourstateVisitor final : public VNVisitor {
             selp->lsbp(lsbp);
             selp->fromp(fromp);
             if (isFourstate(lsbp)) {
-                auto assureWidth = [flp, minWidth = std::max(64, lsbp->width())](
+                auto assureWidth = [flp, signExtend = lsbp->isSigned(),
+                                    minWidth = std::max(VL_QUADSIZE, lsbp->width())](
                                        AstNodeExpr* const exprp) -> AstNodeExpr* {
                     UASSERT_OBJ(exprp->width() <= minWidth, exprp,
                                 "This function shall only expand values");
-                    if (exprp->width() < minWidth) return new AstExtend{flp, exprp};
+                    if (exprp->width() < minWidth) {
+                        AstNodeExpr* const extendedp
+                            = signExtend
+                                  ? static_cast<AstNodeExpr*>(new AstExtendS{flp, exprp, minWidth})
+                                  : static_cast<AstNodeExpr*>(new AstExtend{flp, exprp, minWidth});
+                        extendedp->dtypeSetBitSized(minWidth, VSigning::UNSIGNED);
+                        return extendedp;
+                    }
                     return exprp;
                 };
                 // The assumption is that no signal/array will ever have 2^64 indexes so,
@@ -1964,7 +1972,7 @@ class FourstateVisitor final : public VNVisitor {
         }();
         setSelpHandled(newp);
         newp->fromp(valueExprp);
-        const bool isStaticlyInRange = V3Unknown::isStaticlyGte(maxmsb, lsbp);
+        const bool isStaticlyInRange = !lsbp->isSigned() && V3Unknown::isStaticlyGte(maxmsb, lsbp);
         const bool isLsbpFourstate = isFourstate(lsbp);
         if (isStaticlyInRange && !isLsbpFourstate) {
             newp->lsbp(getOnceExpressionValue(lsbp));

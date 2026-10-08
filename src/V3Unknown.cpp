@@ -405,7 +405,8 @@ class UnknownVisitor final : public VNVisitor {
             AstConst* const maxmsbConstp
                 = new AstConst{nodep->fileline(), AstConst::WidthedValue{}, compareWidth, maxmsb};
             AstNodeExpr* lsbp = V3Const::constifyEdit(nodep->lsbp()->unlinkFrBack());
-            if (V3Unknown::isStaticlyGte(maxmsbConstp->num(), lsbp)) {
+            if ((!v3Global.opt.fourstate() || !lsbp->isSigned())
+                && V3Unknown::isStaticlyGte(maxmsbConstp->num(), lsbp)) {
                 // We don't need to add a conditional; we know the existing expression is ok
                 VL_DO_DANGLING(maxmsbConstp->deleteTree(), maxmsbConstp);
                 nodep->lsbp(lsbp);
