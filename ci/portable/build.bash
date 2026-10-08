@@ -125,7 +125,7 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem || regress_status=$?
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1

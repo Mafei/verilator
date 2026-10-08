@@ -221,7 +221,7 @@ class ResultsTest(unittest.TestCase):
                 self.rejected()
 
     def test_actual_logs_override_recorded_success(self):
-        groups = [group for group in ("upstream", "followup", "readmem") if group in GROUPS]
+        groups = [group for group in ("upstream", "followup", "readmem", "nba") if group in GROUPS]
         for group in groups:
             names = GROUPS[group]
             count = len(names)
@@ -241,16 +241,24 @@ class ResultsTest(unittest.TestCase):
             self.log(group).write_text(prefix + summary(count))
 
     def test_subprocess_nonzero_despite_green_summary(self):
-        self.config["t/t_" + GROUPS["fourstate"][0] + ".py"]["returncode"] = 7
-        self.assertEqual(self.run_fixture(), 1)
-        self.assertEqual(self.results["fourstate"]["returncode"], 7)
-        self.assertFalse(self.results["fourstate"]["success"])
-        # Later groups must still be executed and recorded for diagnosis.
-        self.assertTrue(self.results["upstream"]["success"])
-        self.rejected()
+        for group in ("fourstate", "nba"):
+            first = "t/t_" + GROUPS[group][0] + ".py"
+            with self.subTest(group=group):
+                self.config[first]["returncode"] = 7
+                self.assertEqual(self.run_fixture(), 1)
+                self.assertEqual(self.results[group]["returncode"], 7)
+                self.assertFalse(self.results[group]["success"])
+                # Other groups must still be executed and recorded for diagnosis.
+                self.assertTrue(
+                    all(result["success"] for name, result in self.results.items()
+                        if name != group))
+                self.rejected()
+            self.config[first]["returncode"] = 0
 
     def test_zero_exit_does_not_hide_failed_or_partial_summary(self):
-        groups = [group for group in ("fourstate", "followup", "readmem") if group in GROUPS]
+        groups = [
+            group for group in ("fourstate", "followup", "readmem", "nba") if group in GROUPS
+        ]
         for group in groups:
             names = GROUPS[group]
             first = "t/t_" + names[0] + ".py"

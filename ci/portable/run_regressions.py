@@ -34,6 +34,14 @@ GROUPS = {
         "fourstate_sampled_expr", "fourstate_struct", "fourstate_trace_fst", "fourstate_trace_vcd",
         "fourstate_vpi", "vpi_get", "vpi_get_value_array"
     ],
+    "nba": [
+        "assigndly_deep_ref_array", "assigndly_dynamic", "assigndly_dynamic_delay",
+        "disable_fork_nba", "fork_jumpblock", "fourstate_nba_loop", "nba_commit_queue",
+        "nba_commit_queue_suspenable", "nba_mixed_update_clocked", "nba_mixed_update_comb",
+        "nba_partial_late", "select_bound_timing_intra", "struct_array_assignment_delayed",
+        "timing_fork_join", "timing_intra_assign", "timing_intra_assign_nolocalize",
+        "timing_nba_1", "timing_nba_2", "timing_nba_loop", "timing_wait_fork_split", "unroll_delay"
+    ],
     "readmem": [
         "fourstate_readmem", "fourstate_readmem_bad", "fourstate_readmem_range",
         "fourstate_readmem_unsup", "sys_readmem", "sys_readmem_4state", "sys_readmem_assoc",
