@@ -3916,7 +3916,8 @@ class FourstateVisitor final : public VNVisitor {
         iterateChildren(nodep);
     }
     void visit(AstSenItem* const nodep) override {
-        if (!VN_IS(nodep->sensp(), FourstateExpr) && isFourstate(nodep->sensp())) {
+        if (nodep->sensp() && !VN_IS(nodep->sensp(), FourstateExpr)
+            && isFourstate(nodep->sensp())) {
             AstNodeExpr* const sensp = nodep->sensp()->unlinkFrBack();
             pushDeletep(sensp);
             nodep->sensp(new AstFourstateExpr{nodep->fileline(),
