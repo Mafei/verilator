@@ -90,10 +90,6 @@ module t;
     a = new;
     c = (f(`IMPURE_ONE) ? a : b);
     if (!c.foo()) $stop;
-    casex (dummy_if.signal)
-      8'b01z0100x: ;
-      default: $stop;
-    endcase
     $write("*-* All Finished *-*\n");
     $finish;
   end

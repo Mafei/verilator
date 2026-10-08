@@ -1,16 +1,8 @@
-%Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:64:5: Unsupported CMethod hard: pop
-                                                    : ... note: In instance 't'
-   64 |     input Q;
-      |     ^~~~~
-                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
-%Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:64:5: Unsupported CMethod hard: push
-                                                    : ... note: In instance 't'
-   64 |     input Q;
-      |     ^~~~~
 %Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:64:5: Unsupported: Variable of type: 'SAMPLEQUEUEDTYPE' with --fourstate
                                                     : ... note: In instance 't'
    64 |     input Q;
       |     ^~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
 %Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:68:9: Unsupported: Variable of type: 'logic$[$]' with --fourstate
                                                     : ... note: In instance 't'
    68 |   logic queue [$];
@@ -31,10 +23,6 @@
                                                      : ... note: In instance 't'
    91 |     c = (f(($c(1))) ? a : b);
       |                     ^
-%Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:94:7: Four-state values in case items are unsupported
-                                                    : ... note: In instance 't'
-   94 |       8'b01z0100x: ;
-      |       ^~~~~~~~~~~
 %Error-UNSUPPORTED: t/t_fourstate_multi_unsup.v:43:10: Unsupported: Pullups and pulldowns are unsupported with --fourstate
                                                      : ... note: In instance 't.m'
    43 |   pullup d_0_pup (dummy_out.signal[0]);
