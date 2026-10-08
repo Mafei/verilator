@@ -222,6 +222,11 @@ static void process() {
         v3Global.assertDTypesResolved(true);
         v3Global.widthMinUsage(VWidthMinUsage::MATCHES_WIDTH);
 
+        if (v3Global.opt.timing().isSetTrue()) {
+            // Preserve source-level @* dependencies before function inlining and timing lowering.
+            V3Timing::prepareImplicit(v3Global.rootp());
+        }
+
         // End of elaboration
         V3Stats::addStatPerf(V3Stats::STAT_WALLTIME_ELAB, elabWallTime.deltaTime());
         const VlOs::DeltaWallTime cvtWallTime{true};
