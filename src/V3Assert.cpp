@@ -1259,8 +1259,9 @@ class AssertVisitor final : public VNVisitor {
             ifp->branchPred(VBranchPred::BP_UNLIKELY);
             // Only the selected monitor consumes an explicit $monitoron request;
             // other registered monitors may be in different modules.
-            ifp->addNext(new AstAssign{fl, newMonitorRequestVarRefp(nodep, VAccess::WRITE),
-                                       new AstConst{fl, AstConst::BitFalse{}}});
+            AstNode::addNext(ifp,
+                             new AstAssign{fl, newMonitorRequestVarRefp(nodep, VAccess::WRITE),
+                                           new AstConst{fl, AstConst::BitFalse{}}});
             AstIf* const selectedp
                 = new AstIf{fl,
                             new AstEq{fl, new AstConst{fl, monNum},
@@ -1268,8 +1269,9 @@ class AssertVisitor final : public VNVisitor {
                             ifp};
             selectedp->isBoundsCheck(true);
             selectedp->branchPred(VBranchPred::BP_UNLIKELY);
-            selectedp->addNext(new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
-                                             new AstConst{fl, AstConst::BitFalse{}}});
+            AstNode::addNext(selectedp,
+                             new AstAssign{fl, new AstVarRef{fl, pendingp, VAccess::WRITE},
+                                           new AstConst{fl, AstConst::BitFalse{}}});
             m_modp->addStmtsp(new AstAlwaysPostponed{fl, selectedp});
         } else if (nodep->displayType() == VDisplayType::DT_STROBE) {
             nodep->displayType(VDisplayType::DT_DISPLAY);
