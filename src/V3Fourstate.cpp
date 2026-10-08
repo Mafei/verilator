@@ -752,7 +752,7 @@ private:
     static bool isNet(const AstVar* const varp) {
         const VVarType kind = varp->varType();
         return (kind == VVarType::WIRE || kind == VVarType::TRIWIRE || kind == VVarType::TRIOR
-                || kind == VVarType::TRIAND)
+                || kind == VVarType::TRIAND || kind == VVarType::PORT)
                && varp->dtypep()->skipRefp()->isIntegralOrPacked()
                && needsSplitting(varp->dtypep());
     }
@@ -775,8 +775,12 @@ private:
                     reason = "partial continuous LHS";
                 }
             }
-            net.drivers.push_back(
-                Driver{m_modp, VN_CAST(m_assignp, AssignW), whole, false, reason, {}});
+            net.drivers.push_back(Driver{m_modp,
+                                         m_continuous ? VN_CAST(m_assignp, AssignW) : nullptr,
+                                         whole,
+                                         false,
+                                         reason,
+                                         {}});
         }
         Driver& driver = net.drivers[inserted.first->second];
         const int64_t hi = lo + width - 1;
@@ -914,10 +918,18 @@ private:
 
 public:
     explicit FourstateNetDrivers(AstNetlist* const netlistp) { iterateConst(netlistp); }
+    static bool needsNetAudit(const Net& net) {
+        if (net.varp->varType() != VVarType::PORT) return true;
+        // Implicit net ports retain PORT through linking. At least one real continuous
+        // contribution is required; ordinary procedural variable ports keep their old path.
+        return std::any_of(net.drivers.begin(), net.drivers.end(),
+                           [](const Driver& driver) { return driver.assignp != nullptr; });
+    }
     std::set<const AstVar*> multiDrivenNets() const {
         std::set<const AstVar*> result;
         for (AstVar* const varp : m_varOrder) {
-            if (m_nets.at(varp).drivers.size() > 1) result.insert(varp);
+            const Net& net = m_nets.at(varp);
+            if (net.drivers.size() > 1 && needsNetAudit(net)) result.insert(varp);
         }
         return result;
     }
@@ -948,10 +960,12 @@ public:
         std::vector<Net> result;
         for (AstVar* const varp : m_varOrder) {
             const Net& net = m_nets.at(varp);
-            if (!overlaps(net)) continue;  // Disjoint partial writers retain their existing path.
+            if (!needsNetAudit(net) || !overlaps(net)) continue;
+            // Disjoint partial writers and procedural-only ports retain their existing path.
             string reason;
-            if (!VN_IS(net.modulep, Module) || varp->isIO() || varp->isClassMember()
-                || varp->isFuncLocal() || varp->lifetime().isAutomatic()) {
+            if (!VN_IS(net.modulep, Module) || varp->isIO() || varp->varType() == VVarType::PORT
+                || varp->isClassMember() || varp->isFuncLocal()
+                || varp->lifetime().isAutomatic()) {
                 reason = "nonlocal target";
             } else if (varp->isPullup() || varp->isPulldown()) {
                 reason = "implicit pull";
@@ -4131,6 +4145,7 @@ public:
         , m_fourstateGeneratorValueVisitor{*this}
         , m_fourstateGeneratorXZVisitor{*this} {
         m_pullAssignments = FourstatePullVisitor::collect(netlistp);
+        V3Error::abortIfErrors();  // Preserve the pull audit's precise diagnostics and precedence.
         const std::vector<FourstateNetDrivers::Net> nets
             = FourstateNetDrivers{netlistp}.auditedNets();
         V3Error::abortIfErrors();
