@@ -144,14 +144,22 @@ same selection.
 
 The `fourstate-pull-20261008` candidate preserves all 125 selected checks and
 adds an independent `pull` group with a positive simulation and a compile-negative
-driver, for **127 explicitly selected checks**. The positive driver checks 4,032
-values, event counts, snapshots and time observations, plus 116 exact VCD
+driver, for **127 explicitly selected checks**. The positive driver checks 4,036
+values, event counts, snapshots and time observations, plus 120 exact VCD
 histories. It exercises single whole continuous drivers of local `tri0` and
 `tri1` packed vectors at 1/7/33/65/95/129 bits, ascending and nonzero ranges,
 mixed X/Z data, repeated values, release to Z and subsequent driving. Separate
 65-bit RHS signals in the same module check that different assignments retain
-independent captures. The compile-negative driver checks thirteen unsupported
+independent captures. The compile-negative driver checks fourteen unsupported
 driver contexts against native compiler-generated diagnostic goldens.
+
+Four additional constant-driver assertions and their exact scalar VCD histories
+retain the known-driver path. They also reproduce an inherited scalar trace
+defect: a generated one-bit expression can carry upper storage bits into the
+four-state character lookup. The shared scalar trace path masks both halves
+to their low signal bit before recording and emitting a value; change detection
+also ignores storage padding. This keeps the VCD/FST/SAIF trace interfaces within
+their single-bit input range without changing two-state tracing.
 
 The bounded pull fix snapshots both value and X/Z halves before writing either
 target half. Only released Z bits receive the implicit pull value; active X
@@ -171,6 +179,8 @@ an inherited settle loop even when driving an ordinary wire. This candidate
 rejects impure pull-net RHS expressions instead of claiming that broader
 scheduling behavior is fixed. The selected tests do not certify arbitrary
 function calls or general strength, switch and bidirectional-net semantics.
+Existing four-state aggregate restrictions, including the explicit rejection
+of packed union variables, also remain in place.
 
 The delayed NBA loss also reproduces with an actual optimized build of the
 unmodified official `4a2989705657d506d50dee5772bc17b3f689d9d5` baseline.
