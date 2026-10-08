@@ -31,6 +31,10 @@ reasons = {
     11: 'Procedural deassign with --fourstate: force or external write access.',
     12: 'Tristate buffer with --fourstate: nondefault or externally driven target.',
     13: 'Tristate buffer with --fourstate: nondefault or externally driven target.',
+    14: 'Blocking intra-assignment delay with --fourstate: partial or hierarchical target.',
+    15: 'Blocking intra-assignment delay with --fourstate: nonlocal or nonpacked variable.',
+    16: 'Blocking intra-assignment delay with --fourstate: partial or hierarchical target.',
+    17: 'Blocking intra-assignment delay with --fourstate: force or external write access.',
 }
 
 for number, reason in reasons.items():

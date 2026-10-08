@@ -46,13 +46,37 @@ module t;
 `elsif DRIVE_CASE_11
   reg public_q  /* verilator public_flat_rw */;
   initial deassign public_q;
+`elsif DRIVE_CASE_14
+  reg [6:0] partial_q;
+  initial partial_q[3:0] = #1 4'bxxzz;
+`elsif DRIVE_CASE_15
+  task automatic delayed_local;
+    reg local_q;
+    local_q = #1 data;
+  endtask
+  initial delayed_local();
+`elsif DRIVE_CASE_16
+  drive_child u ();
+  initial u.q = #1 data;
+`elsif DRIVE_CASE_17
+  initial begin
+    force q = data;
+    release q;
+    q = #1 enable;
+  end
 `endif
 endmodule
 
 `ifdef DRIVE_CASE_9
+`define DRIVE_CHILD
+`elsif DRIVE_CASE_16
+`define DRIVE_CHILD
+`endif
+`ifdef DRIVE_CHILD
 module drive_child;
   reg q = 0;
 endmodule
+`undef DRIVE_CHILD
 `endif
 
 `ifdef DRIVE_CASE_12
