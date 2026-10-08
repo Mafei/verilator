@@ -43,6 +43,7 @@ GROUPS = {
         "timing_intra_assign", "timing_intra_assign_nolocalize", "timing_nba_1", "timing_nba_2",
         "timing_nba_loop", "timing_wait_fork_split", "unroll_delay"
     ],
+    "pull": ["fourstate_pull_release", "fourstate_pull_release_unsup"],
     "readmem": [
         "fourstate_readmem", "fourstate_readmem_bad", "fourstate_readmem_range",
         "fourstate_readmem_unsup", "sys_readmem", "sys_readmem_4state", "sys_readmem_assoc",

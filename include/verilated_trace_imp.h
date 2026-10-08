@@ -558,6 +558,8 @@ void VerilatedTraceBuffer<VL_BUF_T>::fullBit(uint32_t* oldp, CData newval) {
 template <>
 void VerilatedTraceBuffer<VL_BUF_T>::fullLogic(uint32_t* oldp, CData newval, CData newvalXZ) {
     const uint32_t code = oldp - m_sigs_oldvalp;
+    newval &= 1U;
+    newvalXZ &= 1U;
     CData* oldcp = reinterpret_cast<CData*>(oldp);
     oldcp[0] = newval;  // Still copy even if not tracing so chg doesn't call full
     oldcp[1] = newvalXZ;

@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_pull_release_unsup.v:48:14: Unsupported: Driven tri0/tri1 net 'pulled' with --fourstate: explicit drive strength.
+                                                            : ... note: In instance 't'
+   48 |   tri0 [6:0] pulled;
+      |              ^~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to
