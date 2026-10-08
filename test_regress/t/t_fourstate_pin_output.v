@@ -17,7 +17,7 @@ module child_bit(input bit [6:0] drive, output bit [6:0] result);
   assign result = drive;
 endmodule
 
-module t;
+module output_checks(output bit done);
   typedef bit [6:0] bitword_t;
   logic [6:0] drive;
   logic [6:0] memory [3:1];
@@ -38,6 +38,7 @@ module t;
   child h_word(drive, word[selected_bit() +: 7]);
 
   initial begin
+    done = 0;
     index = 1;
     first = 0;
     drive = 7'b10xz010;
@@ -80,7 +81,19 @@ module t;
     `checkh(fixed_memory[0], 7'bzzzzzzz);
     `checkh(bit_memory[0], 7'b0000000);
     `checkh(word[20:14], 7'bzzzzzzz);
+    done = 1;
+  end
+endmodule
+
+`ifndef FOURSTATE_PIN_OUTPUT_INCLUDED
+module t;
+  bit done;
+  output_checks h_output(done);
+
+  initial begin
+    wait (done);
     $write("*-* All Finished *-*\n");
     $finish;
   end
 endmodule
+`endif

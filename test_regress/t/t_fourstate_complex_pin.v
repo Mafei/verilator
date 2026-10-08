@@ -9,6 +9,10 @@
 `define checkh(gotv, expv) do if ((gotv) !== (expv)) begin $write("%%Error: %s:%0d: got=%b expected=%b\n", `__FILE__, `__LINE__, (gotv), (expv)); `stop; end while (0);
 // verilog_format: on
 
+`define FOURSTATE_PIN_OUTPUT_INCLUDED
+`include "t_fourstate_pin_output.v"
+`undef FOURSTATE_PIN_OUTPUT_INCLUDED
+
 module y(input logic [6:0] x, output wire [6:0] result);
   assign result = x;
 endmodule
@@ -19,6 +23,8 @@ endmodule
 
 module t;
   typedef bit [6:0] bitword_t;
+  bit output_done;
+  output_checks h_output(output_done);
   bit [6:0] two_state;
   logic [14:0] x;
   wire [6:0] selected;
@@ -52,6 +58,7 @@ module t;
       `checkh(casted, 7'(i));
       `checkh(known, ~7'(i));
     end
+    wait (output_done);
     $write("*-* All Finished *-*\n");
     $finish;
   end
