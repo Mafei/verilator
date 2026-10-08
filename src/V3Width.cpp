@@ -1547,6 +1547,17 @@ class WidthVisitor final : public VNVisitor {
     }
     static bool packedSelectIndexValue(const AstConst* nodep, int& value) {
         if (!nodep || nodep->num().isFourState()) return false;
+        if (nodep->num().width() > 32) {
+            // A wide index may still be a zero or sign extension of a 32-bit coordinate.
+            // Leave other wide values to the normal selection width checks.
+            const bool sign = nodep->dtypep()->isSigned() && nodep->num().bitIs1(31);
+            if (!nodep->dtypep()->isSigned() && nodep->num().bitIs1(31)) return false;
+            for (int bit = 32; bit < nodep->num().width(); ++bit) {
+                if (nodep->num().bitIs1(bit) != sign) return false;
+            }
+            value = static_cast<int>(nodep->num().edataWord(0));
+            return true;
+        }
         value = nodep->dtypep()->isSigned() && nodep->num().width() < 32
                     ? nodep->num().toSInt()
                     : static_cast<int>(nodep->num().toUInt());
