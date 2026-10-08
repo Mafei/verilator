@@ -37,6 +37,9 @@ for number, reason in reasons.items():
     log = f'{test.obj_dir}/case_{number}.log'
     golden = test.golden_filename.removesuffix('.out') + f'_{number}.out'
     top = {12: 'drive_input', 13: 'drive_inout'}.get(number, 't')
+    # Input-net driving reaches an earlier ASSIGNIN guard. Bypass it only here
+    # to verify that four-state lowering independently rejects this context.
+    input_flags = ['-Wno-ASSIGNIN'] if number == 12 else []
     test.compile(
         verilator_flags2=[
             '--fourstate',
@@ -45,12 +48,12 @@ for number, reason in reasons.items():
             '--top-module',
             top,
             f'-DDRIVE_CASE_{number}',
-        ],
+        ] + input_flags,
         fails=True,
     )
     shutil.copyfile(test.obj_dir + '/vlt_compile.log', log)
     test.file_grep_not(log, r'Internal Error|syntax error')
-    test.file_grep(log, r'%Error-UNSUPPORTED: Unsupported:')
+    test.file_grep(log, r'^%Error-UNSUPPORTED: .*Unsupported:')
     test.file_grep(log, re.escape(reason))
     test.file_grep(log, r'%Error: Exiting due to (\d+) error\(s\)', 1)
     if not os.path.exists(golden):

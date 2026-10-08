@@ -1,6 +1,12 @@
 module Vt_debug_emitv_t;
     input logic clk;
     input logic in;
+    logic debug_buffer;
+    logic debug_nmos;
+    logic debug_pmos;
+    assign debug_buffer = bufif(in,clk);
+    assign debug_nmos = bufif(in,clk);
+    assign debug_pmos = bufif(in,(~ clk));
     typedef enum logic [2:0] {
         ZERO = 3'h0,
         ONE = 3'h1
@@ -312,7 +318,7 @@ module Vt_debug_emitv_t;
                     begin
                         $write("%%Error: %s:%0d:  got=%0d exp=%0d\n", 
                                136'h742f745f64656275675f656d6974762e76, 
-                               'sh105, SUB_B, 2'h1);
+                               'sh10b, SUB_B, 2'h1);
                         $stop;
                     end
                 end

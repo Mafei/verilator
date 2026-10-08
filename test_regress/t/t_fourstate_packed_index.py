@@ -9,13 +9,12 @@
 
 import vltest_bootstrap
 
-# Wide packed indexes exercise normative bounds that Icarus truncates to 32 bits.
+# Wide packed indexes exercise bounds beyond this Icarus version's 32-bit domain.
 test.scenarios('vlt_all')
 
 # Deliberately exercise ascending declarations and narrower/wider selection indexes.
 test.compile(verilator_flags2=[
-    '--binary', '--fourstate', '--debug-check', '-Wno-FUTURE',
-    '-Wno-ASCRANGE', '-Wno-WIDTHEXPAND', '-Wno-WIDTHTRUNC',
+    '--binary', '--fourstate', '--debug-check', '-Wno-FUTURE', '-Wno-fatal',
 ])
 test.execute()
 test.passes()

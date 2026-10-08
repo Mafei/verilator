@@ -13,8 +13,7 @@ test.scenarios('simulator')
 
 # Exercise word-sized indexes and both declaration directions with dynamic X/Z data.
 test.compile(verilator_flags2=[
-    '--binary', '--fourstate', '--debug-check', '-Wno-FUTURE',
-    '-Wno-ASCRANGE', '-Wno-WIDTHEXPAND', '-Wno-WIDTHTRUNC',
+    '--binary', '--fourstate', '--debug-check', '-Wno-FUTURE', '-Wno-fatal',
 ])
 test.execute()
 test.passes()

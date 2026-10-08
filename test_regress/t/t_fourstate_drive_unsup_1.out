@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_drive_unsup.v:19:27: Unsupported: Tristate buffer with --fourstate: explicit drive strength.
+                                                     : ... note: In instance 't'
+   19 |   bufif1 (strong1, weak0) b (result, data, enable);
+      |                           ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

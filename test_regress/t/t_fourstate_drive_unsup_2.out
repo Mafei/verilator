@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_drive_unsup.v:21:15: Unsupported: Tristate buffer with --fourstate: drive delay.
+                                                     : ... note: In instance 't'
+   21 |   bufif1 #(2) b (result, data, enable);
+      |               ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to
