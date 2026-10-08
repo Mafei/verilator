@@ -51,6 +51,10 @@ GROUPS = {
         "sys_readmem_bad_digit", "sys_readmem_bad_end", "sys_readmem_bad_notfound",
         "sys_readmem_eof", "sys_writemem", "sys_writemem_b"
     ],
+    "resolve": [
+        "fourstate_resolve_pair", "fourstate_resolve_triple", "fourstate_resolve_events",
+        "fourstate_resolve_unsup", "fourstate_resolve_defaults"
+    ],
     "upstream": [
         "class_param_enum", "class_static_default_arg", "class_type_param_upcast_chain",
         "debug_emitv", "fork_join_none_any_nested", "fork_join_none_nested_triggered",

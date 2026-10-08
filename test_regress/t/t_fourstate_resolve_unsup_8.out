@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_resolve_unsup.v:103:14: Unsupported: Multiple-driver net 'resolved' with --fourstate: hierarchical writer.
+                                                        : ... note: In instance 't.child'
+  103 |   wire [6:0] resolved;
+      |              ^~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

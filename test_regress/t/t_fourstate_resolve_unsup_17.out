@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_resolve_unsup.v:176:49: Unsupported: Multiple-driver net 'i' with --fourstate: nonlocal target.
+                                                        : ... note: In instance 't_default_writer.child'
+  176 | module resolver_default_writer(input wire [6:0] i = 7'b10zx101,
+      |                                                 ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

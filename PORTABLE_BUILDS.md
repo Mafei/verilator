@@ -182,6 +182,67 @@ function calls or general strength, switch and bidirectional-net semantics.
 Existing four-state aggregate restrictions, including the explicit rejection
 of packed union variables, also remain in place.
 
+The `fourstate-resolve-20261008` candidate keeps all 127 pull-stage selections
+and adds an independent `resolve` group with five drivers, for **132 explicitly
+selected checks**. Four positive drivers target pair and triple drivers,
+resolved-net events and input-default compatibility. A compile-negative driver
+checks retained unsupported contexts against diagnostic goldens. The shared
+public header and oracle helper
+are tracked test inputs, not extra drivers. All groups retain forced generation,
+exact unique test names, counts, exits and commit provenance. This candidate's
+runtime and portable platform verification remain pending until their actual
+logs have been checked.
+
+The resolver accepts exactly two or three whole continuous assignments to a
+local four-state packed integral `wire`, `tri`, `wor` or `wand`. Each contribution
+has its own persistent value/XZ packet initialized to Z. One resolver owns the
+result pair and reads every contribution. Assignments must have compiler-classified pure RHS
+expressions, default equal strengths, and no net or assignment delay. Known
+constant contributions stay part of resolution. Disjoint static partial writers
+retain their existing path. For potentially overlapping multiwriter candidates,
+overlapping partial writes, port/pin and hierarchical
+writers, aliases, force/release, external write access, explicit strengths,
+delays, impure RHS expressions and more than three contributions are rejected.
+Implicit ANSI and non-ANSI output net declarations receive the same explicit
+nonlocal-target diagnostic as `output wire`. This does not add port resolution,
+bidirectional nets, switch primitives or general strength semantics.
+
+A module input declaration default supplies an unconnected-port fallback. Its
+synthetic static initializer is excluded from contribution counts; real
+continuous and hierarchical writers remain subject to the same audit. Connected
+inputs override that fallback for known, X and Z values.
+
+The pair driver checks all sixteen 0/1/X/Z pairs in both declaration orders and
+four net kinds at 1/7/33/65/95/129 bits: 768 primary checks, plus 384 known/dynamic
+and 768 literal-constant checks. The scalar triple driver checks all 64 input
+combinations in all six declaration orders and four net kinds: 1,536 checks.
+The event driver checks 4,320 values, snapshots, event counts and time/realtime
+observations, plus 476 packet checks at additional 17/24/31/32/63/64-bit storage
+boundaries. The input-default driver adds 1,296 assertions at the six primary
+widths with omitted, open and connected ports, including mixed X/Z, snapshots,
+events and time/realtime. The four positive drivers total 9,548 runtime assertions
+and 1,430 complete reference VCD histories, including the driven sources.
+Seventeen compile-negative cases use native compiler-generated goldens. A
+successful simulation completion marker does not bypass the value or waveform
+oracle.
+
+The harness emits each short `Self PASSED` record with both line boundaries in
+one native write, below the POSIX minimum atomic pipe-write limit. This prevents
+parallel compiler fragments from swallowing a record. The anchored result parser
+still rejects an embedded marker. Native partial-prefix and competing-writer
+fixtures exercise the real emitter alongside all existing failure controls.
+
+The source histories exposed an inherited trace-activity gap before the first
+suspension of a split coroutine. The bounded trace fix marks activity at entry
+and retains the existing markers after each await; ordinary function handling
+and the simulation scheduler are unchanged. Large-consumer resolver expression
+growth remains a separate performance acceptance check. An additional independent
+21,280-observation probe generated approximately 206 MB of C++ and exceeded its
+300-second `--binary` build limit. Its already-generated C++ subsequently passed
+an explicit make, runtime and strict waveform oracle, but the original timeout
+remains a failed performance check. Successful small-model simulation alone does
+not certify that check.
+
 The delayed NBA loss also reproduces with an actual optimized build of the
 unmodified official `4a2989705657d506d50dee5772bc17b3f689d9d5` baseline.
 It is not introduced by the four-state integration. The bounded fix captures
@@ -307,21 +368,20 @@ A newer Vivado library or exact RFSoC device requires a verified matching source
 and license. RFADC/RFDAC and transceiver wrappers in the public snapshot lack
 some SIP implementations; XPM, DSP58 and RAMB36E5 are outside this snapshot.
 
-## Remaining multi-driver work
+## Resolver boundaries and pending acceptance
 
-The broader `t_fourstate_demo` and its FST variant remain acceptance failures.
+On the pull-stage baseline, `t_fourstate_demo` and its FST variant remain
+acceptance failures.
 Independent reference comparison finds incorrect wired-OR and 129-bit contention
 values. Re-enabling the old resolver is insufficient: its `triand` truth table
 also produced a wrong, driver-order-dependent result for X and 1.
 
-A later bounded resolver needs persistent storage for each driver, one owner of
-the resolved value/XZ pair and scheduling whenever either half of any driver
-changes. Initial acceptance should compare all sixteen two-driver 0/1/X/Z input
-pairs in both driver orders, partial vector drives at 7/33/65/95/129 bits and
-return-to-Z pull fallback, with matching VCD and FST observations. Ports,
-hierarchy, wired nets, strengths and delayed drivers each need explicit scope
-and reference evidence. Passing a smaller wire/tri/wor subset would not certify
-the existing demo's `triand` and wide contention behavior.
+The resolver candidate covers whole local two/three-driver `wire`, `tri`, `wor`
+and `wand` nets as described above. Its broader demo VCD/FST acceptance must be
+checked against the unchanged inherited goldens. Partial overlapping drives,
+multiple-driver pull fallback, ports, hierarchy, strengths and delayed drivers
+remain outside the implementation. Neither this matrix nor the selected
+functional vendor probes certify complete SystemVerilog or vendor timing models.
 
 For cloud development, run `ci/portable/run_regressions.py` with the selected
 group names directly, without setting an Actions environment variable. The

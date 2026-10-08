@@ -19,6 +19,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 import check_results
+import harness_pass_probe
 import log_evidence
 import run_regressions
 
@@ -43,7 +44,11 @@ def incorrect_name_logs(names):
     # be the original valid log. Appending a repeated name still rejects it.
     if len(names) > 1:
         variants.append([*names[:-1], names[0]])
-    return [pass_records(actual) + summary(len(names)) for actual in variants]
+    outputs = [pass_records(actual) + summary(len(names)) for actual in variants]
+    # A marker spliced into parallel compiler output is not a complete record,
+    # even when the summary and every textual test name look green.
+    outputs.append("clang-long-command-prefix" + pass_records(names) + summary(len(names)))
+    return outputs
 
 
 class ResultsTest(unittest.TestCase):
@@ -138,16 +143,22 @@ class ResultsTest(unittest.TestCase):
             len(GROUPS["upstream"]))
         self.assertEqual(self.run_fixture(), 0)
         self.verify()
-        # The real fake-driver subprocess also rejects a wrong full argv.
-        arguments = original["arguments"]
-        for wrong in ([arg for arg in arguments if arg != "--no-skip-identical"], arguments[:-1],
-                      [*arguments[:3], *reversed(arguments[3:])]):
-            with self.subTest(arguments=wrong):
-                self.config[first]["arguments"] = wrong
-                self.assertEqual(self.run_fixture(), 1)
-                self.assertEqual(self.results["upstream"]["returncode"], 98)
-                self.rejected()
         self.config[first] = original
+        # Every selected group uses the exact forced-generation argv, including
+        # new independent groups. A singleton's reversed selection is unchanged.
+        for group, names in GROUPS.items():
+            first = "t/t_" + names[0] + ".py"
+            arguments = self.config[first]["arguments"]
+            variants = [[arg for arg in arguments if arg != "--no-skip-identical"], arguments[:-1]]
+            if len(names) > 1:
+                variants.append([*arguments[:3], *reversed(arguments[3:])])
+            for wrong in variants:
+                with self.subTest(group=group, arguments=wrong):
+                    self.config[first]["arguments"] = wrong
+                    self.assertEqual(self.run_fixture(), 1)
+                    self.assertEqual(self.results[group]["returncode"], 98)
+                    self.rejected()
+            self.config[first]["arguments"] = arguments
         # An ordinary cloud checkout has neither build-created output directory.
         shutil.rmtree(self.root / "logs")
         shutil.rmtree(self.root / "out")
@@ -230,6 +241,17 @@ class ResultsTest(unittest.TestCase):
                 self.rejected()
 
     def test_actual_logs_override_recorded_success(self):
+        native = harness_pass_probe.probe(SOURCE_ROOT, GROUPS["readmem"])
+        self.assertEqual(native["worker_returncodes"], [0] * 4)
+        self.assertTrue(native["compiler_pass_overlap"])
+        self.assertTrue(
+            run_regressions.passed_names(native["outputs"]["pressure"],
+                                         native["pressure_expected"]))
+        count = len(GROUPS["readmem"])
+        self.log("readmem").write_text(native["outputs"]["legacy"] + summary(count))
+        self.rejected()
+        self.log("readmem").write_text(native["outputs"]["atomic"] + summary(count))
+        self.verify()
         for group, names in GROUPS.items():
             count = len(names)
             prefix = pass_records(names)

@@ -648,13 +648,16 @@ class TraceVisitor final : public VNVisitor {
                     if (AstStmtExpr* const stmtp = VN_CAST(insertp, StmtExpr)) {
                         stmtp->addNextHere(setterp);
                     } else if (AstCFunc* const funcp = VN_CAST(insertp, CFunc)) {
-                        // If there are awaits, insert the setter after each await
                         if (funcp->isCoroutine() && funcp->stmtsp()) {
+                            // A split coroutine can write traced variables before its first
+                            // await. Mark both that initial segment and every resumed segment.
                             funcp->stmtsp()->foreachAndNext([setterp](AstCAwait* awaitp) {
                                 awaitp->addNextHere(setterp->cloneTree(false));
                             });
+                            funcp->stmtsp()->addHereThisAsNext(setterp);
+                        } else {
+                            funcp->addStmtsp(setterp);
                         }
-                        funcp->addStmtsp(setterp);
                     } else {
                         insertp->v3fatalSrc("Bad trace activity vertex");
                     }

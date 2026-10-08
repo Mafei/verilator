@@ -931,6 +931,17 @@ class VlTest:
         message = message.rstrip() + "\n"
         print(self.soprint(message), end="")
 
+    def _emit_self_passed(self) -> None:
+        # Compiler processes share stdout and may leave a partial line. Keep
+        # both line boundaries and the record in one write, below the POSIX
+        # minimum PIPE_BUF, so another writer cannot split this pass record.
+        record = ("\n" + self.soprint("Self PASSED")).encode("utf-8")
+        if len(record) > 512:
+            raise ValueError("Self PASSED record exceeds the atomic pipe write limit")
+        sys.stdout.flush()
+        if os.write(sys.stdout.fileno(), record) != len(record):
+            raise OSError("Incomplete Self PASSED record write")
+
     def error(self, message: str) -> None:
         """Called from tests as: error("Reason message")
         Newline is optional. Only first line is passed to summaries
@@ -1055,7 +1066,7 @@ class VlTest:
 
     def _exit(self):
         if self.ok:
-            self.oprint("Self PASSED")
+            self._emit_self_passed()
         elif self._skips and not self.errors:
             self.oprint("-Skip: " + self._skips)
         else:

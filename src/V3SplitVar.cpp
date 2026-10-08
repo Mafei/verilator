@@ -115,6 +115,7 @@
 #include "V3SplitVar.h"
 
 #include "V3AstUserAllocator.h"
+#include "V3Fourstate.h"
 #include "V3Stats.h"
 #include "V3UniqueNames.h"
 
@@ -981,6 +982,7 @@ class SplitPackedVarVisitor final : public VNVisitor, public SplitVarImpl {
     const VNUser2InUse m_user2InUse;
 
     AstNetlist* const m_netp;
+    const std::set<const AstVar*> m_fourstateMultiDrivenNets;
     const AstNodeModule* m_modp = nullptr;  // Current module (just for log)
     int m_numSplitAttr = 0;  // Number of variables split due to attribute
     int m_numSplitAuto = 0;  // Number of variables split automatically
@@ -990,6 +992,9 @@ class SplitPackedVarVisitor final : public VNVisitor, public SplitVarImpl {
         if (!cannotSplitTaskReason(nodep)) iterateChildren(nodep);
     }
     void visit(AstVar* nodep) override {
+        // Preserve original selectors and net kind for the four-state driver audit,
+        // including automatic splitting of repeated identical selections.
+        if (m_fourstateMultiDrivenNets.count(nodep)) return;
         if (!nodep->attrSplitVar() && !nodep->user2()) return;  // Nothing to do
         if (const char* const reason = cannotSplitReason(nodep, true)) {
             if (nodep->attrSplitVar()) {
@@ -1340,7 +1345,10 @@ class SplitPackedVarVisitor final : public VNVisitor, public SplitVarImpl {
 public:
     // When reusing the information from SplitUnpackedVarVisitor
     SplitPackedVarVisitor(AstNetlist* nodep, SplitVarRefs fromUnpackedSplit)
-        : m_netp{nodep} {
+        : m_netp{nodep}
+        , m_fourstateMultiDrivenNets{v3Global.opt.fourstate()
+                                         ? V3Fourstate::collectMultiDrivenNets(nodep)
+                                         : std::set<const AstVar*>{}} {
         // If you want ignore refs and walk the tne entire AST,
         // just call iterateChildren(m_modp) and split() for each module
         if (v3Global.opt.fVarSplit()) {
