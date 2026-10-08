@@ -38,11 +38,12 @@ def pass_records(names):
 
 def incorrect_name_logs(names):
     """Keep a green summary while omitting, substituting or repeating names."""
-    return [
-        pass_records(actual) + summary(len(names))
-        for actual in ([], names[:-1], [*names[:-1], "unselected_fixture"], [*names, names[0]],
-                       [*names[:-1], names[0]])
-    ]
+    variants = [[], names[:-1], [*names[:-1], "unselected_fixture"], [*names, names[0]]]
+    # A singleton has no second identity to replace with its first; that would
+    # be the original valid log. Appending a repeated name still rejects it.
+    if len(names) > 1:
+        variants.append([*names[:-1], names[0]])
+    return [pass_records(actual) + summary(len(names)) for actual in variants]
 
 
 class ResultsTest(unittest.TestCase):
@@ -169,50 +170,58 @@ class ResultsTest(unittest.TestCase):
 
     def test_recorded_failures_and_incomplete_counts(self):
         original = copy.deepcopy(self.results)
-        mutations = [{
-            "returncode": 7
-        }, {
-            "success": False
-        }, {
-            "success": 1
-        }, {
-            "expected": 999
-        }, {
-            "expected": True
-        }, {
-            "returncode": False
-        }, {
-            "summary_status": "FAILED"
-        }, {
-            "commit": "0" * 40
-        }, {
-            "selected": list(reversed(GROUPS["upstream"]))
-        }, {
-            "counts": {
-                "passed": len(GROUPS["upstream"]) - 1,
-                "failed": 0
-            }
-        }, {
-            "counts": {
-                "passed": len(GROUPS["upstream"]),
-                "failed": 1
-            }
-        }, {
-            "counts": {
-                "passed": len(GROUPS["upstream"]),
-                "failed": False
-            }
-        }, {
-            "counts": None
-        }]
-        for mutation in mutations:
-            with self.subTest(mutation=mutation):
-                self.results = copy.deepcopy(original)
-                self.results["upstream"].update(mutation)
-                self.rejected()
-        self.results = copy.deepcopy(original)
-        self.results["upstream"] = None
-        self.rejected()
+        for group, names in GROUPS.items():
+            count = len(names)
+            wrong_selection = list(reversed(names)) if count > 1 else []
+            mutations = [{
+                "returncode": 7
+            }, {
+                "success": False
+            }, {
+                "success": 1
+            }, {
+                "expected": 999
+            }, {
+                "expected": True
+            }, {
+                "returncode": False
+            }, {
+                "summary_status": "FAILED"
+            }, {
+                "commit": "0" * 40
+            }, {
+                "selected": wrong_selection
+            }, {
+                "counts": {
+                    "passed": count - 1,
+                    "failed": 0
+                }
+            }, {
+                "counts": {
+                    "passed": count,
+                    "failed": 1
+                }
+            }, {
+                "counts": {
+                    "passed": count,
+                    "failed": False
+                }
+            }, {
+                "counts": {
+                    "passed": True,
+                    "failed": 0
+                }
+            }, {
+                "counts": None
+            }]
+            for mutation in mutations:
+                with self.subTest(group=group, mutation=mutation):
+                    self.results = copy.deepcopy(original)
+                    self.results[group].update(mutation)
+                    self.rejected()
+            self.results = copy.deepcopy(original)
+            self.results[group] = None
+            self.rejected()
 
     def test_provenance_mismatch_and_empty(self):
         for provenance in ("0" * 40 + "\n", ""):
@@ -221,9 +230,7 @@ class ResultsTest(unittest.TestCase):
                 self.rejected()
 
     def test_actual_logs_override_recorded_success(self):
-        groups = [group for group in ("upstream", "followup", "readmem", "nba") if group in GROUPS]
-        for group in groups:
-            names = GROUPS[group]
+        for group, names in GROUPS.items():
             count = len(names)
             prefix = pass_records(names)
             outputs = [
@@ -241,8 +248,8 @@ class ResultsTest(unittest.TestCase):
             self.log(group).write_text(prefix + summary(count))
 
     def test_subprocess_nonzero_despite_green_summary(self):
-        for group in ("fourstate", "nba"):
-            first = "t/t_" + GROUPS[group][0] + ".py"
+        for group, names in GROUPS.items():
+            first = "t/t_" + names[0] + ".py"
             with self.subTest(group=group):
                 self.config[first]["returncode"] = 7
                 self.assertEqual(self.run_fixture(), 1)
@@ -256,11 +263,7 @@ class ResultsTest(unittest.TestCase):
             self.config[first]["returncode"] = 0
 
     def test_zero_exit_does_not_hide_failed_or_partial_summary(self):
-        groups = [
-            group for group in ("fourstate", "followup", "readmem", "nba") if group in GROUPS
-        ]
-        for group in groups:
-            names = GROUPS[group]
+        for group, names in GROUPS.items():
             first = "t/t_" + names[0] + ".py"
             original = self.config[first]["output"]
             count = len(names)
