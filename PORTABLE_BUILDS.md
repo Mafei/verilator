@@ -195,10 +195,11 @@ logs have been checked.
 The resolver accepts exactly two or three whole continuous assignments to a
 local four-state packed integral `wire`, `tri`, `wor` or `wand`. Each contribution
 has its own persistent value/XZ packet initialized to Z. One resolver owns the
-result pair and reads every contribution. Assignments must have pure RHS
+result pair and reads every contribution. Assignments must have compiler-classified pure RHS
 expressions, default equal strengths, and no net or assignment delay. Known
 constant contributions stay part of resolution. Disjoint static partial writers
-retain their existing path; overlapping partial writes, port/pin and hierarchical
+retain their existing path. For potentially overlapping multiwriter candidates,
+overlapping partial writes, port/pin and hierarchical
 writers, aliases, force/release, external write access, explicit strengths,
 delays, impure RHS expressions and more than three contributions are rejected.
 Implicit ANSI and non-ANSI output net declarations receive the same explicit
@@ -220,8 +221,12 @@ The source histories exposed an inherited trace-activity gap before the first
 suspension of a split coroutine. The bounded trace fix marks activity at entry
 and retains the existing markers after each await; ordinary function handling
 and the simulation scheduler are unchanged. Large-consumer resolver expression
-growth remains a separate performance acceptance check; successful small-model
-simulation alone does not certify that check.
+growth remains a separate performance acceptance check. An additional independent
+21,280-observation probe generated approximately 206 MB of C++ and exceeded its
+300-second `--binary` build limit. Its already-generated C++ subsequently passed
+an explicit make, runtime and strict waveform oracle, but the original timeout
+remains a failed performance check. Successful small-model simulation alone does
+not certify that check.
 
 The delayed NBA loss also reproduces with an actual optimized build of the
 unmodified official `4a2989705657d506d50dee5772bc17b3f689d9d5` baseline.
