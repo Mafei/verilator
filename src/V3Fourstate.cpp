@@ -742,6 +742,7 @@ private:
     std::map<AstVar*, Net> m_nets;
     std::vector<AstVar*> m_varOrder;
     std::unordered_set<const AstNodeVarRef*> m_recordedRefs;
+    std::unordered_set<const AstVar*> m_formalPinWriters;
     AstNodeModule* m_modp = nullptr;
     AstNodeAssign* m_assignp = nullptr;
     const AstNode* m_contextp = nullptr;
@@ -847,7 +848,10 @@ private:
         VL_RESTORER_COPY(m_context);
         m_contextp = nodep;
         if (AstVar* const formalp = nodep->modVarp()) {
-            if (isNet(formalp) && formalp->direction().isNonOutput()) {
+            // One module declaration describes every instance of its formal input. Its port
+            // boundary is one logical writer, rather than one contribution per parent cell.
+            if (isNet(formalp) && formalp->direction().isNonOutput()
+                && m_formalPinWriters.insert(formalp).second) {
                 Net& net = m_nets[formalp];
                 net.varp = formalp;
                 net.writerIndices.emplace(nodep, net.drivers.size());
@@ -857,7 +861,9 @@ private:
             if (formalp->isWritable()) {
                 m_context = "port or pin writer";
                 if (AstNodeExpr* const exprp = VN_CAST(nodep->exprp(), NodeExpr)) {
-                    scanLhs(exprp, nodep, false, 0, exprp->width(), false);
+                    // Static disjoint actual selections are not competing drivers, even though
+                    // a genuine overlapping pin contribution remains outside resolver support.
+                    scanLhs(exprp, nodep, true, 0, exprp->width(), false);
                 }
             }
         }
