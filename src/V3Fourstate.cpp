@@ -596,6 +596,13 @@ class FourstateVisitor final : public VNVisitor {
         m_tmpVarReleaserStack;  // Stack used by TmpVarsReleaser to keep track of ownership and
                                 // count of vars to release
 
+    struct ArrayIndexCapture final {
+        AstVar* const valuep;
+        AstVar* const badp;
+    };
+    std::map<const AstArraySel*, ArrayIndexCapture>
+        m_arrayIndexCaptures;  // Index snapshots shared by the value and X/Z selections
+
     // Original AstVar* and pair of assignments <value, xz>
     using NetToAssignWps
         = std::map<const AstVar*, std::vector<std::pair<AstAssignW*, AstAssignW*>>>;
@@ -1035,6 +1042,150 @@ class FourstateVisitor final : public VNVisitor {
         m_lastCalculationStatp = nodep;
     }
 
+    AstNodeExpr* getOnceExpressionValue(AstNodeExpr* const exprp) {
+        if (isFourstate(exprp) || exprp->isPure()) {
+            return getFourstateExpressionValue(exprp, true);
+        }
+        if (AstNodeExpr* const cachedp = getExprValuep(exprp)) {
+            return cachedp->cloneTree(false);
+        }
+        // Both halves must share side effects, including operands used only for their X/Z part.
+        FileLine* const flp = exprp->fileline();
+        AstNodeExpr* const valuep = getFourstateExpressionValue(exprp, false);
+        AstVar* const varp = createTmp(exprp);
+        varp->dtypep(getTwoStateDtype(exprp->dtypep()));
+        addPrecalculation(new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE}, valuep});
+        AstVarRef* const resultp = new AstVarRef{flp, varp, VAccess::READ};
+        setFourstate(resultp, false);
+        setExprValuep(exprp, resultp);
+        return resultp;
+    }
+
+    static bool isIntegralArrayElement(const AstArraySel* const selp) {
+        const AstNodeDType* const dtypep = selp->dtypep()->skipRefp();
+        return !VN_IS(dtypep, UnpackArrayDType) && !dtypep->isCompound()
+               && dtypep->basicp()->keyword().isIntNumeric();
+    }
+
+    static bool isFixedIntegralArraySel(const AstArraySel* const selp) {
+        if (!VN_IS(selp->fromp()->dtypep()->skipRefp(), UnpackArrayDType)) return false;
+        const AstArraySel* leafp = selp;
+        // A subarray needs a typed default value. Only handle it as part of a scalar selection.
+        while (VN_IS(leafp->dtypep()->skipRefp(), UnpackArrayDType)) {
+            const AstArraySel* const parentp = VN_CAST(leafp->backp(), ArraySel);
+            if (!parentp || parentp->fromp() != leafp) return false;
+            leafp = parentp;
+        }
+        return isIntegralArrayElement(leafp);
+    }
+
+    const ArrayIndexCapture& getArrayIndexCapture(AstArraySel* const selp) {
+        const auto it = m_arrayIndexCaptures.find(selp);
+        if (it != m_arrayIndexCaptures.end()) return it->second;
+        FileLine* const flp = selp->fileline();
+        AstNodeExpr* const bitp = selp->bitp();
+        static constexpr int minIndexWidth = 64;
+        const int width = std::max(minIndexWidth, bitp->width());
+        AstNodeExpr* valuep = getOnceExpressionValue(bitp);
+        if (valuep->width() < width) {
+            valuep = bitp->isSigned()
+                         ? static_cast<AstNodeExpr*>(new AstExtendS{flp, valuep, width})
+                         : static_cast<AstNodeExpr*>(new AstExtend{flp, valuep, width});
+        }
+        valuep->dtypeSetBitSized(width, VSigning::UNSIGNED);
+        AstVar* const valueVarp = createTmp(valuep);
+        valueVarp->dtypep(valuep->dtypep());
+        addPrecalculation(
+            new AstAssign{flp, new AstVarRef{flp, valueVarp, VAccess::WRITE}, valuep});
+
+        // V3WidthSel already normalized the declaration's low bound, including ascending ranges.
+        const AstUnpackArrayDType* const dtypep
+            = VN_AS(selp->fromp()->dtypep()->skipRefp(), UnpackArrayDType);
+        AstNodeExpr* const badp = new AstOr{
+            flp, new AstRedOr{flp, getFourstateExpressionXZ(bitp)},
+            new AstGte{flp, new AstVarRef{flp, valueVarp, VAccess::READ},
+                       new AstConst{flp, AstConst::WidthedValue{}, width,
+                                    static_cast<uint32_t>(dtypep->elementsConst())}}};
+        AstVar* const badVarp = createTmp(badp);
+        addPrecalculation(
+            new AstAssign{flp, new AstVarRef{flp, badVarp, VAccess::WRITE}, badp});
+        return m_arrayIndexCaptures.emplace(selp, ArrayIndexCapture{valueVarp, badVarp})
+            .first->second;
+    }
+
+    static AstNodeExpr* newArrayIndexValue(AstArraySel* const selp,
+                                         const ArrayIndexCapture& capture) {
+        FileLine* const flp = selp->fileline();
+        AstNodeExpr* resultp = new AstVarRef{flp, capture.valuep, VAccess::READ};
+        // Bounds use the full snapshot; an in-range array address always fits in 64 bits.
+        static constexpr int addressWidth = 64;
+        if (resultp->width() > addressWidth) {
+            resultp = new AstSel{flp, resultp, 0, addressWidth};
+            resultp->dtypeSetBitSized(addressWidth, VSigning::UNSIGNED);
+            setSelpHandled(resultp);
+        }
+        return resultp;
+    }
+
+    AstNodeExpr* getArrayReadBad(AstArraySel* const selp) {
+        AstNodeExpr* resultp = nullptr;
+        for (AstArraySel* currentp = selp; currentp;
+             currentp = VN_CAST(currentp->fromp(), ArraySel)) {
+            if (!isFixedIntegralArraySel(currentp)) break;
+            const ArrayIndexCapture& capture = getArrayIndexCapture(currentp);
+            AstNodeExpr* const badp = new AstVarRef{currentp->fileline(), capture.badp,
+                                                  VAccess::READ};
+            resultp = resultp ? new AstOr{selp->fileline(), resultp, badp} : badp;
+        }
+        return resultp;
+    }
+
+    AstNodeExpr* getFourstateExpressionArraySelHandler(AstArraySel* const selp,
+                                                       const bool xzPart) {
+        FileLine* const flp = selp->fileline();
+        if (!isFixedIntegralArraySel(selp)) {
+            // Whole subarrays and other element types retain their existing lowering.
+            selp->bitp()->purityCheck();
+            AstArraySel* const resultp = new AstArraySel{
+                flp,
+                xzPart ? getFourstateExpressionXZ(selp->fromp())
+                       : getFourstateExpressionValue(selp->fromp()),
+                isFourstate(selp->bitp()) ? getTwoStateCast(selp->bitp())
+                                        : selp->bitp()->cloneTree(false)};
+            resultp->dtypep(getTwoStateDtype(selp->dtypep()));
+            setSelpHandled(resultp);
+            return resultp;
+        }
+        AstNodeExpr* const fromp = [&]() -> AstNodeExpr* {
+            if (AstArraySel* const parentp = VN_CAST(selp->fromp(), ArraySel)) {
+                if (isFixedIntegralArraySel(parentp)) {
+                    return getFourstateExpressionArraySelHandler(parentp, xzPart);
+                }
+            }
+            return xzPart ? getFourstateExpressionXZ(selp->fromp())
+                          : getFourstateExpressionValue(selp->fromp());
+        }();
+        const ArrayIndexCapture& capture = getArrayIndexCapture(selp);
+        AstNodeExpr* indexp = newArrayIndexValue(selp, capture);
+        const AstNodeVarRef* const basep = VN_CAST(selp->fromp()->baseFromp(true), NodeVarRef);
+        const bool lvalue = basep && basep->access().isWriteOrRW();
+        const bool leaf = isIntegralArrayElement(selp);
+        if (lvalue || !leaf) {
+            AstConst* const invalidp
+                = new AstConst{flp, AstConst::WidthedValue{}, indexp->width(), 0U};
+            // The wide sentinel lets V3Unknown guard writes and retain RHS side effects/timing.
+            if (lvalue) invalidp->num().setAllBits1();
+            indexp = new AstCond{flp, new AstVarRef{flp, capture.badp, VAccess::READ}, invalidp,
+                                 indexp};
+        }
+        AstArraySel* const resultp = new AstArraySel{flp, fromp, indexp};
+        resultp->dtypep(getTwoStateDtype(selp->dtypep()));
+        setSelpHandled(resultp);
+        if (lvalue || !leaf) return resultp;
+        return new AstCond{flp, getArrayReadBad(selp),
+                           createZeroOrOnesp(selp, isFourstate(selp)), resultp};
+    }
+
     AstNodeExpr* getFourstateExpressionSelHandler(AstSel* const selp,
                                                   AstNodeExpr* const valueExprp,
                                                   const bool defaultsToZero) {
@@ -1148,6 +1299,10 @@ class FourstateVisitor final : public VNVisitor {
 
         void addPrecalculation(AstNode* const nodep) {
             m_fourstateVisitor.addPrecalculation(nodep);
+        }
+
+        AstNodeExpr* getShiftOperandValue(AstNodeExpr* const exprp) {
+            return m_fourstateVisitor.getOnceExpressionValue(exprp);
         }
 
         void liftExprStmtStatements(AstExprStmt* const exprStmtp) {
@@ -1685,6 +1840,17 @@ class FourstateVisitor final : public VNVisitor {
                         shiftrp->lhsp(), true /*must be in tmp so it always gets evaluated*/),
                     getFourstateExpressionValue(shiftrp->rhsp())}};
         }
+        void visit(AstShiftRS* const shiftrsp) override {
+            FileLine* const flp = shiftrsp->fileline();
+            AstNodeExpr* const lhsp = getShiftOperandValue(shiftrsp->lhsp());
+            AstNodeExpr* const rhsp = getShiftOperandValue(shiftrsp->rhsp());
+            AstShiftRS* const shiftp = new AstShiftRS{flp, lhsp, rhsp};
+            shiftp->dtypep(getTwoStateDtype(shiftrsp->dtypep()));
+            // Shift the value and X/Z halves with the same sign extension.
+            m_resultp = new AstCond{
+                flp, new AstRedOr{flp, getFourstateExpressionXZ(shiftrsp->rhsp())},
+                createZeroOrOnesp(shiftrsp, true), shiftp};
+        }
         void visit(AstExtend* const extendp) override {
             FileLine* const flp = extendp->fileline();
             m_resultp = new AstExtend{flp, getFourstateExpressionValue(extendp->lhsp(), false),
@@ -1734,14 +1900,8 @@ class FourstateVisitor final : public VNVisitor {
         }
 
         void visit(AstArraySel* const arraySelp) override {
-            arraySelp->bitp()->purityCheck();
-            m_resultp = new AstArraySel{arraySelp->fileline(),
-                                       getFourstateExpressionValue(arraySelp->fromp(), false),
-                                       isFourstate(arraySelp->bitp())
-                                           ? m_fourstateVisitor.getTwoStateCast(arraySelp->bitp())
-                                           : arraySelp->bitp()->cloneTree(false)};
-            m_resultp->dtypep(getTwoStateDtype(arraySelp->dtypep()));
-            setSelpHandled(m_resultp);
+            m_resultp
+                = m_fourstateVisitor.getFourstateExpressionArraySelHandler(arraySelp, false);
         }
 
         void visit(AstSliceSel* const sliceSelp) override {
@@ -2058,6 +2218,19 @@ class FourstateVisitor final : public VNVisitor {
                               new AstShiftR{flp, getFourstateExpressionXZ(shiftrp->lhsp(), false),
                                             getFourstateExpressionValue(shiftrp->rhsp())}};
         }
+        void visit(AstShiftRS* const shiftrsp) override {
+            FileLine* const flp = shiftrsp->fileline();
+            // Evaluate the value even if only the X/Z half is required.
+            AstNodeExpr* const valuep = getShiftOperandValue(shiftrsp->lhsp());
+            pushDeletep(valuep);
+            AstNodeExpr* const lhsp = getFourstateExpressionXZ(shiftrsp->lhsp(), false);
+            AstNodeExpr* const rhsp = getShiftOperandValue(shiftrsp->rhsp());
+            AstShiftRS* const shiftp = new AstShiftRS{flp, lhsp, rhsp};
+            shiftp->dtypep(getTwoStateDtype(shiftrsp->dtypep()));
+            m_resultp = new AstCond{
+                flp, new AstRedOr{flp, getFourstateExpressionXZ(shiftrsp->rhsp())},
+                createZeroOrOnesp(shiftrsp, true), shiftp};
+        }
         void visit(AstExtend* const extendp) override {
             FileLine* const flp = extendp->fileline();
             m_resultp = new AstExtend{flp, getFourstateExpressionXZ(extendp->lhsp(), false),
@@ -2224,14 +2397,7 @@ class FourstateVisitor final : public VNVisitor {
         }
 
         void visit(AstArraySel* const arraySelp) override {
-            arraySelp->bitp()->purityCheck();
-            m_resultp = new AstArraySel{arraySelp->fileline(),
-                                       getFourstateExpressionXZ(arraySelp->fromp(), false),
-                                       isFourstate(arraySelp->bitp())
-                                           ? m_fourstateVisitor.getTwoStateCast(arraySelp->bitp())
-                                           : arraySelp->bitp()->cloneTree(false)};
-            m_resultp->dtypep(getTwoStateDtype(arraySelp->dtypep()));
-            setSelpHandled(m_resultp);
+            m_resultp = m_fourstateVisitor.getFourstateExpressionArraySelHandler(arraySelp, true);
         }
 
         void visit(AstSliceSel* const sliceSelp) override {
@@ -3001,6 +3167,13 @@ class FourstateVisitor final : public VNVisitor {
     void visit(AstArraySel* const nodep) override {
         UASSERT_OBJ(!isFourstate(nodep), nodep,
                     "This visitor shall never be reached for four-state AstArraySel");
+        if (!isSelpHandled(nodep) && isFixedIntegralArraySel(nodep)) {
+            AstNodeExpr* const newp = getFourstateExpressionArraySelHandler(nodep, false);
+            FourstateLogicTypePropagator{newp};
+            nodep->replaceWith(newp);
+            pushDeletep(nodep);
+            return;
+        }
         if (isFourstate(nodep->bitp())) {
             AstNodeExpr* const newp = getTwoStateCast(nodep->bitp());
             nodep->bitp()->unlinkFrBack()->deleteTree();
@@ -3143,6 +3316,7 @@ class FourstateVisitor final : public VNVisitor {
         VL_RESTORER(m_currentTmpSpotp);
         VL_RESTORER(m_modp);
         VL_RESTORER_COPY(m_tmpUnusedVarps);
+        VL_RESTORER_CLEAR(m_arrayIndexCaptures);
         m_modp = nodep;
         m_currentTmpSpotp = nodep->stmtsp();
         iterateChildren(nodep);

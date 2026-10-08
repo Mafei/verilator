@@ -123,7 +123,7 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities || regress_status=$?
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended || regress_status=$?
 [[ ${smoke_status:-0} == 0 && $regress_status == 0 ]]
 python3 - <<'PY'
 import hashlib,pathlib

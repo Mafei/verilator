@@ -13,7 +13,16 @@ import sys
 
 GROUPS = {
     "capabilities": """
-        fourstate_mem_index fourstate_shiftrs
+        fourstate_mac_model fourstate_mem_index fourstate_shiftrs
+        fourstate_supplies
+    """.split(),
+    "extended": """
+        fourstate_arithmetics fourstate_assign_complex fourstate_assign_sel_lhs
+        fourstate_comparison fourstate_complex_pin fourstate_concat
+        fourstate_countbits fourstate_eqwild fourstate_event_detection
+        fourstate_extend fourstate_logand fourstate_logor fourstate_neqwild
+        fourstate_redand fourstate_redor fourstate_redxor fourstate_replicate
+        fourstate_sel fourstate_shift
     """.split(),
     "integration": ["fourstate_coverage"],
     "fourstate": """

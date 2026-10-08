@@ -1371,8 +1371,11 @@ class WidthVisitor final : public VNVisitor {
                                           << " outside " << frommsb << ":" << fromlsb);
                     }
                 }
-                widthCheckSized(nodep, "Extract Range", nodep->bitp(), selwidthDTypep, EXTEND_EXP,
-                                false /*NOWARN*/);
+                // Four-state bounds checks need every address bit, including high X/Z bits.
+                if (!v3Global.opt.fourstate()) {
+                    widthCheckSized(nodep, "Extract Range", nodep->bitp(), selwidthDTypep,
+                                    EXTEND_EXP, false /*NOWARN*/);
+                }
             }
         }
     }
