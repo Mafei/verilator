@@ -434,7 +434,8 @@ requests remain drafts; acceptance results do not authorize merging or release.
 
 The `fourstate-amd-repair-20261008` branch continues from the preserved resolver
 checkpoint. Its separate `amd-repair` group adds public minimal regressions;
-it retains the original ten groups and all 132 selected drivers. The unchanged
+it retains the original ten groups and all 132 selected drivers. With the 16
+additional repair drivers, the selected collection contains 148 tests. The unchanged
 34-profile public AMD selection and broader 108-case collection remain separate
 acceptance contracts. Compiler generation, C++ builds, runtime outputs and
 physical VCD histories must all be checked at the final candidate SHA.
@@ -442,12 +443,15 @@ physical VCD histories must all be checked at the final candidate SHA.
 | Area | Candidate behavior and boundary |
 | --- | --- |
 | Integral unary minus | Preserve signed/context widths and evaluate each operand once. Any X/Z operand produces an all-X result. |
-| Packed bit indexes | Keep DFG enabled, normalize invalid-index predicates to one bit, preserve signed bounds and reject invalid writes before indexing storage. |
-| Packed partial reads | Preserve in-range bits and return X for out-of-range bits for the qualified normalized, at most 32-bit index domain. Oversized selections and wider index domains retain their existing behavior and need further validation. |
+| Packed bit indexes | Keep DFG enabled, normalize invalid-index predicates to one bit, preserve signed bounds and reject invalid writes before indexing storage. In two-state mode, check the complete signed index domain before narrowing; ascending and nonzero declaration bounds retain signed arithmetic through normalization. The separate wide unsigned and four-state normalization paths retain their existing boundaries. |
+| Packed partial reads | Preserve in-range bits and return X for out-of-range bits of four-state integral sources in the qualified normalized, at most 32-bit index domain. Oversized selections and wider index domains retain their existing behavior and need further validation. |
 | Conditional expressions | Lower each branch once under guarded value/mask snapshots. Known predicates evaluate only the selected branch; ambiguous predicates evaluate both. The inherited merge formula remains; common-Z ambiguous branches are a known unvalidated semantic boundary. |
-| Single tristate buffers | Accept a whole local net or output with default strength, one qualified driver and no delay. Unknown enables are checked independently of data X/Z. MOS primitives, multiple contributions, explicit strengths and externally driven targets remain unsupported. |
-| Procedural assign/deassign | Accept whole module-owned packed variables with a constant or direct local-variable RHS. Compound live expressions, aliases, partial/hierarchical targets and external writes remain unsupported. |
+| Local buffer primitives | Accept plain `buf` and tristate buffers on a whole local net or output with default strength, one qualified driver and no delay. Enabled Z input becomes X, including constant and dynamic plain-buffer inputs. Unknown tristate enables are checked independently of data X/Z. MOS primitives, multiple contributions, explicit strengths and externally driven targets remain unsupported. |
+| Procedural assign/deassign | Accept whole module-owned packed variables with a constant or direct local-variable RHS. Keep the assigned value when deassigned; subsequent procedural or nonblocking updates become visible without exposing stale hidden writes. Compound live expressions, aliases, partial/hierarchical targets and external writes remain unsupported. |
 | Blocking intra-assignment delay | Capture value/mask before one suspension using activation-local storage for whole module-owned packed targets. The independent regression checks concurrent task invocations, zero/X/Z delays and widths through 129 bits. Partial/hierarchical, automatic/local, port and externally written targets remain unsupported. |
+| Implicit timed sensitivity | Rearm `always @*` processes whose own body contains an explicit suspension, using external values read by that body. Automatic locals and reads belonging only to nested waits/events do not become sensitivity inputs. Timing hidden only in a called task is outside this repair. |
+| Monitor output | Print the final values in the postponed region after zero-delay and nonblocking updates. Preserve argument-change detection, explicit unchanged `$monitoron` requests, and replacement of the argument list while disabled. Time alone does not create an argument-change event. The regression does not certify all combinations of repeated monitor control tasks. |
+| Zero-delay resumptions | With `--sched-zero-delay`, reevaluate dependent combinational logic and commit the qualified queued packed nonblocking updates after Inactive resumptions. Mixed whole unpacked-array shadow updates retain an independently recorded limitation. |
 | Clock/IO and glbl | Recheck the original models after each applicable repair. General strength resolution, bidirectional IO and hierarchical multiwriter nets require further implementation; passing functional profiles does not certify SDF or vendor timing models. |
 
 Boundary-index regressions intentionally retain ascending declarations and
@@ -478,3 +482,12 @@ provide relevant scheduling, declaration and default-value rules in the
 1800-2023 text has not been independently retrieved for this investigation.
 A stable applicable CI subset must state any exclusion and its basis explicitly,
 while retaining the full selection's raw outcomes.
+
+The full 18-case Icarus comparison always retains both scheduling/default-value
+differences above. Its applicable CI gate requires the other 16 cases to pass.
+The two classified output differences do not excuse compilation errors, crashes,
+timeouts, source changes or malformed evidence. The independent signed-domain
+regression uses literal mathematical bounds through 95-bit index expressions;
+Icarus 12 truncates indices in the positive and negative `2**40` value
+classes, so the common reference selection explicitly omits those classes
+and is not a full-domain certificate.
