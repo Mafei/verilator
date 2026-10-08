@@ -86,6 +86,7 @@ python3 ci/portable/test_regression_results.py
 autoconf
 ./configure --prefix=/opt/verilator-fourstate --disable-ccwarn --disable-tcmalloc --disable-jemalloc
 make -C src -j2 opt
+python3 ci/portable/log_evidence.py compiler
 if [[ -n ${PORTABLE_BASELINE:-} ]]; then
     export VERILATOR_ROOT="$root"
     git diff -- src/flexfix > out/baseline-source.patch
@@ -124,14 +125,10 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup || regress_status=$?
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1
 fi
 python3 ci/portable/check_results.py
-python3 - <<'PY'
-import hashlib,pathlib
-files=sorted(pathlib.Path('out').glob('*'))
-pathlib.Path('out/SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in files if p.is_file()))
-PY
+python3 ci/portable/log_evidence.py results

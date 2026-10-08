@@ -1,0 +1,3 @@
+%Warning: obj_vlt/t_fourstate_readmem_bad/bad_7.mem:2: $readmem too many words for the requested range
+Readmem diagnostic checks: 12
+*-* All Finished *-*

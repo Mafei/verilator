@@ -512,6 +512,14 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         iterateChildrenSeparately(nodep);
         setFourstate(nodep, false, m_fourstateInSubtree);
     }
+    void visit(AstReadMemFile* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
+    void visit(AstReadMemPair* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
 
     void visit(AstSampled* const nodep) override {
         iterateChildrenSeparately(nodep);
@@ -3035,6 +3043,99 @@ class FourstateVisitor final : public VNVisitor {
         }
         iterateChildren(nodep);
     }
+    AstNodeExpr* newReadMemBound(AstNodeExpr* const exprp) {
+        FileLine* const flp = exprp->fileline();
+        AstNodeExpr* valuep = getOnceExpressionValue(exprp);
+        AstNodeExpr* xzp = getFourstateExpressionXZ(exprp);
+        // Keep signed narrow values negative, and validate unknown bits before any writes.
+        if (valuep->width() < 64) {
+            valuep = exprp->isSigned() ? static_cast<AstNodeExpr*>(new AstExtendS{flp, valuep, 64})
+                                       : static_cast<AstNodeExpr*>(new AstExtend{flp, valuep, 64});
+        }
+        valuep->dtypeSetBitSized(64, exprp->dtypep()->numeric());
+        if (xzp->width() < 64) xzp = new AstExtend{flp, xzp, 64};
+        return new AstFourstateExpr{flp, newReadMemCapture(valuep), newReadMemCapture(xzp)};
+    }
+    AstNodeExpr* newReadMemCapture(AstNodeExpr* const exprp) {
+        // Filename strings cannot share the integral temporary pool. Capture arguments
+        // before the bounds so neither later argument effects nor C++ evaluation order
+        // can change the selected filename or its knownness check.
+        FileLine* const flp = exprp->fileline();
+        AstNodeDType* const dtypep = needsSplitting(exprp->dtypep())
+                                         ? getTwoStateDtype(exprp->dtypep())
+                                         : exprp->dtypep();
+        AstVar* const varp = new AstVar{flp, VVarType::BLOCKTEMP, m_tmpNames.get(exprp), dtypep};
+        varp->funcLocal(m_tmpFuncLocal);
+        varp->noReset(true);
+        varp->noSubst(true);
+        m_currentTmpSpotp->addHereThisAsNext(varp);
+        addPrecalculation(new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE}, exprp});
+        return new AstVarRef{flp, varp, VAccess::READ};
+    }
+    void visit(AstReadMem* const nodep) override {
+        StmtHelper stmtHelper{*this, nodep};
+        if (!needsSplitting(nodep->memp()->dtypep())) {
+            iterateChildren(nodep);
+            return;
+        }
+        const AstNodeVarRef* const refp = VN_CAST(nodep->memp(), NodeVarRef);
+        const AstUnpackArrayDType* const arrayp
+            = VN_CAST(nodep->memp()->dtypep()->skipRefp(), UnpackArrayDType);
+        const AstBasicDType* const elementp
+            = arrayp ? VN_CAST(arrayp->subDTypep()->skipRefp(), BasicDType) : nullptr;
+        if (!refp || !arrayp || !elementp || !elementp->keyword().isIntNumeric()) {
+            nodep->v3warn(E_UNSUPPORTED, "Unsupported: Four-state $readmem requires a whole fixed "
+                                         "one-dimensional integral memory.");
+            return;
+        }
+        if (refp->varp()->isFuncLocal() || refp->varp()->lifetime().isAutomatic()
+            || refp->varp()->isRef() || refp->varp()->isClassMember() || refp->varp()->isIO()
+            || refp->varp()->isForceable()) {
+            nodep->v3warn(E_UNSUPPORTED,
+                          "Unsupported: Four-state $readmem into automatic, aliased, port or "
+                          "forceable memory.");
+            return;
+        }
+        if ((nodep->lsbp() && nodep->lsbp()->width() > 64)
+            || (nodep->msbp() && nodep->msbp()->width() > 64)) {
+            nodep->v3warn(E_UNSUPPORTED,
+                          "Unsupported: Four-state $readmem address wider than 64 bits.");
+            return;
+        }
+        FileLine* const flp = nodep->fileline();
+        AstNodeExpr* const oldMemp = nodep->memp();
+        AstNodeExpr* const valuep = getFourstateExpressionValue(oldMemp);
+        AstNodeExpr* const xzp = getFourstateExpressionXZ(oldMemp);
+        oldMemp->replaceWith(new AstReadMemPair{flp, valuep, xzp});
+        pushDeletep(oldMemp);
+        if (AstCvtPackString* const packp = VN_CAST(nodep->filenamep(), CvtPackString)) {
+            AstNodeExpr* const sourcep = packp->lhsp();
+            if (isFourstate(sourcep)) {
+                AstNodeExpr* const filenameValuep = getOnceExpressionValue(sourcep);
+                AstNodeExpr* const knownp
+                    = new AstLogNot{flp, new AstRedOr{flp, getFourstateExpressionXZ(sourcep)}};
+                sourcep->replaceWith(filenameValuep);
+                pushDeletep(sourcep);
+                AstNodeExpr* const filenamep = nodep->filenamep()->unlinkFrBack();
+                nodep->filenamep(new AstReadMemFile{flp, filenamep, knownp});
+            }
+        }
+        if (AstReadMemFile* const filep = VN_CAST(nodep->filenamep(), ReadMemFile)) {
+            filep->filenamep(newReadMemCapture(filep->filenamep()->unlinkFrBack()));
+            filep->knownp(newReadMemCapture(filep->knownp()->unlinkFrBack()));
+        } else if (!VN_IS(nodep->filenamep(), Const)) {
+            nodep->filenamep(newReadMemCapture(nodep->filenamep()->unlinkFrBack()));
+        }
+        if (AstNodeExpr* const boundp = nodep->lsbp()) {
+            boundp->replaceWith(newReadMemBound(boundp));
+            pushDeletep(boundp);
+        }
+        if (AstNodeExpr* const boundp = nodep->msbp()) {
+            boundp->replaceWith(newReadMemBound(boundp));
+            pushDeletep(boundp);
+        }
+        iterateChildren(nodep);
+    }
     void visit(AstDisplay* const nodep) override {
         StmtHelper stmtHelper{*this, nodep};
         if (nodep->filep() && isFourstate(nodep->filep())) {
@@ -3567,6 +3668,11 @@ public:
         triorTriandReduce(m_assignWToTrior, triorReducer);
         triorTriandReduce(m_assignWToWire, triReducer);
         V3Error::abortIfErrors();
+        // Split variables are obsolete. Audit only their lowered replacements, including
+        // parameter initializers. Keep the originals alive until deferred deletion so
+        // any missed reference is still diagnosed rather than dereferencing freed storage.
+        for (AstVar* const varp : m_varpsToRemove) pushDeletep(varp->unlinkFrBack());
+        m_varpsToRemove.clear();
         { FourstateLogicTypePropagator{netlistp}; }
         netlistp->foreach([](const AstNodeExpr* const nodep) {
             if (VN_IS(nodep, NodeFTaskRef)) {
@@ -3579,7 +3685,6 @@ public:
             }
         });
         V3Error::abortIfErrors();
-        for (AstVar* const varp : m_varpsToRemove) varp->unlinkFrBack()->deleteTree();
         UASSERT_OBJ(m_tmpVarReleaserStack.empty(), m_tmpVarReleaserStack.back().first,
                     "TmpVarsReleaser stack frame has not been consumed");
     }

@@ -724,6 +724,21 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         puts(")");
     }
 
+    void visit(AstReadMemFile* const nodep) override {
+        puts("READMEM_FILE(NAME=");
+        iterateConst(nodep->filenamep());
+        puts(", KNOWN=");
+        iterateConst(nodep->knownp());
+        puts(")");
+    }
+    void visit(AstReadMemPair* const nodep) override {
+        puts("READMEM_PAIR(VAL=");
+        iterateConst(nodep->valuep());
+        puts(", XZ=");
+        iterateConst(nodep->xzp());
+        puts(")");
+    }
+
     // Nodes involing AstText
     void visit(AstText* nodep) override {
         // All Text should be under TextBlock/CStmt/CStmtUser/CExpr/CExprUser

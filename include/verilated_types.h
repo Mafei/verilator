@@ -1832,6 +1832,77 @@ std::string VL_TO_STRING(const VlUnpacked<T_Value, N_Depth>& obj) {
 template <typename T_Value, std::size_t N_Depth>
 struct VlContainsCustomStruct<VlUnpacked<T_Value, N_Depth>> : VlContainsCustomStruct<T_Value> {};
 
+/// Internal writer for a single synchronously loaded four-state memory entry.
+using VlReadMemFourstateWriter = void (*)(void*, QData, const EData*, const EData*);
+
+/// Internal single-file parser used by the typed four-state readmem wrapper.
+extern void VL_READMEM_FOURSTATE_CALLBACK(bool hex, int bits, int storageWords, int storageBits,
+                                          QData depth, int arrayLsb, const std::string& filename,
+                                          void* contextp, VlReadMemFourstateWriter writer,
+                                          bool hasStart, QData startValue, bool startKnown,
+                                          bool startSigned, bool hasEnd, QData endValue,
+                                          bool endKnown, bool endSigned,
+                                          bool filenameKnown) VL_MT_SAFE;
+
+/// Internal conversion from clean readmem words to integral model storage.
+template <typename T_Value>
+struct VlReadMemFourstateStorage final {
+    static_assert(std::is_same<T_Value, CData>::value || std::is_same<T_Value, SData>::value
+                      || std::is_same<T_Value, IData>::value
+                      || std::is_same<T_Value, QData>::value,
+                  "Four-state readmem requires integral model storage");
+    static constexpr int kWords = sizeof(T_Value) <= sizeof(EData) ? 1 : 2;
+    static constexpr int kBits = sizeof(T_Value) * 8;
+    static void set(T_Value& value, const EData* wordsp) {
+        QData data = wordsp[0];
+        if (sizeof(T_Value) > sizeof(EData)) data |= static_cast<QData>(wordsp[1]) << 32;
+        value = static_cast<T_Value>(data);
+    }
+};
+
+/// Internal conversion from clean readmem words to wide model storage.
+template <std::size_t N_Words>
+struct VlReadMemFourstateStorage<VlWide<N_Words>> final {
+    static_assert(N_Words > 0
+                      && N_Words <= static_cast<std::size_t>(std::numeric_limits<int>::max() / 32),
+                  "Invalid four-state readmem word count");
+    static constexpr int kWords = N_Words;
+    static constexpr int kBits = N_Words * 32;
+    static void set(VlWide<N_Words>& value, const EData* wordsp) {
+        for (std::size_t i = 0; i < N_Words; ++i) value.data()[i] = wordsp[i];
+    }
+};
+
+/// Read one fixed integral memory in a single traversal, preserving distinct X/Z bits.
+/// Bounds carry their signedness and knownness; omitted bounds use the declared low/high.
+/// Present signed bounds must be sign-extended to 64 bits. Unknown filename/bounds
+/// and bounds outside the declaration warn and load nothing. File @ addresses are
+/// checked 32-bit hexadecimal encodings of signed declaration indices.
+/// Value and XZ writes are synchronous; callers must protect concurrent model observers.
+template <typename T_Value, std::size_t N_Depth>
+void VL_READMEM_FOURSTATE_N(bool hex, int bits, int arrayLsb, const std::string& filename,
+                            VlUnpacked<T_Value, N_Depth>& values, VlUnpacked<T_Value, N_Depth>& xz,
+                            bool hasStart, QData startValue, bool startKnown, bool startSigned,
+                            bool hasEnd, QData endValue, bool endKnown, bool endSigned,
+                            bool filenameKnown = true) VL_MT_SAFE {
+    static_assert(N_Depth > 0 && N_Depth <= static_cast<QData>(UINT32_MAX) + 1,
+                  "Invalid four-state readmem depth");
+    using Storage = VlReadMemFourstateStorage<T_Value>;
+    struct Context final {
+        VlUnpacked<T_Value, N_Depth>& values;
+        VlUnpacked<T_Value, N_Depth>& xz;
+    } context{values, xz};
+    const auto writer = [](void* contextp, QData offset, const EData* valuep, const EData* xzp) {
+        Context& ctx = *static_cast<Context*>(contextp);
+        Storage::set(ctx.values[offset], valuep);
+        Storage::set(ctx.xz[offset], xzp);
+    };
+    VL_READMEM_FOURSTATE_CALLBACK(hex, bits, Storage::kWords, Storage::kBits, N_Depth, arrayLsb,
+                                  filename, &context, writer, hasStart, startValue, startKnown,
+                                  startSigned, hasEnd, endValue, endKnown, endSigned,
+                                  filenameKnown);
+}
+
 template <typename T_Value, size_t N_MaxSize>
 template <typename T_UnpackedValue, std::size_t N_UnpackedDepth>
 void VlQueue<T_Value, N_MaxSize>::renew_copy(

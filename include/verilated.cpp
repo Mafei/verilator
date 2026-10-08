@@ -3022,6 +3022,282 @@ void VlWriteMem::print(QData addr, bool addrstamp, const void* valuep) {
     }
 }
 
+namespace {
+// The filename may be a temporary expression. Own it until queued diagnostics run.
+void vlReadMemFourstateWarn(const std::string& filename, int line,
+                            const char* message) VL_MT_SAFE {
+    VerilatedThreadMsgQueue::post(VerilatedMsg{
+        [filename, line, message]() { vl_warn(filename.c_str(), line, "", message); }});
+}
+
+void vlReadMemFourstateError(const std::string& filename, int line,
+                             const char* message) VL_MT_SAFE {
+    VerilatedContext* const contextp = Verilated::threadContextp();
+    contextp->finishPendingInc();
+    VerilatedThreadMsgQueue::post(VerilatedMsg{[filename, line, message, contextp]() {
+        vl_fatal(filename.c_str(), line, "", message);
+        contextp->finishPendingDec();
+    }});
+}
+
+// Independent token reader for the additive four-state path. The legacy VlReadMem
+// parser and randomized-X behavior deliberately do not participate here.
+class VlReadMemFourstateTokens final {
+    FILE* m_fp;
+    const std::string& m_filename;
+    int m_line = 1;
+    int m_saved = EOF;
+
+    int get() {
+        const int ch = m_saved == EOF ? std::fgetc(m_fp) : m_saved;
+        m_saved = EOF;
+        if (ch == '\n') ++m_line;
+        return ch;
+    }
+    void putback(int ch) {
+        m_saved = ch;
+        if (ch == '\n') --m_line;
+    }
+
+public:
+    explicit VlReadMemFourstateTokens(const std::string& filename)
+        : m_fp{std::fopen(filename.c_str(), "r")}
+        , m_filename{filename} {}
+    VL_UNCOPYABLE(VlReadMemFourstateTokens);
+    ~VlReadMemFourstateTokens() { close(); }
+    bool isOpen() const { return m_fp != nullptr; }
+    int line() const { return m_line; }
+    void close() {
+        if (m_fp) std::fclose(m_fp);
+        m_fp = nullptr;
+    }
+    void error(const char* message) {
+        // Fatal handlers may abort rather than unwind; close before reporting.
+        close();
+        vlReadMemFourstateError(m_filename, m_line, message);
+    }
+    bool next(std::string& token, bool& address) {
+        token.clear();
+        int ch;
+        while (true) {
+            ch = get();
+            if (ch == EOF) {
+                if (std::ferror(m_fp)) error("$readmem file read error");
+                return false;
+            }
+            if (std::isspace(ch)) continue;
+            if (ch != '/') break;
+            ch = get();
+            if (ch == '/') {
+                do { ch = get(); } while (ch != EOF && ch != '\n');
+            } else if (ch == '*') {
+                int previous = 0;
+                do {
+                    ch = get();
+                    if (ch == EOF) {
+                        error("$readmem unterminated comment");
+                        return false;
+                    }
+                    if (previous == '*' && ch == '/') break;
+                    previous = ch;
+                } while (true);
+            } else {
+                error("$readmem invalid comment character");
+                return false;
+            }
+        }
+        address = ch == '@';
+        if (address) ch = get();
+        while (ch != EOF && !std::isspace(ch) && ch != '/' && ch != '@') {
+            token += static_cast<char>(ch);
+            ch = get();
+        }
+        if (ch == EOF && std::ferror(m_fp)) {
+            error("$readmem file read error");
+            return false;
+        }
+        putback(ch);
+        if (token.empty()) {
+            error("$readmem empty address directive");
+            return false;
+        }
+        return true;
+    }
+};
+
+int vlReadMemFourstateHexDigit(char ch) {
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+    return -1;
+}
+
+// Avoid implementation-defined unsigned-to-signed conversions of negative bounds.
+bool vlReadMemFourstateBound(QData value, bool isSigned, int64_t& result) {
+    const QData signedMax = std::numeric_limits<int64_t>::max();
+    if (value <= signedMax) {
+        result = static_cast<int64_t>(value);
+    } else if (isSigned) {
+        result = -static_cast<int64_t>(~value) - 1;
+    } else {
+        return false;
+    }
+    return true;
+}
+}  // namespace
+
+void VL_READMEM_FOURSTATE_CALLBACK(bool hex, int bits, int storageWords, int storageBits,
+                                   QData depth, int arrayLsb, const std::string& filename,
+                                   void* contextp, VlReadMemFourstateWriter writer, bool hasStart,
+                                   QData startValue, bool startKnown, bool startSigned,
+                                   bool hasEnd, QData endValue, bool endKnown, bool endSigned,
+                                   bool filenameKnown) VL_MT_SAFE {
+    if (VL_UNLIKELY(!filenameKnown)) {
+        vlReadMemFourstateWarn("", 0, "$readmem four-state filename contains X/Z; no data loaded");
+        return;
+    }
+    if (VL_UNLIKELY((hasStart && !startKnown) || (hasEnd && !endKnown))) {
+        vlReadMemFourstateWarn(filename, 0,
+                               "$readmem four-state bound contains X/Z; no data loaded");
+        return;
+    }
+    const int64_t low = arrayLsb;
+    // Fixed array declaration indices are signed 32-bit. Check before addition.
+    if (VL_UNLIKELY(depth == 0
+                    || depth - 1 > static_cast<QData>(std::numeric_limits<int32_t>::max() - low)
+                    || bits <= 0 || bits > storageBits || storageWords <= 0
+                    || static_cast<QData>(bits) > static_cast<QData>(storageWords) * 32)) {
+        vlReadMemFourstateError(filename, 0, "$readmem invalid four-state memory shape");
+        return;
+    }
+    const int64_t high = low + static_cast<int64_t>(depth - 1);
+    int64_t start = low;
+    int64_t end = high;
+    if (VL_UNLIKELY((hasStart && !vlReadMemFourstateBound(startValue, startSigned, start))
+                    || (hasEnd && !vlReadMemFourstateBound(endValue, endSigned, end))
+                    || start < low || start > high || end < low || end > high)) {
+        vlReadMemFourstateWarn(filename, 0,
+                               "$readmem four-state bound out of range; no data loaded");
+        return;
+    }
+    VlReadMemFourstateTokens tokens{filename};
+    if (VL_UNLIKELY(!tokens.isOpen())) {
+        vlReadMemFourstateWarn(filename, 0, "$readmem file not found");
+        return;
+    }
+    const int direction = start <= end ? 1 : -1;
+    const int64_t selectedLow = std::min(start, end);
+    const int64_t selectedHigh = std::max(start, end);
+    int64_t cursor = start;
+    bool atEnd = false;
+    bool anyAddress = false;
+    bool excessWarned = false;
+    std::vector<EData> values(storageWords);
+    std::vector<EData> xz(storageWords);
+    std::string token;
+    bool address = false;
+    while (tokens.next(token, address)) {
+        if (address) {
+            QData raw = 0;
+            bool anyDigit = false;
+            for (const char ch : token) {
+                if (ch == '_') continue;
+                const int digit = vlReadMemFourstateHexDigit(ch);
+                if (VL_UNLIKELY(digit < 0)) {
+                    tokens.error(
+                        "$readmem invalid address digit (X/Z and signed text are not allowed)");
+                    return;
+                }
+                if (VL_UNLIKELY(raw > (static_cast<QData>(UINT32_MAX) - digit) / 16)) {
+                    tokens.error(
+                        "$readmem address exceeds the supported 32-bit declaration domain");
+                    return;
+                }
+                raw = raw * 16 + digit;
+                anyDigit = true;
+            }
+            if (VL_UNLIKELY(!anyDigit)) {
+                tokens.error("$readmem empty address directive");
+                return;
+            }
+            // Hex addresses encode signed declaration indices in 32-bit two's complement.
+            cursor = raw <= static_cast<QData>(INT32_MAX)
+                         ? static_cast<int64_t>(raw)
+                         : -static_cast<int64_t>(static_cast<QData>(UINT32_MAX) - raw) - 1;
+            if (VL_UNLIKELY(cursor < selectedLow || cursor > selectedHigh)) {
+                tokens.error("$readmem address outside the requested range");
+                return;
+            }
+            anyAddress = true;
+            atEnd = false;
+            continue;
+        }
+        if (VL_UNLIKELY(atEnd)) {
+            tokens.close();
+            vlReadMemFourstateWarn(filename, tokens.line(),
+                                   "$readmem too many words for the requested range");
+            return;
+        }
+        std::fill(values.begin(), values.end(), 0);
+        std::fill(xz.begin(), xz.end(), 0);
+        const int shift = hex ? 4 : 1;
+        const size_t maxDigits = static_cast<size_t>((bits - 1) / shift + 1);
+        size_t digits = 0;
+        for (const char ch : token) {
+            if (ch == '_') continue;
+            const bool isX = ch == 'x' || ch == 'X';
+            const bool isZ = ch == 'z' || ch == 'Z';
+            const int digit = vlReadMemFourstateHexDigit(ch);
+            if (VL_UNLIKELY(!isX && !isZ && (digit < 0 || (!hex && digit > 1)))) {
+                tokens.error(hex ? "$readmemh invalid data digit"
+                                 : "$readmemb invalid data digit");
+                return;
+            }
+            const EData lowMask = hex ? 15 : 1;
+            EData valueCarry = isX ? lowMask : isZ ? 0 : digit;
+            EData xzCarry = isX || isZ ? lowMask : 0;
+            for (int word = 0; word < storageWords; ++word) {
+                const EData nextValue = values[word] >> (32 - shift);
+                const EData nextXz = xz[word] >> (32 - shift);
+                values[word] = (values[word] << shift) | valueCarry;
+                xz[word] = (xz[word] << shift) | xzCarry;
+                valueCarry = nextValue;
+                xzCarry = nextXz;
+            }
+            if (digits <= maxDigits)
+                ++digits;  // Saturate; arbitrarily long tokens cannot overflow.
+        }
+        if (VL_UNLIKELY(digits == 0)) {
+            tokens.error("$readmem empty data word");
+            return;
+        }
+        if (VL_UNLIKELY(digits > maxDigits && !excessWarned)) {
+            vlReadMemFourstateWarn(filename, tokens.line(),
+                                   "$readmem excess data digits; truncating to element width");
+            excessWarned = true;
+        }
+        const int usedWords = (bits - 1) / 32 + 1;
+        const int topBits = (bits - 1) % 32 + 1;
+        const EData topMask = topBits == 32 ? UINT32_MAX : (1U << topBits) - 1;
+        values[usedWords - 1] &= topMask;
+        xz[usedWords - 1] &= topMask;
+        for (int word = usedWords; word < storageWords; ++word) {
+            values[word] = 0;
+            xz[word] = 0;
+        }
+        const QData offset = static_cast<QData>(cursor - low);
+        writer(contextp, offset, values.data(), xz.data());
+        // Check the endpoint before arithmetic, never increment beyond the declaration domain.
+        atEnd = cursor == end;
+        if (!atEnd) cursor += direction;
+    }
+    if (tokens.isOpen() && !atEnd && !anyAddress) {
+        tokens.close();
+        vlReadMemFourstateWarn(filename, tokens.line(),
+                               "$readmem not enough words for the requested range");
+    }
+}
+
 void VL_READMEM_N(bool hex,  // Hex format, else binary
                   int bits,  // M_Bits of each array row
                   QData depth,  // Number of rows

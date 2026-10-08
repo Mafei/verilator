@@ -2294,6 +2294,42 @@ public:
     int instrCount() const override { return INSTR_COUNT_PLI; }
     bool sameNode(const AstNode* /*samep*/) const override { return true; }
 };
+class AstReadMemFile final : public AstNodeExpr {
+    // A string filename and the known-bit check for its packed source, after four-state lowering.
+    // @astgen op1 := filenamep : AstNodeExpr
+    // @astgen op2 := knownp : AstNodeExpr
+public:
+    AstReadMemFile(FileLine* fl, AstNodeExpr* filenamep, AstNodeExpr* knownp)
+        : ASTGEN_SUPER_ReadMemFile(fl) {
+        this->filenamep(filenamep);
+        this->knownp(knownp);
+        dtypep(filenamep->dtypep());
+    }
+    ASTGEN_MEMBERS_AstReadMemFile;
+    string emitVerilog() override { V3ERROR_NA_RETURN(""); }
+    string emitC() override { V3ERROR_NA_RETURN(""); }
+    bool cleanOut() const override { return true; }
+    bool sameNode(const AstNode* /*samep*/) const override { return true; }
+};
+class AstReadMemPair final : public AstNodeExpr {
+    // Whole value/XZ memories owned by a lowered four-state readmem statement.
+    // @astgen op1 := valuep : AstNodeExpr
+    // @astgen op2 := xzp : AstNodeExpr
+public:
+    AstReadMemPair(FileLine* fl, AstNodeExpr* valuep, AstNodeExpr* xzp)
+        : ASTGEN_SUPER_ReadMemPair(fl) {
+        UASSERT_OBJ(valuep->dtypep() == xzp->dtypep(), this,
+                    "Value and XZ memories must have the same unpacked shape");
+        this->valuep(valuep);
+        this->xzp(xzp);
+        dtypep(valuep->dtypep());
+    }
+    ASTGEN_MEMBERS_AstReadMemPair;
+    string emitVerilog() override { V3ERROR_NA_RETURN(""); }
+    string emitC() override { V3ERROR_NA_RETURN(""); }
+    bool cleanOut() const override { return true; }
+    bool sameNode(const AstNode* /*samep*/) const override { return true; }
+};
 class AstRising final : public AstNodeExpr {
     // Verilog $rising_gclk
     // @astgen op1 := exprp : AstNodeExpr

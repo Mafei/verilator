@@ -6,6 +6,7 @@
 """Exercise actual subprocess failures, provenance, logs, and the Bash gate."""
 
 import copy
+import hashlib
 import importlib.util
 import io
 import json
@@ -18,6 +19,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 import check_results
+import log_evidence
 import run_regressions
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
@@ -156,10 +158,11 @@ class ResultsTest(unittest.TestCase):
 
     def test_missing_extra_and_empty_groups(self):
         original = copy.deepcopy(self.results)
-        for results in ({}, {
-                key: value
-                for key, value in original.items() if key != "upstream"
-        }, dict(original, unexpected=original["upstream"])):
+        incomplete = [{
+            key: value
+            for key, value in original.items() if key != omitted
+        } for omitted in GROUPS]
+        for results in [{}, *incomplete, dict(original, unexpected=original["upstream"])]:
             with self.subTest(groups=list(results)):
                 self.results = results
                 self.rejected()
@@ -218,7 +221,7 @@ class ResultsTest(unittest.TestCase):
                 self.rejected()
 
     def test_actual_logs_override_recorded_success(self):
-        groups = ["upstream"] + (["followup"] if "followup" in GROUPS else [])
+        groups = [group for group in ("upstream", "followup", "readmem") if group in GROUPS]
         for group in groups:
             names = GROUPS[group]
             count = len(names)
@@ -247,7 +250,7 @@ class ResultsTest(unittest.TestCase):
         self.rejected()
 
     def test_zero_exit_does_not_hide_failed_or_partial_summary(self):
-        groups = ["fourstate"] + (["followup"] if "followup" in GROUPS else [])
+        groups = [group for group in ("fourstate", "followup", "readmem") if group in GROUPS]
         for group in groups:
             names = GROUPS[group]
             first = "t/t_" + names[0] + ".py"
@@ -296,7 +299,7 @@ class BashGateTest(unittest.TestCase):
         source = (SOURCE_ROOT / "ci/portable/build.bash").read_text()
         smoke = source[source.index("    smoke_status=0\n"):source.index("\nfi\n# The harness")]
         gate = source[source.index("regress_status=0\n"):source.
-                      index("\npython3 - <<'PY'\nimport hashlib,pathlib")]
+                      index("\npython3 ci/portable/log_evidence.py results\n")]
         command = next(line for line in gate.splitlines()
                        if line.startswith("python3 ci/portable/run_regressions.py "))
         selected = command.split(" || ", 1)[0].split()[2:]
@@ -327,6 +330,79 @@ python3() {
                                         capture_output=True)
                 self.assertEqual(result.returncode == 0, statuses == (0, 0, 0), result.stderr)
                 self.assertEqual("VALIDATION_PASSED" in result.stdout, statuses == (0, 0, 0))
+
+
+class LogEvidenceTest(unittest.TestCase):
+    """Check recorded byte hashes and limited enum normalization independently."""
+
+    def test_compiler_and_repeated_output_checksums(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for directory in ("bin", "test_regress/obj_vlt/t_debug_emitv"):
+                (root / directory).mkdir(parents=True)
+            binary = b"fixture compiler bytes\n"
+            (root / "bin/verilator_bin").write_bytes(binary)
+            tree = root / "test_regress/obj_vlt/t_debug_emitv/Vt_023_width.tree.v"
+            tree.write_text("__Venum_h123abcde__0\n")
+            command = [shutil.which("python3"), str(SOURCE_ROOT / "ci/portable/log_evidence.py")]
+            result = subprocess.run([*command, "compiler"],
+                                    cwd=root,
+                                    check=True,
+                                    capture_output=True,
+                                    text=True)
+            self.assertIn("COMPILER_SHA256 " + hashlib.sha256(binary).hexdigest(), result.stdout)
+            self.assertEqual((root / "out/compiler-SHA256SUMS").read_text(),
+                             hashlib.sha256(binary).hexdigest() + "  bin/verilator_bin\n")
+            (root / "out/package.tar.gz").write_bytes(b"fixture package bytes\n")
+            manifests = []
+            for _ in range(2):
+                result = subprocess.run([*command, "results"],
+                                        cwd=root,
+                                        check=True,
+                                        capture_output=True,
+                                        text=True)
+                manifest = (root / "out/SHA256SUMS").read_text()
+                manifests.append(manifest)
+                self.assertIn("OUTPUT_SHA256SUMS_BEGIN\n" + manifest, result.stdout)
+                self.assertIn("DEBUG_ENUM_EVIDENCE ", result.stdout)
+                names = []
+                for line in manifest.splitlines():
+                    digest, name = line.split("  ", 1)
+                    names.append(name)
+                    self.assertEqual(
+                        digest,
+                        hashlib.sha256((root / "out" / name).read_bytes()).hexdigest())
+                self.assertEqual(
+                    set(names),
+                    {"compiler-SHA256SUMS", "enum-hash-evidence.json", "package.tar.gz"})
+            self.assertEqual(manifests[0], manifests[1])
+
+    def test_enum_hashes_keep_suffix_alias_and_literal_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tree = root / "width.tree.v"
+            raw = ("__Venum_h123abcde__0 __Venum_h123abcde__1 __Venum_h87654321__0\n"
+                   "32'h123abcde\n")
+            tree.write_text(raw)
+            original = log_evidence.enum_evidence(tree, root)
+            self.assertEqual(original["raw_sha256"], hashlib.sha256(raw.encode()).hexdigest())
+            self.assertEqual(
+                original["raw_tokens"],
+                ["__Venum_h123abcde__0", "__Venum_h123abcde__1", "__Venum_h87654321__0"])
+            self.assertEqual(original["identities"], {"123abcde": "HASH0", "87654321": "HASH1"})
+            tree.write_text(
+                raw.replace("__Venum_h123abcde",
+                            "__Venum_h11111111").replace("__Venum_h87654321", "__Venum_h22222222"))
+            changed = log_evidence.enum_evidence(tree, root)
+            self.assertNotEqual(changed["raw_sha256"], original["raw_sha256"])
+            self.assertEqual(changed["normalized_sha256"], original["normalized_sha256"])
+            for variant in (raw.replace("__1 ", "__2 "), raw.replace("87654321", "123abcde"),
+                            raw.replace("32'h123abcde", "32'h87654321")):
+                with self.subTest(variant=variant):
+                    tree.write_text(variant)
+                    self.assertNotEqual(
+                        log_evidence.enum_evidence(tree, root)["normalized_sha256"],
+                        original["normalized_sha256"])
 
 
 class EnumHashTest(unittest.TestCase):

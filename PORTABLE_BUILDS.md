@@ -75,6 +75,18 @@ provenance, dependency reports, and checksums. Debug/coverage executables are
 not included. Unpack anywhere and invoke `bin/verilator`; leave `VERILATOR_ROOT`
 unset to use the relocated installation's own runtime files.
 
+The job log prints the optimized compiler's SHA256 immediately after its build.
+After validation it also prints every `out/SHA256SUMS` entry, including the
+portable tar package. The checksum file excludes itself so repeating this step
+does not create a self-referential digest. Debug enum evidence records the raw
+generated identifiers and both raw and normalized SHA256 values for each
+`t_debug_emitv` width dump. Normalization replaces only its eight-digit enum
+type hash, preserving distinct type identities, repeated references and numeric
+suffixes. The raw width dumps remain in the existing artifacts. A cloud checkout
+with those dumps can reproduce the log with
+`python3 ci/portable/log_evidence.py results`; it requires no download token or
+additional toolchain dependency.
+
 CI checks the relocated package by compiling and executing a four-state timing
 model, including a required failure on an unknown comparison. The Linux package
 is tested in a new Rocky 8.10 container with a different installation path.
@@ -95,11 +107,49 @@ to agree. A partial group set, skipped tests, retry failures or a mismatched
 commit fail validation. The gate's independent failure fixtures also run with
 macOS Bash 3.2.
 
+The `fourstate-readmem-20261008` candidate preserves those 86 checks and adds
+an independent `readmem` group of 16 checks, for **102 explicitly selected
+checks**. Two new public four-state positive tests target integral memory-file
+loading and address ranges. A runtime-negative driver checks malformed input
+and range diagnostics, while a compile-negative driver checks retained
+unsupported memory types and shapes. Twelve unmodified upstream checks cover
+hexadecimal/binary reading and write/read round trips, wide and aligned elements,
+associative arrays, EOF without a newline, malformed addresses and digits,
+short or missing files, and unsupported associative-array types. These use their
+original sources and goldens. In particular, the historical name
+`t_sys_readmem_4state` denotes a compatibility test of two-state random-reset
+behavior; it is not evidence of preserved X/Z data. The new readmem candidate
+still requires compiler, runtime and portable-platform validation. Its selection
+does not establish support for all memory types or original vendor RAM models.
+Range inputs are committed `.mem` files; the width and runtime-negative drivers
+generate their inputs beneath `TEST_OBJ_DIR`. All drivers retain the forced
+generation option and their independent names, counts and exit-status checks.
+
+The four-state file reader keeps X and Z distinct, masks unused storage bits,
+zero-extends short words, truncates oversized words with a warning, preserves
+untouched entries and clears their X/Z masks when known data is loaded again.
+Defaults traverse the declared numerical low-to-high bounds; explicit start/end
+arguments select either direction. Sparse addresses use checked 32-bit hexadecimal
+address tokens, including negative array indices encoded in two's complement.
+Malformed digits, addresses and addresses outside the selected range are errors;
+files that are missing, short or too long retain diagnostic handling.
+
+This bounded implementation warns and performs no writes when a packed filename
+contains any X/Z bit, an address contains X/Z, a known address is outside the
+declared array, or an unsigned address cannot fit a signed 64-bit index. These
+are explicit implementation policies, not certification of unknown-argument
+conversion in SystemVerilog. In particular, the packed-filename policy also
+checks unknown padding bits. Filename and bound expressions are captured once.
+Existing two-state memory-file reading and writing retain their separate path.
+Four-state conditional expressions also retain a selected Z branch instead of
+being rewritten into logical operations that would turn it into X.
+
 | Area | Public regression evidence | Scope and remaining limits |
 | --- | --- | --- |
 | Arithmetic and logical shifts | `t_fourstate_shiftrs` executes 9,832 checks using 7/31/48/65/95-bit data, widened results, 65-bit distances, X/Z signs and counts, and operand side effects. | Value and X/Z halves share one operand evaluation. The test drives its own clock and checks its execution count. |
 | Fixed unpacked integral RAM | `t_fourstate_mem_index` checks unknown, high-bit, invalid, signed, ascending and multidimensional addresses; blocking/NBA writes; function indices/RHS effects; and integral class-member elements. | Address snapshots are scoped to their owning statement. Whole-subarray assignments and invalid dynamic-array accesses remain outside this guarantee. Very wide index normalization needs further reference-simulator comparison. |
-| Unknown detection | `t_fourstate_isunknown` and the RAM/shift capability checks exercise `$isunknown`, including expressions with side effects. | Replacement expressions must retain their state classification and evaluation effects. `int`, `byte`, `shortint` and `longint` are two-state types; unknown-address tests use four-state `logic` addresses. |
+| Unknown detection | `t_fourstate_isunknown` and the RAM/shift capability checks exercise `$isunknown`, including expressions with side effects. | Replacement expressions must retain their state classification and evaluation effects. Unknown-address tests use four-state `logic` addresses; coverage of integer atom types is limited to the listed regressions. |
+| Fixed integral memory-file loading | `t_fourstate_readmem` and `t_fourstate_readmem_range` check `$readmemh`/`$readmemb`, X/Z data, scalar through 176-bit elements, ascending/descending declarations, nonzero/negative indices, explicit reverse ranges, sparse addresses and repeat loads. | Paired value/XZ storage is updated through typed references. The initial scope is a whole fixed one-dimensional packed integral vector memory. Automatic, aliased, class-member, port and forceable memories, other element shapes and addresses wider than 64 bits are rejected. |
 | Behavioral arithmetic model | `t_fourstate_mac_model` simulates signed 18-by-27-to-48 multiply/add/shift, enable, synchronous reset and delayed global reset. | This independently written model does not certify DSP48E2 parameter modes, cascades, control words, timing checks or the vendor `glbl` implementation. |
 | Supply nets | `t_fourstate_supplies` simulates constant `supply0` and `supply1` vectors. | Constants do not validate drive strengths, pullups/pulldowns, `tri0`/`tri1` or bus contention. |
 | Complex assignment and ports | The inherited complex-assignment and complex-pin tests execute X/Z checks and receiver side-effect assertions. Streaming assignments use a positive runtime test. | General multi-driver, UDP, switch, specify and strength resolution remain limited. Continuous-driver conflict registration remains disabled. |
@@ -142,22 +192,44 @@ all OPMODE/control words or the behavioral arithmetic regression above.
 The original `glbl` passes startup GSR/PRLD/GTS, GRESTORE, JTAG-Z and implicit
 PLL pull-up checks; fifteen selected VCD samples agree with the reference.
 
-Original `RAMB18E2` and `RAMB36E2` still fail compilation because their retained
+At the preserved `f32661859415977f2215b4c6b10f733a6f1699af` checkpoint,
+original `RAMB18E2` and `RAMB36E2` fail compilation because their retained
 INIT-file branches use `$readmemh` on a four-state unpacked memory, even when
 the functional probe selects an empty INIT file. Their unchanged reference
 probes run initialization, parity, write-first, unknown-address recovery and
 synchronous reset checks. A passing public memory regression does not replace
-this original-model gap. The four-model probe intentionally exits nonzero
-when either RAM model fails.
+this original-model gap. The readmem candidate must rerun both unchanged models,
+`glbl` and the bounded `DSP48E2` profile, and additionally exercise actual
+`INIT_FILE` loading for both RAM models. Public INIT fixtures include known, X,
+Z and parity bits. Internal memory checks distinguish stored Z from a subsequent
+model output expression that converts Z to X. Completion markers, runtime exits
+and selected waveform samples must all agree with the independent reference.
+The six-profile probe exits nonzero when any profile fails.
 
 These original-model checks use `--timing` and keep warnings, including ignored
 specify/timing constructs; they certify a functional subset rather than SDF.
-No `XIL_TIMING`, `XIL_XECLIB` or `XIL_DR` macro is enabled. The 86 portable checks
+No `XIL_TIMING`, `XIL_XECLIB` or `XIL_DR` macro is enabled. The portable checks
 are independent minimal regressions; the original-model probe evidence is
 separate and does not imply both portable platforms ran the vendor models.
 A newer Vivado library or exact RFSoC device requires a verified matching source
 and license. RFADC/RFDAC and transceiver wrappers in the public snapshot lack
 some SIP implementations; XPM, DSP58 and RAMB36E5 are outside this snapshot.
+
+## Remaining multi-driver work
+
+The broader `t_fourstate_demo` and its FST variant remain acceptance failures.
+Independent reference comparison finds incorrect wired-OR and 129-bit contention
+values. Re-enabling the old resolver is insufficient: its `triand` truth table
+also produced a wrong, driver-order-dependent result for X and 1.
+
+A later bounded resolver needs persistent storage for each driver, one owner of
+the resolved value/XZ pair and scheduling whenever either half of any driver
+changes. Initial acceptance should compare all sixteen two-driver 0/1/X/Z input
+pairs in both driver orders, partial vector drives at 7/33/65/95/129 bits and
+return-to-Z pull fallback, with matching VCD and FST observations. Ports,
+hierarchy, wired nets, strengths and delayed drivers each need explicit scope
+and reference evidence. Passing a smaller wire/tri/wor subset would not certify
+the existing demo's `triand` and wide contention behavior.
 
 For cloud development, run `ci/portable/run_regressions.py` with the selected
 group names directly, without setting an Actions environment variable. The
