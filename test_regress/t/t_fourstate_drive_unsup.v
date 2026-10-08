@@ -48,16 +48,24 @@ module t;
   initial deassign public_q;
 `elsif DRIVE_CASE_14
   reg [6:0] partial_q;
-  initial partial_q[3:0] = #1 4'bxxzz;
+  initial begin
+    partial_q[3:0] = #1 4'bxxzz;
+    // Preserve the original partial footprint instead of an unused or auto-split net.
+    $display("%b", partial_q);
+  end
 `elsif DRIVE_CASE_15
   task automatic delayed_local;
     reg local_q;
     local_q = #1 data;
+    $display("%b", local_q);
   endtask
   initial delayed_local();
 `elsif DRIVE_CASE_16
   drive_child u ();
-  initial u.q = #1 data;
+  initial begin
+    u.q = #1 data;
+    $display("%b", u.q);
+  end
 `elsif DRIVE_CASE_17
   initial begin
     force q = data;
