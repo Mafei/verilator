@@ -42,16 +42,26 @@ namespace V3Sched {
 // Remaps external domains using the specified trigger map
 
 std::map<const AstVarScope*, std::vector<AstSenTree*>>
-TimingKit::remapDomains(const std::unordered_map<const AstSenTree*, AstSenTree*>& trigMap) const {
+TimingKit::remapDomains(const std::unordered_map<const AstSenTree*, AstSenTree*>& trigMap,
+                        AstSenTree* const zeroDelayDomainp) const {
     std::map<const AstVarScope*, std::vector<AstSenTree*>> remappedDomainMap;
     for (const auto& vscpDomains : m_externalDomains) {
         const AstVarScope* const vscp = vscpDomains.first;
         const auto& domains = vscpDomains.second;
         auto& remappedDomains = remappedDomainMap[vscp];
         remappedDomains.reserve(domains.size());
+        bool usesDelayDomain = false;
         for (AstSenTree* const domainp : domains) {
             remappedDomains.push_back(trigMap.at(domainp));
+            const AstCMethodHard* const methodp
+                = VN_CAST(domainp->sensesp()->exprp(), CMethodHard);
+            if (methodp && methodp->method() == VCMethod::SCHED_AWAITING_CURRENT_TIME) {
+                usesDelayDomain = true;
+            }
         }
+        // A delayed process can also resume in Inactive for #0. Its writes must
+        // trigger dependent logic even when no timed process is ready in Active.
+        if (zeroDelayDomainp && usesDelayDomain) remappedDomains.push_back(zeroDelayDomainp);
     }
     return remappedDomainMap;
 }

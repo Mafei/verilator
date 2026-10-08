@@ -615,7 +615,8 @@ void createEval(AstNetlist* netlistp,  //
                 const EvalKit& nbaKit,  //
                 const EvalKit& obsKit,  //
                 const EvalKit& reactKit,  //
-                TimingKit& timingKit  //
+                TimingKit& timingKit,  //
+                AstVarScope* const zeroDelayResumedVscp  //
 ) {
     FileLine* const flp = netlistp->fileline();
 
@@ -694,7 +695,11 @@ void createEval(AstNetlist* netlistp,  //
                     flp, new AstVarRef{flp, delaySchedVscp, VAccess::READWRITE},
                     VCMethod::SCHED_RESUME_ZERO_DELAY};
                 callp->dtypeSetVoid();
-                return callp->makeStmt();
+                AstNodeStmt* const stmtp = callp->makeStmt();
+                // The next Active iteration must see writes made by these
+                // resumptions, independently of awaitingCurrentTime().
+                stmtp->addNext(util::setVar(zeroDelayResumedVscp, 1));
+                return stmtp;
             } else {
                 // Assumption was that the design doesn't use #0 delays.
                 // Die at run-time if it does.
@@ -955,6 +960,13 @@ void schedule(AstNetlist* netlistp) {
     const uint32_t dpiExportTriggerIndex = dpiExportTriggerVscp
                                                ? extraTriggers.allocate("DPI export trigger")
                                                : std::numeric_limits<uint32_t>::max();
+    AstVarScope* const zeroDelayResumedVscp
+        = v3Global.usesZeroDelay() && timingKit.getDelayScheduler(netlistp)
+              ? netlistp->topScopep()->createTemp("__VzeroDelayResumed", 1)
+              : nullptr;
+    const uint32_t zeroDelayTriggerIndex = zeroDelayResumedVscp
+                                               ? extraTriggers.allocate("zero-delay resumption")
+                                               : std::numeric_limits<uint32_t>::max();
     const uint32_t firstVifTriggerIndex = extraTriggers.size();
     for (const auto& entry : virtIfaceTriggers.m_triggers) {
         extraTriggers.allocate("virtual interface member: " + entry.m_ifacep->name() + "."
@@ -977,6 +989,9 @@ void schedule(AstNetlist* netlistp) {
     if (dpiExportTriggerVscp) {
         trigKit.addExtraTriggerAssignment(dpiExportTriggerVscp, dpiExportTriggerIndex);
     }
+    if (zeroDelayResumedVscp) {
+        trigKit.addExtraTriggerAssignment(zeroDelayResumedVscp, zeroDelayTriggerIndex);
+    }
     addVirtIfaceTriggerAssignments(netlistp, staticp, virtIfaceTriggers, firstVifTriggerIndex,
                                    trigKit);
     if (v3Global.opt.stats()) V3Stats::statsStage("sched-create-triggers");
@@ -994,7 +1009,10 @@ void schedule(AstNetlist* netlistp) {
     remapSensitivities(logicReplicas.m_act, trigKit.mapVec());
     remapSensitivities(timingKit.m_lbs, trigKit.mapVec());
     const std::map<const AstVarScope*, std::vector<AstSenTree*>> actTimingDomains
-        = timingKit.remapDomains(trigKit.mapVec());
+        = timingKit.remapDomains(trigKit.mapVec(), zeroDelayResumedVscp
+                                                       ? trigKit.newExtraTriggerSenTree(
+                                                             trigKit.vscp(), zeroDelayTriggerIndex)
+                                                       : nullptr);
 
     // Create the inverse map from trigger ref AstSenTree to original AstSenTree
     V3Order::TrigToSenMap trigToSenAct;
@@ -1048,7 +1066,10 @@ void schedule(AstNetlist* netlistp) {
         const auto& vifVscpToSens
             = virtIfaceTriggers.makeVscpToSensMap(trigKit, firstVifTriggerIndex, trigVscp);
 
-        const auto& timingDomains = timingKit.remapDomains(trigMap);
+        const auto& timingDomains = timingKit.remapDomains(
+            trigMap, zeroDelayResumedVscp
+                         ? trigKit.newExtraTriggerSenTree(trigVscp, zeroDelayTriggerIndex)
+                         : nullptr);
         AstCFunc* const funcp = V3Order::order(
             netlistp, logic, trigToSen, cgRefBindings, name,
             name == "nba" && v3Global.opt.mtasks(), false,
@@ -1093,7 +1114,8 @@ void schedule(AstNetlist* netlistp) {
     createPostponed(netlistp, logicClasses);
 
     // Step 16: Populate the eval entry point function of each region of a time step
-    createEval(netlistp, trigKit, actKit, nbaKit, obsKit, reactKit, timingKit);
+    createEval(netlistp, trigKit, actKit, nbaKit, obsKit, reactKit, timingKit,
+               zeroDelayResumedVscp);
 
     // Step 17: Add neccessary evaluation before awaits
     if (AstCCall* const readyp = timingKit.createReady(netlistp)) {
