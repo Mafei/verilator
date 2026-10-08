@@ -18,7 +18,7 @@ test.compile(verilator_flags2=['--binary', '--fourstate', '--trace', '--stats', 
 if test.vlt_all:
     test.file_grep(test.stats, r'Fourstate, Implicit pull driver fallbacks\s+(\d+)', 18)
 test.execute(logfile=test.run_log_filename)
-test.file_grep(test.run_log_filename, r'Pull release checks: (\d+)', 4032)
+test.file_grep(test.run_log_filename, r'Pull release checks: (\d+)', 4036)
 test.file_grep_not(test.run_log_filename, r'%Error|ERROR:|WARNING:')
 
 
@@ -120,6 +120,12 @@ for phase in range(8):
                 expected[key + '_time'].append((timestamp, time_bits))
             expected[key + '_realtime'].append((timestamp, str(timestamp / 1000).removesuffix('.0')))
 instances['distinct'] = 65
+instances['constants'] = 1
+for name, value in (('declaration_one', '1'), ('declaration_zero', '0'),
+                    ('assignment_one', '1'), ('assignment_zero', '0')):
+    key = 'constants.' + name
+    widths[key] = 1
+    expected[key] = [(0, value)]
 
 with open(test.trace_filename, encoding='ascii') as stream:
     trace = stream.read()
@@ -147,6 +153,9 @@ for line in trace.splitlines():
                 codes.setdefault(declaration[3], []).append(key)
     if line.startswith('#'):
         timestamp = int(line[1:])
+    if (line and line[0] not in '$#br' and line[1:] in codes
+            and line[0].lower() not in '01xz'):
+        test.error(f'Pull release VCD has invalid scalar value {line[0]!r} at {timestamp}ps: {line}')
     value = re.match(r'b([01xzXZ]+) (\S+)', line)
     scalar = re.match(r'([01xzXZ])(\S+)$', line)
     real_value = re.match(r'r([^ ]+) (\S+)', line)

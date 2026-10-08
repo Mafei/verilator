@@ -26,6 +26,8 @@ module t;
   pull_check #(33, 40, 8) nonzero(done[7]);
   wire distinct_done;
   distinct_pull distinct(distinct_done);
+  wire constants_done;
+  constant_pull constants(constants_done);
 
   initial begin
     $dumpfile(`STRINGIFY(`TEST_DUMPFILE));
@@ -33,11 +35,33 @@ module t;
     #6;
     if (done !== '1) $fatal(1, "Pull release checks did not finish");
     if (!distinct_done) $fatal(1, "Distinct pull checks did not finish");
+    if (!constants_done) $fatal(1, "Constant pull checks did not finish");
     $display("Pull release checks: %0d", w1.checks + w7.checks + w33.checks
              + w65.checks + w95.checks + w129.checks + ascending.checks + nonzero.checks
-             + distinct.checks);
+             + distinct.checks + constants.checks);
     $write("*-* All Finished *-*\n");
     $finish;
+  end
+endmodule
+
+module constant_pull(output bit done = 0);
+  // Preserve the four public constant-override controls. In particular,
+  // runtime value assertions must also have valid scalar VCD encoding.
+  tri0 declaration_one = 1'b1;
+  tri1 declaration_zero = 1'b0;
+  tri0 assignment_one;
+  tri1 assignment_zero;
+  assign assignment_one = 1'b1;
+  assign assignment_zero = 1'b0;
+  bit [31:0] checks = 0;
+
+  initial begin
+    #1;
+    `checkh(declaration_one, 1'b1);
+    `checkh(declaration_zero, 1'b0);
+    `checkh(assignment_one, 1'b1);
+    `checkh(assignment_zero, 1'b0);
+    done = 1;
   end
 endmodule
 
