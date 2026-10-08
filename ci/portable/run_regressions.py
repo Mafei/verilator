@@ -53,7 +53,7 @@ GROUPS = {
     ],
     "resolve": [
         "fourstate_resolve_pair", "fourstate_resolve_triple", "fourstate_resolve_events",
-        "fourstate_resolve_unsup"
+        "fourstate_resolve_unsup", "fourstate_resolve_defaults"
     ],
     "upstream": [
         "class_param_enum", "class_static_default_arg", "class_type_param_upcast_chain",

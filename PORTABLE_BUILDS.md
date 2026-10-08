@@ -183,10 +183,11 @@ Existing four-state aggregate restrictions, including the explicit rejection
 of packed union variables, also remain in place.
 
 The `fourstate-resolve-20261008` candidate keeps all 127 pull-stage selections
-and adds an independent `resolve` group with four drivers, for **131 explicitly
-selected checks**. Three positive drivers target pair and triple drivers and
-resolved-net events. A compile-negative driver checks retained unsupported
-contexts against diagnostic goldens. The shared public header and oracle helper
+and adds an independent `resolve` group with five drivers, for **132 explicitly
+selected checks**. Four positive drivers target pair and triple drivers,
+resolved-net events and input-default compatibility. A compile-negative driver
+checks retained unsupported contexts against diagnostic goldens. The shared
+public header and oracle helper
 are tracked test inputs, not extra drivers. All groups retain forced generation,
 exact unique test names, counts, exits and commit provenance. This candidate's
 runtime and portable platform verification remain pending until their actual
