@@ -1,0 +1,1102 @@
+{
+  "applicable": [
+    "addwide",
+    "unary_minus",
+    "unary_minus3",
+    "shift1",
+    "shift5",
+    "signed4",
+    "tern1",
+    "tern5",
+    "tern10",
+    "muxtest",
+    "nb_assign",
+    "nb_delay",
+    "assign_nb1",
+    "packeda",
+    "sv_cast_packed_struct",
+    "always_comb"
+  ],
+  "baseline": {
+    "applicable16_failed": 2,
+    "applicable16_passed": 14,
+    "compile_unsupported": 2,
+    "compiler_head": "e834ca82b607871ee3f9a4a09a252f5cdc4aa5aa",
+    "expected_output_failed": 2,
+    "full18_native_exit": 1,
+    "full18_passed": 14,
+    "reference18_passed": 18,
+    "result_sha256": "d0c951eda3518d9bc47b75a1bfb908a37b8efae81337919fdd733f5fd64fad2f"
+  },
+  "diagnostic_only": {
+    "nb_ec_concat": {
+      "clauses": [
+        "4.9.4",
+        "10.4.2"
+      ],
+      "edition": "IEEE 1800-2017",
+      "reason": "Original test requires NBA updates immediately after event trigger in the active region; retain NBA-region scheduling and report original expected-output difference."
+    },
+    "sv_packed_port1": {
+      "clauses": [
+        "6.8",
+        "6.8 Table 6-7",
+        "7.2.1",
+        "23.3.3"
+      ],
+      "edition": "IEEE 1800-2017",
+      "reason": "Untouched upper bits of an explicitly typed four-state packed variable initialize to X; original test expects Z. Keep default-X semantics and report original expected-output difference."
+    }
+  },
+  "files": {
+    "COPYING": {
+      "bytes": 18092,
+      "git_blob_SHA1": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "path": "COPYING",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/COPYING",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    "README.md": {
+      "bytes": 15116,
+      "git_blob_SHA1": "41152e38a62568ec41e96f2aa5c478fc22e3e010",
+      "path": "README.md",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/README.md",
+      "sha256": "01f3c7d9e5cd2a21f8f784da0002b5cffb5543cb776c3efab6388de9188ddb6a"
+    },
+    "ivtest/COPYING": {
+      "bytes": 17990,
+      "git_blob_SHA1": "916d1f0f28429fa417ab35d2c37250ec1ab8934d",
+      "path": "ivtest/COPYING",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/COPYING",
+      "sha256": "1ca3e8f71b7de618968e7ea9fe47822d9e704dc476aef8544033abedec355225"
+    },
+    "ivtest/README.txt": {
+      "bytes": 2860,
+      "git_blob_SHA1": "f46bf0ff790368e8dbfb68ec324e8531c6047d26",
+      "path": "ivtest/README.txt",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/README.txt",
+      "sha256": "24c31987af48207b29640645b9f8db1d8112d41980f6ad0adaab6eaed7b8a854"
+    },
+    "ivtest/gold/shift1.gold": {
+      "bytes": 27,
+      "git_blob_SHA1": "6dd34a9c823e274c49065d256d04467286774ce8",
+      "path": "ivtest/gold/shift1.gold",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/gold/shift1.gold",
+      "sha256": "a0e5c08090b9896d1cefc7e2f918faa4ca03c026629bf92349e7e148ca13417e"
+    },
+    "ivtest/gold/shift5.gold": {
+      "bytes": 43,
+      "git_blob_SHA1": "5783917b0415c57c7d60a8c7c0fc1102c8f87117",
+      "path": "ivtest/gold/shift5.gold",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/gold/shift5.gold",
+      "sha256": "733ba77dd1a67ac39a39ce2042b4432198a4c6169217585c63151f3ca9c9005c"
+    },
+    "ivtest/gold/signed4.gold": {
+      "bytes": 66,
+      "git_blob_SHA1": "9cca410c1fb81fb7f4fa98f3e93d2d2b48a24a6b",
+      "path": "ivtest/gold/signed4.gold",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/gold/signed4.gold",
+      "sha256": "e4d0a60f7e66c63604ffff2658ded3462fc3057eca571043391d00fba48a1d0f"
+    },
+    "ivtest/gold/tern5.gold": {
+      "bytes": 200,
+      "git_blob_SHA1": "b386b4e9a6545ff6a38158a41e1cf5ff7f0c126b",
+      "path": "ivtest/gold/tern5.gold",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/gold/tern5.gold",
+      "sha256": "226e0cdffaf796f22795845c36464e3e844799c62fac999e5d24ae1a2c9db12b"
+    },
+    "ivtest/ivltests/addwide.v": {
+      "bytes": 929,
+      "git_blob_SHA1": "524b0bcc0c035ff6d702c186ad7230f81086e7ba",
+      "path": "ivtest/ivltests/addwide.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/addwide.v",
+      "sha256": "de98aa4d08041eb496e1836111509068a11912bf4a74c960664395ed5356e06f"
+    },
+    "ivtest/ivltests/always_comb.v": {
+      "bytes": 1463,
+      "git_blob_SHA1": "501644cdfe97232a3b5ba8eef6b014815c34300e",
+      "path": "ivtest/ivltests/always_comb.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/always_comb.v",
+      "sha256": "140517c9eaffacf35967b65419d2e13b1060b2470e775e34474d3b81812174c6"
+    },
+    "ivtest/ivltests/assign_nb1.v": {
+      "bytes": 1368,
+      "git_blob_SHA1": "701bb4abaa99d8cc4dbe7e378c292661bef688a3",
+      "path": "ivtest/ivltests/assign_nb1.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/assign_nb1.v",
+      "sha256": "1fc64019edfe7c4fb8ac3a811bcefac9f58bd0302aaf575d55268a6105143a92"
+    },
+    "ivtest/ivltests/muxtest.v": {
+      "bytes": 1998,
+      "git_blob_SHA1": "ebc3e8b3f2eaec029aa71de0c99d700687ccb2d4",
+      "path": "ivtest/ivltests/muxtest.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/muxtest.v",
+      "sha256": "8926abce93d06d4ccbe5473042148d83e0772c89a872c5a4b7c93c686754cb0e"
+    },
+    "ivtest/ivltests/nb_assign.v": {
+      "bytes": 812,
+      "git_blob_SHA1": "e55cb830d1eef31b9875714d2b059c86b679cf5b",
+      "path": "ivtest/ivltests/nb_assign.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/nb_assign.v",
+      "sha256": "adde1e56b319b2ced826d0e397ecf0324aa2dd16d125942dec09295008101e71"
+    },
+    "ivtest/ivltests/nb_delay.v": {
+      "bytes": 2317,
+      "git_blob_SHA1": "dc9e3c976296940094917fe7d8272bf74bac7169",
+      "path": "ivtest/ivltests/nb_delay.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/nb_delay.v",
+      "sha256": "2882500635e806d1faf74944e172787863e212ccf42617f708a60a8bee2fcd97"
+    },
+    "ivtest/ivltests/nb_ec_concat.v": {
+      "bytes": 2008,
+      "git_blob_SHA1": "a27ae3a99cd3e738572e84606e1fa333f8a145b5",
+      "path": "ivtest/ivltests/nb_ec_concat.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/nb_ec_concat.v",
+      "sha256": "39448441948887a7c93b9b82b078344cc1716cf7e5036085cf693526e2bcb855"
+    },
+    "ivtest/ivltests/packeda.v": {
+      "bytes": 2363,
+      "git_blob_SHA1": "ebfeb3719f94e9a44fbdd92dae5176a5a54538f0",
+      "path": "ivtest/ivltests/packeda.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/packeda.v",
+      "sha256": "c7716cb6467b9eab2e53b4508f928597f23c30d8e42600c86f31b68b4dbb64f0"
+    },
+    "ivtest/ivltests/shift1.v": {
+      "bytes": 1218,
+      "git_blob_SHA1": "85d6bf0beff43f5c53a073f8412c360d59fb8091",
+      "path": "ivtest/ivltests/shift1.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/shift1.v",
+      "sha256": "a6526ac665260d359f0738f017fb87e337fdb4b763d798f669746e3f12a712bb"
+    },
+    "ivtest/ivltests/shift5.v": {
+      "bytes": 941,
+      "git_blob_SHA1": "3cf2cb086c66358efa20de8f416161be4212bf53",
+      "path": "ivtest/ivltests/shift5.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/shift5.v",
+      "sha256": "b4f8ed238873ed00c48234e8e8973400e62b160ec7d791914af66cbbf0bb39b4"
+    },
+    "ivtest/ivltests/signed4.v": {
+      "bytes": 1168,
+      "git_blob_SHA1": "e61f843d60ce738be2ffbd57b833cb7f493713c0",
+      "path": "ivtest/ivltests/signed4.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/signed4.v",
+      "sha256": "35f14ca6a508e27af8ce45e67b5262df3fd74148e32501b146e57cc65abd342f"
+    },
+    "ivtest/ivltests/sv_cast_packed_struct.v": {
+      "bytes": 2395,
+      "git_blob_SHA1": "4fe55672ca341b357946d1bf864ba2d782be65b2",
+      "path": "ivtest/ivltests/sv_cast_packed_struct.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/sv_cast_packed_struct.v",
+      "sha256": "8498a08623b74c10ad592125234d31740ce59feb20f0eced90f534a88a95a6fe"
+    },
+    "ivtest/ivltests/sv_packed_port1.v": {
+      "bytes": 651,
+      "git_blob_SHA1": "ab3a4027e366615dcda3484ddd41a0e741636b55",
+      "path": "ivtest/ivltests/sv_packed_port1.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/sv_packed_port1.v",
+      "sha256": "55b00828531d6f5208870d1a1a9ea491ddaf3d4ef7d2da08239107eb5a098dc3"
+    },
+    "ivtest/ivltests/tern1.v": {
+      "bytes": 1393,
+      "git_blob_SHA1": "7bf288c26fe715f2bee26afa505b510ef8b01a40",
+      "path": "ivtest/ivltests/tern1.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/tern1.v",
+      "sha256": "6fe308f6fb75ca818ecdf99d60b770bfd7ce5fe5c7891caa0748f481696ea8bc"
+    },
+    "ivtest/ivltests/tern10.v": {
+      "bytes": 498,
+      "git_blob_SHA1": "d8596cbb9d8876a83630f567cde5b60362773863",
+      "path": "ivtest/ivltests/tern10.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/tern10.v",
+      "sha256": "692d5fa8c1d19cbc4f8addd359c7437f31d8a6b39090d18bae71c7f0ecc4b51d"
+    },
+    "ivtest/ivltests/tern5.v": {
+      "bytes": 1071,
+      "git_blob_SHA1": "f0b2514690f7684959a20f16907bb72ba64cff03",
+      "path": "ivtest/ivltests/tern5.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/tern5.v",
+      "sha256": "76435afa451373eea39152e5bff3a36ce9a61e38b9a344cbd7eadadfd574ece0"
+    },
+    "ivtest/ivltests/unary_minus.v": {
+      "bytes": 1270,
+      "git_blob_SHA1": "e58eee5f6897355c32f01612ff63117c71187077",
+      "path": "ivtest/ivltests/unary_minus.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/unary_minus.v",
+      "sha256": "17609e21edc292b55deed7e14da68daad2acc5536f7068172fae5ab1910fabd0"
+    },
+    "ivtest/ivltests/unary_minus3.v": {
+      "bytes": 1159,
+      "git_blob_SHA1": "5dad21cb0c2956fd3ab9ff55bf206d870bcccfeb",
+      "path": "ivtest/ivltests/unary_minus3.v",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/ivltests/unary_minus3.v",
+      "sha256": "78e8581be645e616cdd40eed6e3f89c62ecdf7f7aa64982e443df90ba3c18654"
+    },
+    "ivtest/perl-lib/Diff.pm": {
+      "bytes": 3892,
+      "git_blob_SHA1": "ce11ff61e3faed2ce3ae6c92929a847ff88b0b6d",
+      "path": "ivtest/perl-lib/Diff.pm",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/perl-lib/Diff.pm",
+      "sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228"
+    },
+    "ivtest/regress-sv.list": {
+      "bytes": 43241,
+      "git_blob_SHA1": "b98ce9cbe0b7d2b7e8ffec3c9f5aa8083c74930d",
+      "path": "ivtest/regress-sv.list",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/regress-sv.list",
+      "sha256": "676dfcffb62d77e090a31762caf5c4b7d4815fdb0ce7518620c10248ce64ada0"
+    },
+    "ivtest/regress-vlg.list": {
+      "bytes": 69717,
+      "git_blob_SHA1": "bb622a859e3ecfe15e972ce0d2e174324d48e146",
+      "path": "ivtest/regress-vlg.list",
+      "raw_https_url": "https://raw.githubusercontent.com/steveicarus/iverilog/f45ffabed3212a106f01cb362ef42c5d293f4513/ivtest/regress-vlg.list",
+      "sha256": "f3bdb79ad58ecf13b8d8a096ea65a30ca1b729813b6ea541c21e3072622a695b"
+    }
+  },
+  "files_count": 29,
+  "files_roles": {
+    "gold_expected": 4,
+    "licenses": 2,
+    "originalDiff_contract": 1,
+    "originalmanifest_lists": 2,
+    "readme_provenance": 2,
+    "selected_source": 18,
+    "total": 29
+  },
+  "finish_hook": {
+    "CFLAGS": "-DVL_USER_FINISH",
+    "gold_output_filtering": "NONE",
+    "semantics": "Exact default finish behavior gotFinish(true), omits solely simulator-generated filename/line finish notice. Original SV display/expected bytes unchanged. Default stop/fatal remain unmodified and independently tested nonzero.",
+    "sha256": "5bbfa5873a00f52de2a7fdccf667a71cfb9b5c452f9f39fc8dd5c8d581b1afad",
+    "source": "// SPDX-License-Identifier: CC0-1.0\n// Override only the documented runtime finish hook; preserve all SV output\n// and leave default vl_stop/vl_fatal behavior and nonzero failures intact.\n#include \"verilated.h\"\nvoid vl_finish(const char*, int, const char*) {\n    Verilated::threadContextp()->gotFinish(true);\n}\n"
+  },
+  "gate_policy": {
+    "activate_only_after_root_exactcandidate_validation": true,
+    "all18_execute": true,
+    "applicable16_must_pass": true,
+    "diagnostic_cases_only_waive_expected_output_difference": true,
+    "diagnostic_compile_build_runtime_nonzero_timeout_ICE_or_provenance_error_fails_gate": true,
+    "full18_gate_reported_separately": true
+  },
+  "license": {
+    "download_and_retain": [
+      "COPYING",
+      "ivtest/COPYING"
+    ],
+    "notice": "Official suite files retain their original GPL-2.0, GPL-2.0-or-later and public-domain notices; see unchanged per-file headers and pinned COPYING files."
+  },
+  "model_build_jobs": 1,
+  "origin": "https://github.com/steveicarus/iverilog.git",
+  "original_selection_sha256": "6db2541073e37e3fa7f9f95847367395c25de32beaeb6c9073229f738d48ce73",
+  "portable_handoff_sha256": "2b40a1147cd2a37bbfbb3b966f7c51df9144e51df793aa33467d3fcee59b00e1",
+  "profiles": [
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog wide arithmetic/NBA",
+      "gate": "mandatory",
+      "id": "addwide",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "a0e4ea5d1c9f8c6fbe33251481a83cdd40a3b8af4bcf6721ab3d726058a92603",
+      "original_list": {
+        "fields": [
+          "addwide",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 71,
+        "name": "addwide",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/addwide.v",
+      "source_git_blob_SHA1": "524b0bcc0c035ff6d702c186ad7230f81086e7ba",
+      "source_sha256": "de98aa4d08041eb496e1836111509068a11912bf4a74c960664395ed5356e06f",
+      "top": "bench",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog unary arithmetic",
+      "gate": "mandatory",
+      "id": "unary_minus",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "aabb8d0b2672e7fe1a77fce209f2ace006bfbc765426701c6fbe9abbbf2f3687",
+      "original_list": {
+        "fields": [
+          "unary_minus",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 1767,
+        "name": "unary_minus",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/unary_minus.v",
+      "source_git_blob_SHA1": "e58eee5f6897355c32f01612ff63117c71187077",
+      "source_sha256": "17609e21edc292b55deed7e14da68daad2acc5536f7068172fae5ab1910fabd0",
+      "top": "main",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog runtime unary arithmetic",
+      "gate": "mandatory",
+      "id": "unary_minus3",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "15b58f1a46e9a4134825255914e7577e705b1a9ba6f1744d445e2d03b5b1d455",
+      "original_list": {
+        "fields": [
+          "unary_minus3",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 1770,
+        "name": "unary_minus3",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/unary_minus3.v",
+      "source_git_blob_SHA1": "5dad21cb0c2956fd3ab9ff55bf206d870bcccfeb",
+      "source_sha256": "78e8581be645e616cdd40eed6e3f89c62ecdf7f7aa64982e443df90ba3c18654",
+      "top": "test",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "mode": "original_gold_exact",
+        "path": "ivtest/gold/shift1.gold",
+        "sha256": "a0e5c08090b9896d1cefc7e2f918faa4ca03c026629bf92349e7e148ca13417e"
+      },
+      "feature": "Verilog logical shift+condition, original gold",
+      "gate": "mandatory",
+      "id": "shift1",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "b5d8db648623eef6b8de3bf7984b8153c9d4b60ead1450b91430f3398ef436d7",
+      "original_list": {
+        "fields": [
+          "shift1",
+          "normal",
+          "ivltests",
+          "gold=shift1.gold"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 1606,
+        "name": "shift1",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/shift1.v",
+      "source_git_blob_SHA1": "85d6bf0beff43f5c53a073f8412c360d59fb8091",
+      "source_sha256": "a6526ac665260d359f0738f017fb87e337fdb4b763d798f669746e3f12a712bb",
+      "top": "dummy",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "mode": "original_gold_exact",
+        "path": "ivtest/gold/shift5.gold",
+        "sha256": "733ba77dd1a67ac39a39ce2042b4432198a4c6169217585c63151f3ca9c9005c"
+      },
+      "feature": "Verilog signed arithmetic shift, original gold",
+      "gate": "mandatory",
+      "id": "shift5",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "22b574cfb39d84f30b1e1f6b4d8d47c92d30437613f398f1f6f597d36caf2b91",
+      "original_list": {
+        "fields": [
+          "shift5",
+          "normal",
+          "ivltests",
+          "gold=shift5.gold"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 1610,
+        "name": "shift5",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/shift5.v",
+      "source_git_blob_SHA1": "3cf2cb086c66358efa20de8f416161be4212bf53",
+      "source_sha256": "b4f8ed238873ed00c48234e8e8973400e62b160ec7d791914af66cbbf0bb39b4",
+      "top": "ArithmeticShiftTest",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "mode": "original_gold_exact",
+        "path": "ivtest/gold/signed4.gold",
+        "sha256": "e4d0a60f7e66c63604ffff2658ded3462fc3057eca571043391d00fba48a1d0f"
+      },
+      "feature": "Verilog signed formatting, original gold",
+      "gate": "mandatory",
+      "id": "signed4",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "677e5172ec7359499eb447a5d971969ec20e80ce1262c69b9c0b8779b1b1ad6d",
+      "original_list": {
+        "fields": [
+          "signed4",
+          "normal",
+          "ivltests",
+          "gold=signed4.gold"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 1615,
+        "name": "signed4",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/signed4.v",
+      "source_git_blob_SHA1": "e61f843d60ce738be2ffbd57b833cb7f493713c0",
+      "source_sha256": "35f14ca6a508e27af8ce45e67b5262df3fd74148e32501b146e57cc65abd342f",
+      "top": "signed1",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog conditional width context",
+      "gate": "mandatory",
+      "id": "tern1",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "d9eee53d77e76f50ebe59117d5fc320a13c59bb202967fb3df7f9229a723d442",
+      "original_list": {
+        "fields": [
+          "tern1",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 1706,
+        "name": "tern1",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/tern1.v",
+      "source_git_blob_SHA1": "7bf288c26fe715f2bee26afa505b510ef8b01a40",
+      "source_sha256": "6fe308f6fb75ca818ecdf99d60b770bfd7ce5fe5c7891caa0748f481696ea8bc",
+      "top": "main",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "mode": "original_gold_exact",
+        "path": "ivtest/gold/tern5.gold",
+        "sha256": "226e0cdffaf796f22795845c36464e3e844799c62fac999e5d24ae1a2c9db12b"
+      },
+      "feature": "Verilog multi-bit X predicate conditional, original gold",
+      "gate": "mandatory",
+      "id": "tern5",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "6948a2067f99833378f8bb339451edf0af5fb90db8058924cffd522b9a59f869",
+      "original_list": {
+        "fields": [
+          "tern5",
+          "normal",
+          "ivltests",
+          "gold=tern5.gold"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 1709,
+        "name": "tern5",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/tern5.v",
+      "source_git_blob_SHA1": "f0b2514690f7684959a20f16907bb72ba64cff03",
+      "source_sha256": "76435afa451373eea39152e5bff3a36ce9a61e38b9a344cbd7eadadfd574ece0",
+      "top": "main",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog continuous conditional width",
+      "gate": "mandatory",
+      "id": "tern10",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "16ecfb8acb52442a4358c494431c126c4e3e573c0d27aeb61cceb435e777e25e",
+      "original_list": {
+        "fields": [
+          "tern10",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 1713,
+        "name": "tern10",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/tern10.v",
+      "source_git_blob_SHA1": "d8596cbb9d8876a83630f567cde5b60362773863",
+      "source_sha256": "692d5fa8c1d19cbc4f8addd359c7437f31d8a6b39090d18bae71c7f0ecc4b51d",
+      "top": "main",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog X predicate known operand merge",
+      "gate": "mandatory",
+      "id": "muxtest",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "841793056771d0010076ee20e7964ea899009e8c924bfa52d362fbf42ec6d374",
+      "original_list": {
+        "fields": [
+          "muxtest",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 725,
+        "name": "muxtest",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/muxtest.v",
+      "source_git_blob_SHA1": "ebc3e8b3f2eaec029aa71de0c99d700687ccb2d4",
+      "source_sha256": "8926abce93d06d4ccbe5473042148d83e0772c89a872c5a4b7c93c686754cb0e",
+      "top": "test",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog delayed NBA packed+real",
+      "gate": "mandatory",
+      "id": "nb_assign",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "14896bd7d10664685bb89932c2f7d5a674fd56f644ec0cd0e321db7e6803f124",
+      "original_list": {
+        "fields": [
+          "nb_assign",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 726,
+        "name": "nb_assign",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/nb_assign.v",
+      "source_git_blob_SHA1": "e55cb830d1eef31b9875714d2b059c86b679cf5b",
+      "source_sha256": "adde1e56b319b2ced826d0e397ecf0324aa2dd16d125942dec09295008101e71",
+      "top": "top",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog queued delayed NBA packed+real",
+      "gate": "mandatory",
+      "id": "nb_delay",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "d18406e3cefbd818930fa3e9fd6058336735a25ca7acd424153769e684ca5fa2",
+      "original_list": {
+        "fields": [
+          "nb_delay",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 727,
+        "name": "nb_delay",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/nb_delay.v",
+      "source_git_blob_SHA1": "dc9e3c976296940094917fe7d8272bf74bac7169",
+      "source_sha256": "2882500635e806d1faf74944e172787863e212ccf42617f708a60a8bee2fcd97",
+      "top": "top",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog event controlled NBA concat/index",
+      "gate": "diagnostic-only",
+      "id": "nb_ec_concat",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "4f6d234f67cb6fc950a821298b616a34b0a3d16995d22df7bd7d51e817569a7e",
+      "original_list": {
+        "fields": [
+          "nb_ec_concat",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 728,
+        "name": "nb_ec_concat",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/nb_ec_concat.v",
+      "source_git_blob_SHA1": "a27ae3a99cd3e738572e84606e1fa333f8a145b5",
+      "source_sha256": "39448441948887a7c93b9b82b078344cc1716cf7e5036085cf693526e2bcb855",
+      "top": "test",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "Verilog dynamic packed select delayed NBA",
+      "gate": "mandatory",
+      "id": "assign_nb1",
+      "iverilog_flags": [
+        "-g2005"
+      ],
+      "original_license_header_metadata_sha256": "37b17519d4c4163babcfb5f41df3cbe66e3a5edcebabbe8fba30f30e4d6e474a",
+      "original_list": {
+        "fields": [
+          "assign_nb1",
+          "normal",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-vlg.list",
+        "logical_line": 173,
+        "name": "assign_nb1",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/assign_nb1.v",
+      "source_git_blob_SHA1": "701bb4abaa99d8cc4dbe7e378c292661bef688a3",
+      "source_sha256": "1fc64019edfe7c4fb8ac3a811bcefac9f58bd0302aaf575d55268a6105143a92",
+      "top": "main",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "SystemVerilog multidimensional packed array",
+      "gate": "mandatory",
+      "id": "packeda",
+      "iverilog_flags": [
+        "-g2009"
+      ],
+      "original_license_header_metadata_sha256": "fcbca198b77d6695945dffaae9c2d1aebed2a43191b2e46242be1cfb5790923b",
+      "original_list": {
+        "fields": [
+          "packeda",
+          "normal,-g2009",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-sv.list",
+        "logical_line": 427,
+        "name": "packeda",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/packeda.v",
+      "source_git_blob_SHA1": "ebfeb3719f94e9a44fbdd92dae5176a5a54538f0",
+      "source_sha256": "c7716cb6467b9eab2e53b4508f928597f23c30d8e42600c86f31b68b4dbb64f0",
+      "top": "top",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "SystemVerilog packed structs/ports XZ+undriven",
+      "gate": "diagnostic-only",
+      "id": "sv_packed_port1",
+      "iverilog_flags": [
+        "-g2009"
+      ],
+      "original_license_header_metadata_sha256": "8aa2d6b99758332bce372bf245609b21c03da576e6a91691f59a8bc072642387",
+      "original_list": {
+        "fields": [
+          "sv_packed_port1",
+          "normal,-g2009",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-sv.list",
+        "logical_line": 726,
+        "name": "sv_packed_port1",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/sv_packed_port1.v",
+      "source_git_blob_SHA1": "ab3a4027e366615dcda3484ddd41a0e741636b55",
+      "source_sha256": "55b00828531d6f5208870d1a1a9ea491ddaf3d4ef7d2da08239107eb5a098dc3",
+      "top": "main",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "SystemVerilog signed packed struct casts",
+      "gate": "mandatory",
+      "id": "sv_cast_packed_struct",
+      "iverilog_flags": [
+        "-g2005-sv"
+      ],
+      "original_license_header_metadata_sha256": "9b1d103043b31b54cb354b68d324217e1bc5e6c09b4b1301e9a058b242c34a44",
+      "original_list": {
+        "fields": [
+          "sv_cast_packed_struct",
+          "normal,-g2005-sv",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-sv.list",
+        "logical_line": 569,
+        "name": "sv_cast_packed_struct",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/sv_cast_packed_struct.v",
+      "source_git_blob_SHA1": "4fe55672ca341b357946d1bf864ba2d782be65b2",
+      "source_sha256": "8498a08623b74c10ad592125234d31740ce59feb20f0eced90f534a88a95a6fe",
+      "top": "test",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    },
+    {
+      "expected": {
+        "additional_guards": "Exactly one whitespace/case-insensitive standalone PASSED, no FAIL/ERROR/FATAL, actual native0. Do not replace with generated gold.",
+        "mode": "upstream_selfchecking_unique_PASSED",
+        "source_contract_sha256": "e361f745bbb23194c4d74f1abe876a5d97fc7d4797010d61c8c788520449e228",
+        "source_of_contract": "ivtest/perl-lib/Diff.pm"
+      },
+      "feature": "SystemVerilog always_comb/function sensitivity",
+      "gate": "mandatory",
+      "id": "always_comb",
+      "iverilog_flags": [
+        "-g2005-sv"
+      ],
+      "original_license_header_metadata_sha256": "94bb25d4779eb0a127a4c4fe4c8f978d726c7d7c7ce4ec6e911db9ddd7a3f231",
+      "original_list": {
+        "fields": [
+          "always_comb",
+          "normal,-g2005-sv",
+          "ivltests"
+        ],
+        "list": "ivtest/regress-sv.list",
+        "logical_line": 70,
+        "name": "always_comb",
+        "type": "normal"
+      },
+      "original_test_type": "normal",
+      "runtime_flags": [
+        "+verilator+quiet"
+      ],
+      "source": "ivtest/ivltests/always_comb.v",
+      "source_git_blob_SHA1": "501644cdfe97232a3b5ba8eef6b014815c34300e",
+      "source_sha256": "140517c9eaffacf35967b65419d2e13b1060b2470e775e34474d3b81812174c6",
+      "top": "top",
+      "verilator_flags": [
+        "--cc",
+        "--exe",
+        "--main",
+        "--fourstate",
+        "--timing",
+        "-Wno-fatal",
+        "-CFLAGS",
+        "-DVL_USER_FINISH"
+      ]
+    }
+  ],
+  "reference_policy": "Icarus reference compiler is not executed in portable CI. Linux baseline/candidate reference comparisons remain separate receipts.",
+  "schema_version": 1,
+  "scope": "Bounded pinned official acceptance: all 18 execute; separate stable-applicable 16 gate. All other official cases are UNRUN. No IEEE normative certification.",
+  "semantics_review": {
+    "access": "IndexedoriginalIEEE2017clause text viawebquery; fullPDFsizecap/HTTPS403notbypassed; no2023claim",
+    "edition": "IEEE1800-2017",
+    "normative_certification": false,
+    "primary_url": "https://rfsoc.mit.edu/6S965/_static/F24/documentation/1800-2017.pdf",
+    "receipt_sha256": "18e7eb835db8991550f717023634137b79f8af30daa54e59e47576f22efad422"
+  },
+  "source_commit": "f45ffabed3212a106f01cb362ef42c5d293f4513",
+  "stage_timeouts_seconds": {
+    "build": 60,
+    "compile": 30,
+    "run": 15
+  }
+}

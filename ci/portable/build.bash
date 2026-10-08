@@ -72,6 +72,7 @@ if [[ $platform == macos-arm64 ]]; then
 fi
 python3 ci/portable/test_flexfix.py
 python3 ci/portable/test_regression_results.py
+python3 ci/portable/test_icarus_acceptance.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
@@ -133,3 +134,15 @@ if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
 fi
 python3 ci/portable/check_results.py
 python3 ci/portable/log_evidence.py results
+# Official inputs and expectations stay pinned and unchanged. All 18 execute;
+# the documented 16 applicable cases have a separate gate from the 141 above.
+icarus_head=$(git rev-parse HEAD)
+icarus_run_status=0
+icarus_check_status=0
+python3 ci/portable/icarus_acceptance.py run --expected-head "$icarus_head" || icarus_run_status=$?
+python3 ci/portable/icarus_acceptance.py check --expected-head "$icarus_head" || icarus_check_status=$?
+python3 ci/portable/log_evidence.py results
+if [[ $icarus_run_status != 0 || $icarus_check_status != 0 ]]; then
+    echo "Official Icarus validation failed: run=$icarus_run_status, check=$icarus_check_status"
+    exit 1
+fi
