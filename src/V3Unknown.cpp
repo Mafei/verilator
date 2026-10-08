@@ -383,15 +383,16 @@ class UnknownVisitor final : public VNVisitor {
 
     void visit(AstSel* nodep) override {
         iterateChildren(nodep);
-        // !v3Global.opt.fourstate() - in four-state mode V3Fourstate
-        // handles AstSel boundary checks
-        if (!v3Global.opt.fourstate() && !nodep->user1SetOnce()) {
+        const AstNode* const basefromp = nodep->baseFromp(true);
+        const AstNodeVarRef* const varrefp = VN_CAST(basefromp, NodeVarRef);
+        const AstMemberSel* const memberSelp = VN_CAST(basefromp, MemberSel);
+        const bool lvalue = (varrefp && varrefp->access().isWriteOrRW())
+                            || (memberSelp && memberSelp->access().isWriteOrRW());
+        // Four-state reads are checked in V3Fourstate. Its unknown bit-write sentinel
+        // still needs the normal lvalue guard before expansion into destination words.
+        if ((!v3Global.opt.fourstate() || (lvalue && nodep->widthConst() == 1))
+            && !nodep->user1SetOnce()) {
             // Guard against reading/writing past end of bit vector array
-            const AstNode* const basefromp = nodep->baseFromp(true);
-            bool lvalue = false;
-            if (const AstNodeVarRef* const varrefp = VN_CAST(basefromp, NodeVarRef)) {
-                lvalue = varrefp->access().isWriteOrRW();
-            }
             // Find range of dtype we are selecting from
             // Similar code in V3Const::warnSelect
             const uint32_t maxmsb = nodep->fromp()->dtypep()->width() - 1;
@@ -400,8 +401,9 @@ class UnknownVisitor final : public VNVisitor {
             // If (maxmsb >= selected), we're in bound
             // See if the condition is constant true (e.g. always in bound due to constant select)
             // Note below has null backp(); the Edit function knows how to deal with that.
-            AstConst* const maxmsbConstp = new AstConst{
-                nodep->fileline(), AstConst::WidthedValue{}, nodep->lsbp()->width(), maxmsb};
+            const int compareWidth = std::max(VL_IDATASIZE, nodep->lsbp()->width());
+            AstConst* const maxmsbConstp
+                = new AstConst{nodep->fileline(), AstConst::WidthedValue{}, compareWidth, maxmsb};
             AstNodeExpr* lsbp = V3Const::constifyEdit(nodep->lsbp()->unlinkFrBack());
             if (V3Unknown::isStaticlyGte(maxmsbConstp->num(), lsbp)) {
                 // We don't need to add a conditional; we know the existing expression is ok
@@ -410,6 +412,14 @@ class UnknownVisitor final : public VNVisitor {
                 return;
             }
             nodep->lsbp(newExprStmtOrClone(lsbp));
+            if (lsbp->width() < compareWidth) {
+                lsbp = lsbp->isSigned()
+                           ? static_cast<AstNodeExpr*>(
+                                 new AstExtendS{nodep->fileline(), lsbp, compareWidth})
+                           : static_cast<AstNodeExpr*>(
+                                 new AstExtend{nodep->fileline(), lsbp, compareWidth});
+                lsbp->dtypeSetBitSized(compareWidth, VSigning::UNSIGNED);
+            }
             AstNodeExpr* condp
                 = V3Const::constifyEdit(new AstGte{nodep->fileline(), maxmsbConstp, lsbp});
             if (!lvalue) {

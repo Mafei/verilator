@@ -1757,6 +1757,21 @@ class FourstateVisitor final : public VNVisitor {
                            resultp};
     }
 
+    static AstNodeExpr* newPackedIndexOutOfBounds(AstNodeExpr* valuep, const uint32_t maxIndex) {
+        FileLine* const flp = valuep->fileline();
+        // The normalized index and declaration bound must have the same width. Keep every
+        // index bit, including sign-extension bits that make a negative index out of range.
+        const int width = std::max(VL_IDATASIZE, valuep->width());
+        if (valuep->width() < width) {
+            valuep = valuep->isSigned()
+                         ? static_cast<AstNodeExpr*>(new AstExtendS{flp, valuep, width})
+                         : static_cast<AstNodeExpr*>(new AstExtend{flp, valuep, width});
+            valuep->dtypeSetBitSized(width, VSigning::UNSIGNED);
+        }
+        return new AstLt{flp, new AstConst{flp, AstConst::WidthedValue{}, width, maxIndex},
+                         valuep};
+    }
+
     AstNodeExpr* getFourstateExpressionSelHandler(AstSel* const selp,
                                                   AstNodeExpr* const valueExprp,
                                                   const bool defaultsToZero) {
@@ -1821,34 +1836,29 @@ class FourstateVisitor final : public VNVisitor {
         const bool isStaticlyInRange = V3Unknown::isStaticlyGte(maxmsb, lsbp);
         const bool isLsbpFourstate = isFourstate(lsbp);
         if (isStaticlyInRange && !isLsbpFourstate) {
-            newp->lsbp(lsbp->cloneTree(false));
+            newp->lsbp(getOnceExpressionValue(lsbp));
             return newp;
         }
         AstNodeExpr* conditionp;
         if (isLsbpFourstate) {
-            conditionp = getFourstateExpressionXZ(lsbp, isFourstate(selp));
+            // An X/Z mask is a vector; reduce it before combining it with the one-bit
+            // bounds predicate. DFG requires both operands of a bitwise OR to match.
+            conditionp = new AstRedOr{flp, getFourstateExpressionXZ(lsbp, isFourstate(selp))};
             if (!isStaticlyInRange) {
-                conditionp = new AstOr{flp, conditionp,
-                                       new AstLt{flp, new AstConst{flp, maxmsb},
-                                                 getFourstateExpressionValue(lsbp, true)}};
+                conditionp
+                    = new AstOr{flp, conditionp,
+                                newPackedIndexOutOfBounds(getFourstateExpressionValue(lsbp, true),
+                                                          maxmsb.toUInt())};
             }
             lsbp = getFourstateExpressionValue(lsbp, true);
         } else {
-            if (!VN_IS(lsbp,
-                       NodeVarRef) /*&& !VN_IS(lsbp, Const)*/) {  // Not being a Const is
-                                                                  // guaranteed by logic above - if
-                                                                  // lsbp is a AstConst then it is
-                                                                  // either statically inside or
-                                                                  // outside range
-                AstVar* const lsbTmpp = createTmp(lsbp);
-                addPrecalculation(new AstAssign{flp, new AstVarRef{flp, lsbTmpp, VAccess::WRITE},
-                                                lsbp->cloneTree(false)});
-                lsbp = new AstVarRef{flp, lsbTmpp, VAccess::READ};
-            } else {
-                lsbp = lsbp->cloneTree(false);
-            }
-            conditionp = new AstLt{flp, new AstConst{flp, maxmsb}, lsbp->cloneTree(false)};
+            // The value and X/Z halves must use the same original index evaluation.
+            lsbp = getOnceExpressionValue(lsbp);
+            conditionp = newPackedIndexOutOfBounds(lsbp->cloneTree(false), maxmsb.toUInt());
         }
+        // The guard above checks every original index bit. The selected element only
+        // needs a word-sized offset, including when the source index is wider than 64 bits.
+        if (lsbp->width() > VL_IDATASIZE) lsbp = new AstSel{flp, lsbp, 0, VL_IDATASIZE};
         newp->lsbp(lsbp);
         return new AstCond{flp, conditionp, createZeroOrOnesp(selp, !defaultsToZero), newp};
     }
