@@ -13,24 +13,65 @@ module t;
   bit clk = 0;
   always #5 clk = ~clk;
   wire [6:0] done;
-  negate_check #(.WIDTH(1)) c1(clk, done[0]);
-  negate_check #(.WIDTH(7)) c7(clk, done[1]);
-  negate_check #(.WIDTH(25)) c25(clk, done[2]);
-  negate_check #(.WIDTH(33)) c33(clk, done[3]);
-  negate_check #(.WIDTH(65)) c65(clk, done[4]);
-  negate_check #(.WIDTH(95)) c95(clk, done[5]);
-  negate_check #(.WIDTH(129)) c129(clk, done[6]);
+  negate_check #(
+      .WIDTH(1)
+  ) c1 (
+      clk,
+      done[0]
+  );
+  negate_check #(
+      .WIDTH(7)
+  ) c7 (
+      clk,
+      done[1]
+  );
+  negate_check #(
+      .WIDTH(25)
+  ) c25 (
+      clk,
+      done[2]
+  );
+  negate_check #(
+      .WIDTH(33)
+  ) c33 (
+      clk,
+      done[3]
+  );
+  negate_check #(
+      .WIDTH(65)
+  ) c65 (
+      clk,
+      done[4]
+  );
+  negate_check #(
+      .WIDTH(95)
+  ) c95 (
+      clk,
+      done[5]
+  );
+  negate_check #(
+      .WIDTH(129)
+  ) c129 (
+      clk,
+      done[6]
+  );
   always @(posedge clk) begin
     if (&done) begin
-      $display("Negate checks: %0d", c1.checks + c7.checks + c25.checks + c33.checks
-               + c65.checks + c95.checks + c129.checks);
+      $display(
+          "Negate checks: %0d",
+          c1.checks + c7.checks + c25.checks + c33.checks + c65.checks + c95.checks + c129.checks);
       $write("*-* All Finished *-*\n");
       $finish;
     end
   end
 endmodule
 
-module negate_check #(parameter WIDTH = 7) (input clk, output bit done = 0);
+module negate_check #(
+    parameter WIDTH = 7
+) (
+    input clk,
+    output bit done = 0
+);
   int unsigned cycle = 0;
   int unsigned checks = 0;
   int unsigned calls = 0;

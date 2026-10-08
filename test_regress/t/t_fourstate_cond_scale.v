@@ -4,7 +4,7 @@
 // SPDX-FileCopyrightText: 2026 Mafei
 // SPDX-License-Identifier: CC0-1.0
 
-`timescale 1ns/1ps
+`timescale 1ns / 1ps
 // verilog_format: off
 `define stop $stop
 `define checkh(gotv,expv) do begin checks++; if ((gotv) !== (expv)) begin $write("%%Error: %s:%0d: got=%b expected=%b\n", `__FILE__, `__LINE__, (gotv), (expv)); `stop; end end while (0);
@@ -14,24 +14,29 @@
 
 module t;
   wire [5:0] done;
-  cond_width #(1) w1(done[0]);
-  cond_width #(7) w7(done[1]);
-  cond_width #(33) w33(done[2]);
-  cond_width #(65) w65(done[3]);
-  cond_width #(95) w95(done[4]);
-  cond_width #(129) w129(done[5]);
+  cond_width #(1) w1 (done[0]);
+  cond_width #(7) w7 (done[1]);
+  cond_width #(33) w33 (done[2]);
+  cond_width #(65) w65 (done[3]);
+  cond_width #(95) w95 (done[4]);
+  cond_width #(129) w129 (done[5]);
   initial begin
     $dumpfile(`STRINGIFY(`TEST_DUMPFILE));
     $dumpvars(0, t);
     #100;
     if (done !== '1) $fatal(1, "Conditional scale regression did not finish");
-    $display("Conditional scale checks: %0d", w1.checks + w7.checks + w33.checks + w65.checks + w95.checks + w129.checks);
+    $display("Conditional scale checks: %0d",
+             w1.checks + w7.checks + w33.checks + w65.checks + w95.checks + w129.checks);
     $write("*-* All Finished *-*\n");
     $finish;
   end
 endmodule
 
-module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
+module cond_width #(
+    parameter int WIDTH = 1
+) (
+    output bit done = 0
+);
   typedef logic [WIDTH-1:0] word_t;
   typedef logic [0:WIDTH-1] up_word_t;
   bit [31:0] checks = 0;
@@ -60,7 +65,9 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
   // Literal merge oracle; unknown predicates never merge two common Z bits.
   // This literal table has no knowledge of the compiler value/mask encoding.
   function automatic logic merged_bit(input logic a, b);
-    case ({a, b})
+    case ({
+      a, b
+    })
       2'b00: return 1'b0;
       2'b11: return 1'b1;
       2'bxx: return 1'bx;
@@ -78,7 +85,8 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
   function automatic word_t pattern(input int phase, flavor);
     word_t result;
     for (int bitno = 0; bitno < WIDTH; bitno++) begin
-      if ((flavor == 1) && ((phase % 4) == 2) && ((bitno % 2) == 0)) result[bitno] = state_code((bitno + phase) % 4);
+      if ((flavor == 1) && ((phase % 4) == 2) && ((bitno % 2) == 0))
+        result[bitno] = state_code((bitno + phase) % 4);
       else result[bitno] = state_code((bitno + phase + flavor) % 4);
       // These phases merge a selected word with itself below an unknown guard.
       // Keep their data at 0/1/X while the equal-Z conditional rule is unsettled.
@@ -122,7 +130,8 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
     return right_value;
   endfunction
 
-  function automatic word_t chain20(input logic [127:0] select_bits, input word_t selected, fallback);
+  function automatic word_t chain20(input logic [127:0] select_bits, input word_t selected,
+                                    fallback);
     return
       select_bits[0] ? selected :
       select_bits[1] ? selected :
@@ -147,7 +156,8 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
       fallback;
   endfunction
 
-  function automatic word_t chain32(input logic [127:0] select_bits, input word_t selected, fallback);
+  function automatic word_t chain32(input logic [127:0] select_bits, input word_t selected,
+                                    fallback);
     return
       select_bits[0] ? selected :
       select_bits[1] ? selected :
@@ -184,7 +194,8 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
       fallback;
   endfunction
 
-  function automatic word_t chain64(input logic [127:0] select_bits, input word_t selected, fallback);
+  function automatic word_t chain64(input logic [127:0] select_bits, input word_t selected,
+                                    fallback);
     return
       select_bits[0] ? selected :
       select_bits[1] ? selected :
@@ -253,7 +264,8 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
       fallback;
   endfunction
 
-  function automatic word_t chain128(input logic [127:0] select_bits, input word_t selected, fallback);
+  function automatic word_t chain128(input logic [127:0] select_bits, input word_t selected,
+                                     fallback);
     return
       select_bits[0] ? selected :
       select_bits[1] ? selected :
@@ -405,19 +417,54 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
         guards = '0;
         case (phase % 8)
           0: wanted = right_value;
-          1: begin guards[0] = 1'b1; wanted = left_value; end
-          2: begin guards[length-1] = 1'b1; wanted = left_value; end
-          3: begin guards[(phase * 3) % length] = 1'bx; wanted = merged_word(left_value, right_value); end
-          4: begin guards[(phase * 3) % length] = 1'bz; wanted = merged_word(left_value, right_value); end
-          5: begin guards[0] = 1'bx; guards[length-1] = 1'b1; wanted = left_value; end
-          6: begin guards[0] = 1'bz; guards[length-1] = 1'b1; wanted = left_value; end
-          7: begin guards = 'x; wanted = merged_word(left_value, right_value); end
+          1: begin
+            guards[0] = 1'b1;
+            wanted = left_value;
+          end
+          2: begin
+            guards[length-1] = 1'b1;
+            wanted = left_value;
+          end
+          3: begin
+            guards[(phase*3)%length] = 1'bx;
+            wanted = merged_word(left_value, right_value);
+          end
+          4: begin
+            guards[(phase*3)%length] = 1'bz;
+            wanted = merged_word(left_value, right_value);
+          end
+          5: begin
+            guards[0] = 1'bx;
+            guards[length-1] = 1'b1;
+            wanted = left_value;
+          end
+          6: begin
+            guards[0] = 1'bz;
+            guards[length-1] = 1'b1;
+            wanted = left_value;
+          end
+          7: begin
+            guards = 'x;
+            wanted = merged_word(left_value, right_value);
+          end
         endcase
         case (depth)
-          0: begin result20 = chain20(guards, left_value, right_value); got = result20; end
-          1: begin result32 = chain32(guards, left_value, right_value); got = result32; end
-          2: begin result64 = chain64(guards, left_value, right_value); got = result64; end
-          3: begin result128 = chain128(guards, left_value, right_value); got = result128; end
+          0: begin
+            result20 = chain20(guards, left_value, right_value);
+            got = result20;
+          end
+          1: begin
+            result32 = chain32(guards, left_value, right_value);
+            got = result32;
+          end
+          2: begin
+            result64 = chain64(guards, left_value, right_value);
+            got = result64;
+          end
+          3: begin
+            result128 = chain128(guards, left_value, right_value);
+            got = result128;
+          end
         endcase
         `checkh(got, wanted);
       end
@@ -447,24 +494,65 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
       // A known one makes a vector true even when other bits contain X/Z.
       // Unknown predicates have no known one; their required branches run once.
       case (phase % 8)
-        0: begin vector7_selector = '0; vector65_selector = '0; end
-        1: begin vector7_selector = '0; vector65_selector = '0;
-                 vector7_selector[0] = 1'b1; vector65_selector[0] = 1'b1; end
-        2: begin vector7_selector = 'x; vector65_selector = 'x; end
-        3: begin vector7_selector = 'z; vector65_selector = 'z; end
-        4: begin vector7_selector = 'x; vector65_selector = 'x;
-                 vector7_selector[3] = 1'b1; vector65_selector[32] = 1'b1; end
-        5: begin vector7_selector = 'z; vector65_selector = 'z;
-                 vector7_selector[6] = 1'b1; vector65_selector[64] = 1'b1; end
-        6: begin vector7_selector = '0; vector65_selector = '0;
-                 vector7_selector[0] = 1'bx; vector65_selector[0] = 1'bx; end
-        7: begin vector7_selector = '0; vector65_selector = '0;
-                 vector7_selector[6] = 1'bz; vector65_selector[64] = 1'bz; end
+        0: begin
+          vector7_selector = '0;
+          vector65_selector = '0;
+        end
+        1: begin
+          vector7_selector = '0;
+          vector65_selector = '0;
+          vector7_selector[0] = 1'b1;
+          vector65_selector[0] = 1'b1;
+        end
+        2: begin
+          vector7_selector = 'x;
+          vector65_selector = 'x;
+        end
+        3: begin
+          vector7_selector = 'z;
+          vector65_selector = 'z;
+        end
+        4: begin
+          vector7_selector = 'x;
+          vector65_selector = 'x;
+          vector7_selector[3] = 1'b1;
+          vector65_selector[32] = 1'b1;
+        end
+        5: begin
+          vector7_selector = 'z;
+          vector65_selector = 'z;
+          vector7_selector[6] = 1'b1;
+          vector65_selector[64] = 1'b1;
+        end
+        6: begin
+          vector7_selector = '0;
+          vector65_selector = '0;
+          vector7_selector[0] = 1'bx;
+          vector65_selector[0] = 1'bx;
+        end
+        7: begin
+          vector7_selector = '0;
+          vector65_selector = '0;
+          vector7_selector[6] = 1'bz;
+          vector65_selector[64] = 1'bz;
+        end
       endcase
       case (phase % 8)
-        0: begin wanted = right_value; want_left = 0; want_right = 1; end
-        1, 4, 5: begin wanted = left_value; want_left = 1; want_right = 0; end
-        default: begin wanted = merged_word(left_value, right_value); want_left = 1; want_right = 1; end
+        0: begin
+          wanted = right_value;
+          want_left = 0;
+          want_right = 1;
+        end
+        1, 4, 5: begin
+          wanted = left_value;
+          want_left = 1;
+          want_right = 0;
+        end
+        default: begin
+          wanted = merged_word(left_value, right_value);
+          want_left = 1;
+          want_right = 1;
+        end
       endcase
       condition_calls = 0;
       left_calls = 0;
@@ -503,8 +591,8 @@ module cond_width #(parameter int WIDTH = 1)(output bit done = 0);
       want_left = selector !== 1'b0 ? 1 : 0;
       want_middle = ((want_inner != 0) && (inner_selector !== 1'b0)) ? 1 : 0;
       want_right = ((want_inner != 0) && (inner_selector !== 1'b1)) ? 1 : 0;
-      nested_result = condition(selector) ? left_branch()
-                      : (inner_condition(inner_selector) ? middle_branch() : right_branch());
+      nested_result = condition(selector) ?
+          left_branch() : (inner_condition(inner_selector) ? middle_branch() : right_branch());
       `checkh(nested_result, wanted);
       `checkd(condition_calls, 1);
       `checkd(inner_calls, want_inner);
