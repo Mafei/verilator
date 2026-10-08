@@ -124,7 +124,11 @@ fi
 export VERILATOR_ROOT="$root"
 regress_status=0
 python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended || regress_status=$?
-[[ ${smoke_status:-0} == 0 && $regress_status == 0 ]]
+if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
+    echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
+    exit 1
+fi
+python3 ci/portable/check_results.py
 python3 - <<'PY'
 import hashlib,pathlib
 files=sorted(pathlib.Path('out').glob('*'))
