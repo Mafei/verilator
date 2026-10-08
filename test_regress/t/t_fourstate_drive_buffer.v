@@ -22,6 +22,10 @@ module t;
   buffer_expression #(63) x63 (done[10]);
   buffer_expression #(64) x64 (done[11]);
   wire [63:0] constants;
+  wire [3:0] plain_constants;
+  for (genvar data = 0; data < 4; data++) begin : p
+    buffer_plain_constant #(data) u (plain_constants[data]);
+  end
   for (genvar kind = 0; kind < 4; kind++) begin : k
     for (genvar en = 0; en < 4; en++) begin : e
       for (genvar data = 0; data < 4; data++) begin : d
@@ -40,6 +44,13 @@ module t;
         end
       end
     end
+    // IV12 folds the literal-Z buf to Z; retain the IEEE 1800-2017 Table 28-4
+    // expectation here. This macro is only for a separate dynamic reference probe.
+`ifndef GATE_BUF_DYNAMIC_ONLY
+    for (int data = 0; data < 4; data++) begin
+      `checkh(plain_constants[data], drive_literal(0, 4 + data))
+    end
+`endif
     #200;
     `checkh(done, 12'hfff)
     $display("Buffer dynamic checks: %0d",
@@ -63,6 +74,7 @@ module buffer_width #(
   wire [0:WIDTH-1] ascending_data = source_data;
   wire [WIDTH+4:5] ranged_enable = source_enable;
   wire [WIDTH-1:0] buffer1, inverter1;
+  wire [WIDTH-1:0] plain_buffer0, plain_buffer1;
   wire [0:WIDTH-1] ascending_buffer0;
   wire [WIDTH+4:5] ranged_inverter0;
   wire [WIDTH-1:0] buffer0 = ascending_buffer0, inverter0 = ranged_inverter0;
@@ -70,6 +82,8 @@ module buffer_width #(
   bufif0 b0[WIDTH-1:0] (ascending_buffer0, ascending_data, ranged_enable);
   notif1 n1[WIDTH-1:0] (inverter1, ascending_data, ranged_enable);
   notif0 n0[WIDTH-1:0] (ranged_inverter0, ascending_data, ranged_enable);
+  // Unlike a continuous wire assignment, logic buf maps both X and Z inputs to X.
+  buf plain[WIDTH-1:0] (plain_buffer0, plain_buffer1, ascending_data);
   initial begin
     #10;
     for (int phase = 0; phase < 16; phase++) begin
@@ -87,6 +101,8 @@ module buffer_width #(
                 2, ((phase % 4 + bitno) % 4) * 4 + (phase / 4 + bitno) % 4))
         `checkh(inverter0[bitno], drive_literal(
                 3, ((phase % 4 + bitno) % 4) * 4 + (phase / 4 + bitno) % 4))
+        `checkh(plain_buffer0[bitno], drive_literal(0, 4 + (phase / 4 + bitno) % 4))
+        `checkh(plain_buffer1[bitno], drive_literal(0, 4 + (phase / 4 + bitno) % 4))
       end
       #1;
     end
@@ -109,6 +125,15 @@ module buffer_constant #(
   else notif0 n (result, D, E);
 endmodule
 
+module buffer_plain_constant #(
+    parameter int DATA = 0
+) (
+    output wire result
+);
+  localparam logic D = DATA == 0 ? 1'b0 : DATA == 1 ? 1'b1 : DATA == 2 ? 1'bx : 1'bz;
+  buf b (result, D);
+endmodule
+
 module buffer_expression #(
     parameter int WIDTH = 17
 ) (
@@ -120,7 +145,7 @@ module buffer_expression #(
   reg [WIDTH-1:0] enable_b = '0, data_b = '0, data_c = '0;
   reg branch = 0;
   bit [WIDTH-1:0] known_enable = '0;
-  wire [WIDTH-1:0] result_a, result_b, result_known;
+  wire [WIDTH-1:0] result_a, result_b, result_known, result_plain;
   function automatic logic [WIDTH-1:0] rotate(input logic [WIDTH-1:0] value);
     // verilator no_inline_task
     return {value[WIDTH-2:0], value[WIDTH-1]};
@@ -132,6 +157,7 @@ module buffer_expression #(
   bufif1 a[WIDTH-1:0] (result_a, rotate (data_a), rotate (enable_a));
   notif0 b[WIDTH-1:0] (result_b, branch ? data_b : data_c, enable_b);
   bufif1 known[WIDTH-1:0] (result_known, rotate (data_c), rotate_known (known_enable));
+  buf plain[WIDTH-1:0] (result_plain, rotate (data_c));
   initial begin
     #10;
     for (int phase = 0; phase < 32; phase++) begin
@@ -166,6 +192,8 @@ module buffer_expression #(
                 0,
                 4 * int'(known_enable[(bitno+WIDTH-1)%WIDTH]) + drive_code(
                     data_c[(bitno+WIDTH-1)%WIDTH])
+                ))
+        `checkh(result_plain[bitno], drive_literal(0, 4 + drive_code(data_c[(bitno+WIDTH-1)%WIDTH])
                 ))
       end
       #1;

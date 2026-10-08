@@ -5726,11 +5726,14 @@ gateBuf<nodep>:
                         { AstNodeExpr* inp = $4;
                           while (inp->nextp()) inp = VN_AS(inp->nextp(), NodeExpr);
                           $$ = new AstImplicit{$<fl>1, inp->cloneTree(false)};
-                          AstNodeExpr* const rhsp = GRAMMARP->createGatePin(inp->cloneTree(false));
+                          // A logic buffer maps input Z to X, unlike a wire assignment.
+                          AstNodeExpr* const rhsp = new AstBufIf1{$<fl>1, new AstConst{$<fl>1, AstConst::All1{}},
+                                                                GRAMMARP->createGatePin(inp->cloneTree(false))};
                           AstAssignW* const ap = new AstAssignW{$<fl>1, $2, rhsp};
                           $$->addNext(new AstAlways{ap});
                           for (AstNodeExpr* outp = $4; outp->nextp(); outp = VN_CAST(outp->nextp(), NodeExpr)) {
-                              AstNodeExpr* const pinRhsp = GRAMMARP->createGatePin(inp->cloneTree(false));
+                              AstNodeExpr* const pinRhsp = new AstBufIf1{$<fl>1, new AstConst{$<fl>1, AstConst::All1{}},
+                                                                       GRAMMARP->createGatePin(inp->cloneTree(false))};
                               AstAssignW* const pinAssp = new AstAssignW{$<fl>1, outp->cloneTree(false), pinRhsp};
                               $$->addNext(new AstAlways{pinAssp});
                           }

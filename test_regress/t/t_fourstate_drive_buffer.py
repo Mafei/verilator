@@ -24,10 +24,10 @@ test.compile(
 )
 test.execute(logfile=test.run_log_filename, iv_run_flags=['-N'])
 if test.vlt_all:
-    test.file_grep(test.stats, r'Fourstate, Isolated tristate buffers\s+(\d+)', 106)
-test.file_grep(test.run_log_filename, r'Buffer dynamic checks: (\d+)', 16128)
-test.file_grep(test.run_log_filename, r'Buffer constant checks: (\d+)', 64)
-test.file_grep(test.run_log_filename, r'Buffer expression checks: (\d+)', 22176)
+    test.file_grep(test.stats, r'Fourstate, Isolated tristate buffers\s+(\d+)', 128)
+test.file_grep(test.run_log_filename, r'Buffer dynamic checks: (\d+)', 24192)
+test.file_grep(test.run_log_filename, r'Buffer constant checks: (\d+)', 68)
+test.file_grep(test.run_log_filename, r'Buffer expression checks: (\d+)', 29568)
 expected = {}
 widths = {}
 states = '01xz'
@@ -39,6 +39,8 @@ for width in (1, 7, 17, 33, 65, 129):
     names = ('buffer1', 'buffer0', 'inverter1', 'inverter0')
     for kind, name in enumerate(names):
         add(expected, widths, owner + name, width, tables[kind][0] * width)
+    for name in ('plain_buffer0', 'plain_buffer1'):
+        add(expected, widths, owner + name, width, '0' * width)
     for phase in range(16):
         timestamp = 10 + phase * 11
         en = [((phase % 4 + bitno) % 4) for bitno in reversed(range(width))]
@@ -52,6 +54,8 @@ for width in (1, 7, 17, 33, 65, 129):
                 timestamp,
                 ''.join(tables[kind][e * 4 + d] for e, d in zip(en, data)),
             )
+        for name in ('plain_buffer0', 'plain_buffer1'):
+            append(expected, owner + name, timestamp, ''.join('01xx'[d] for d in data))
 
 for width in (17, 24, 31, 32, 63, 64):
     owner = f'x{width}.'
@@ -63,6 +67,7 @@ for width in (17, 24, 31, 32, 63, 64):
     add(expected, widths, owner + 'result_a', width, 'z' * width)
     add(expected, widths, owner + 'result_b', width, '1' * width)
     add(expected, widths, owner + 'result_known', width, 'z' * width)
+    add(expected, widths, owner + 'result_plain', width, '0' * width)
     choose = '0'
     for phase in range(32):
         timestamp = 10 + phase * 3
@@ -100,6 +105,12 @@ for width in (17, 24, 31, 32, 63, 64):
         append(expected, owner + 'result_a', timestamp, result_a)
         append(expected, owner + 'result_b', timestamp, result_b)
         append(expected, owner + 'result_known', timestamp, result_known)
+        append(
+            expected,
+            owner + 'result_plain',
+            timestamp,
+            ''.join('01xx'[states.index(d)] for d in known_data),
+        )
 check_trace(test, expected, widths)
 test.file_grep_not(test.run_log_filename, r'%Error|ERROR:|WARNING:')
 test.passes()
