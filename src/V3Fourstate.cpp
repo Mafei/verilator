@@ -662,7 +662,7 @@ class FourstatePullVisitor final : public VNVisitorConst {
         }
     }
     void visit(AstPin* nodep) override {
-        VL_RESTORER(m_context);
+        VL_RESTORER_COPY(m_context);
         if (AstVar* const varp = nodep->modVarp()) {
             if (isPullNet(varp) && varp->direction().isNonOutput()) {
                 DriverInfo& info = m_drivers[varp];
@@ -675,31 +675,31 @@ class FourstatePullVisitor final : public VNVisitorConst {
         iterateChildrenConst(nodep);
     }
     void visit(AstAlias* nodep) override {
-        VL_RESTORER(m_context);
+        VL_RESTORER_COPY(m_context);
         VL_RESTORER(m_alias);
         m_context = "alias";
         m_alias = true;
         iterateChildrenConst(nodep);
     }
     void visit(AstAliasScope* nodep) override {
-        VL_RESTORER(m_context);
+        VL_RESTORER_COPY(m_context);
         VL_RESTORER(m_alias);
         m_context = "alias";
         m_alias = true;
         iterateChildrenConst(nodep);
     }
     void visit(AstRelease* nodep) override {
-        VL_RESTORER(m_context);
+        VL_RESTORER_COPY(m_context);
         m_context = "force or release";
         iterateChildrenConst(nodep);
     }
     void visit(AstAssignForce* nodep) override {
-        VL_RESTORER(m_context);
+        VL_RESTORER_COPY(m_context);
         m_context = "force or release";
         iterateChildrenConst(nodep);
     }
     void visit(AstPull* nodep) override {
-        VL_RESTORER(m_context);
+        VL_RESTORER_COPY(m_context);
         m_context = "explicit pull primitive";
         iterateChildrenConst(nodep);
     }
