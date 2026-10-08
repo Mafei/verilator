@@ -394,3 +394,33 @@ The manual `Original four-state baselines` workflow builds both original commits
 with the same Rocky toolchain and runs a common scalar and aggregate probe.
 Only the public test harness and GNU Flex header adjustment are copied into
 these checkouts. Results and the exact source adjustment are uploaded as evidence.
+
+## Continuing Icarus upstream acceptance
+
+The official Icarus test collection is an additional continuing acceptance
+source. Use the `ivtest` subtree of
+[steveicarus/iverilog](https://github.com/steveicarus/iverilog); its former separate
+`steveicarus/ivtest` repository is obsolete. Pin a full upstream commit, verify
+the source and license, and record a complete test inventory before selecting
+an applicable subset. Preserve upstream test sources, options and expected
+results. Adapt the execution driver rather than rewriting tests or expectations
+to produce passing results.
+
+Compare the same frozen selection against a preserved Verilator baseline and
+an exact candidate SHA. Record each compilation, model build and simulation's
+actual exit code, timeout status, output and relevant waveforms. Report the
+inventory total and separate counts for passed, failed, inapplicable, skipped
+and unrun cases, with explicit reasons and a complete failure list. Distinguish
+ordinary Verilog/SystemVerilog semantics, expected compilation failures and
+Icarus-specific interfaces or tool behavior. An implementation disagreement
+requires a source-grounded language-semantics investigation; Icarus output
+alone is not proof of the language standard.
+
+Expand the stable applicable selection in stages and add it to automatic
+acceptance at the exact tested SHA. Keep the existing 132 selected Verilator
+regressions, the frozen broader 108-case collection, all 34 public original AMD
+profiles, and the native macOS ARM64/Rocky 8.10 portability gates. New collections
+are additional gates and must not replace, silently filter or resize these
+existing contracts. Full Icarus, SystemVerilog or SDF compatibility is not
+claimed when only a bounded selection has run. Candidate branches and pull
+requests remain drafts; acceptance results do not authorize merging or release.
