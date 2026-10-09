@@ -19,6 +19,7 @@ GROUPS = {
         "timing_implicit_delay",
         "timing_monitor_postponed", "timing_zero_domain"
     ],
+    "deassign": ["assign_deassign_clocked", "fourstate_deassign_clocked"],
     "capabilities":
     ["fourstate_mac_model", "fourstate_mem_index", "fourstate_shiftrs", "fourstate_supplies"],
     "followup": [
