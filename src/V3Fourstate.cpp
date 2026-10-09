@@ -305,6 +305,10 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         setFourstate(nodep, needsSplitting(nodep->dtypep()), m_fourstateInSubtree);
         m_fourstateInSubtree |= isFourstate(nodep);
     }
+    void visit(AstCvtPackString* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
     void visit(AstNodeBiop* const nodep) override {
         iterateChildrenSeparately(nodep);
         setFourstate(nodep, isFourstate(nodep->lhsp()) || isFourstate(nodep->rhsp()),
@@ -485,6 +489,15 @@ class FourstateLogicTypePropagator final : public VNVisitor {
     }
     void visit(AstSScanF* const nodep) override {
         iterateChildrenSeparately(nodep);
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
+    void visit(AstTestPlusArgs* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        setFourstate(nodep, false, m_fourstateInSubtree);
+    }
+    void visit(AstValuePlusArgs* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        // The integer success result is always known, independently of the output variable.
         setFourstate(nodep, false, m_fourstateInSubtree);
     }
     void visit(AstFourstateExpr* const nodep) override {
@@ -1256,6 +1269,8 @@ class FourstateVisitor final : public VNVisitor {
     uint32_t m_statTristateBuffers = 0;  // Isolated buffer-gate expressions lowered
     uint32_t m_statDeassigns = 0;  // Whole local deassign statements split into both halves
     uint32_t m_statBlockingDelays = 0;  // Activation-local blocking delay snapshots
+    uint32_t m_statValuePlusArgs = 0;  // Whole integral four-state plusargs outputs lowered
+    uint32_t m_statPackedStrings = 0;  // Packed string operands converted from four-state bits
 
     static AstConst* createZeroOrOnesp(const AstNodeExpr* const exprp, const bool ones = false) {
         AstConst* const resultp
@@ -4238,6 +4253,17 @@ class FourstateVisitor final : public VNVisitor {
         }
         iterateChildren(nodep);
     }
+    void visit(AstCvtPackString* const nodep) override {
+        if (isFourstate(nodep->lhsp())) {
+            AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+            // String characters are two-state bytes: preserve known bits and map X/Z to zero.
+            // Convert both halves together; taking only the value half would map X bits to one.
+            nodep->lhsp(getTwoStateCast(lhsp));
+            pushDeletep(lhsp);
+            ++m_statPackedStrings;
+        }
+        iterateChildren(nodep);
+    }
     void visit(AstCastWrap* const nodep) override {
         if (!isFourstate(nodep) && isFourstate(nodep->lhsp())) {
             AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
@@ -4456,11 +4482,51 @@ class FourstateVisitor final : public VNVisitor {
         pushDeletep(nodep);
         relinker.relink(newp);
     }
+    void visit(AstValuePlusArgs* const nodep) override {
+        if (nodep->outxzp()) {
+            iterateChildren(nodep);
+            return;
+        }
+        // A selected lvalue can be marked two-state despite writing a split variable.
+        // Follow only its storage base; index expressions can have their own writes.
+        const AstNodeExpr* const targetp = nodep->outp()->getVAccessTargetRecurse();
+        const AstNodeVarRef* const refp = VN_CAST(targetp, NodeVarRef);
+        const AstMemberSel* const memberp = VN_CAST(targetp, MemberSel);
+        const bool fourstateOutput
+            = needsSplitting(nodep->outp()->dtypep())
+              || (refp && refp->access().isWriteOrRW() && needsSplitting(refp->varp()->dtypep()))
+              || (memberp && memberp->access().isWriteOrRW()
+                  && needsSplitting(memberp->varp()->dtypep()));
+        if (!fourstateOutput) {
+            iterateChildren(nodep);
+            return;
+        }
+        if (!VN_IS(nodep->outp(), NodeVarRef)
+            || !nodep->outp()->dtypep()->skipRefp()->isIntegralOrPacked()) {
+            nodep->v3warn(E_UNSUPPORTED,
+                          "Unsupported: $value$plusargs output other than a whole integral "
+                          "variable with --fourstate.");
+            // Remove the unsupported expression before later passes inspect its output.
+            nodep->replaceWith(new AstConst{nodep->fileline(), AstConst::WidthedValue{}, 32, 0});
+            pushDeletep(nodep);
+            return;
+        }
+        AstNodeExpr* const outp = nodep->outp()->unlinkFrBack();
+        // The storage type determines how a whole variable is written, independently
+        // of any two-state expression hint attached to its lvalue reference.
+        setLogicType(outp, FOUR_STATE);
+        nodep->outp(getFourstateExpressionValue(outp, false));
+        nodep->outxzp(getFourstateExpressionXZ(outp, false));
+        pushDeletep(outp);
+        nodep->dtypep(getTwoStateDtype(nodep->dtypep()));
+        // Keep the call in its original expression, including short-circuit branches.
+        // The paired runtime writes both references only when the argument matches.
+        iterateChildren(nodep);
+        ++m_statValuePlusArgs;
+    }
     // Skip these trees since these expressions are not supported anyway
     // LCOV_EXCL_START
     void visit(AstCvtPackedToArray* const) override {}
-    void visit(AstTestPlusArgs* const) override {}
-    void visit(AstValuePlusArgs* const) override {}
     void visit(AstFOpenMcd* const) override {}
     void visit(AstConsPackUOrStruct* const) override {}
     // LCOV_EXCL_STOP
@@ -4587,6 +4653,8 @@ public:
         V3Stats::addStat("Fourstate, Isolated tristate buffers", m_statTristateBuffers);
         V3Stats::addStat("Fourstate, Local procedural deassigns", m_statDeassigns);
         V3Stats::addStat("Fourstate, Blocking delay snapshots", m_statBlockingDelays);
+        V3Stats::addStat("Fourstate, Whole integral value plusargs", m_statValuePlusArgs);
+        V3Stats::addStat("Fourstate, Packed string conversions", m_statPackedStrings);
     }
 };
 

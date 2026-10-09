@@ -7397,6 +7397,27 @@ class WidthVisitor final : public VNVisitor {
         if (m_vup->prelim()) {
             iterateCheckString(nodep, "LHS", nodep->searchp(), BOTH);
             userIterateAndNext(nodep->outp(), WidthVP{SELF, BOTH}.p());
+            // Diagnose selected four-state outputs before constant folding or variable
+            // splitting can replace their original lvalue with a whole variable.
+            if (v3Global.opt.fourstate() && !VN_IS(nodep->outp(), NodeVarRef)) {
+                // Follow only the lvalue base. An index expression can itself write a
+                // four-state variable without making the selected storage four-state.
+                const AstNodeExpr* const targetp = nodep->outp()->getVAccessTargetRecurse();
+                const AstNodeVarRef* const refp = VN_CAST(targetp, NodeVarRef);
+                const AstMemberSel* const memberp = VN_CAST(targetp, MemberSel);
+                const bool fourstateOutput
+                    = nodep->outp()->dtypep()->skipRefp()->isFourstate()
+                      || (refp && refp->access().isWriteOrRW()
+                          && refp->varp()->dtypep()->skipRefp()->isFourstate())
+                      || (memberp && memberp->access().isWriteOrRW()
+                          && memberp->varp()->dtypep()->skipRefp()->isFourstate());
+                if (fourstateOutput) {
+                    nodep->v3warn(
+                        E_UNSUPPORTED,
+                        "Unsupported: $value$plusargs output other than a whole integral "
+                        "variable with --fourstate.");
+                }
+            }
             nodep->dtypeChgWidthSigned(32, 1, VSigning::SIGNED);  // Spec says integer return
         }
     }

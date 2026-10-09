@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_plusargs_unsup.v:39:12: Unsupported: $value$plusargs output other than a whole integral variable with --fourstate.
+                                                        : ... note: In instance 't'
+   39 |     code = $value$plusargs("SLICE=%h", packed_value[6:0]);
+      |            ^~~~~~~~~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

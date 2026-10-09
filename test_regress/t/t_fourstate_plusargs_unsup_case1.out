@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_plusargs_unsup.v:41:12: Unsupported: $value$plusargs output other than a whole integral variable with --fourstate.
+                                                        : ... note: In instance 't'
+   41 |     code = $value$plusargs("ELEMENT=%d", unpacked_value[index_value++]);
+      |            ^~~~~~~~~~~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to
