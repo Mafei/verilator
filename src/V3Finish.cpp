@@ -18,10 +18,12 @@
 // block immediately after requesting termination. This also skips the caller's
 // remaining statements and copyback after an inlined finishing call.
 //
-// The jump stays within one generated function. Final blocks, non-inlined
-// functions, fork branches and expression-statement lambdas need separate
+// The jump stays within one generated function. Non-inlined functions, fork
+// branches and expression-statement lambdas need separate
 // termination propagation and are deliberately left unchanged. Exiting a
 // source body does not bypass scheduler bookkeeping or cancel other regions.
+// A separate early entry point handles one call-free final in the sole source
+// top, before calls can be inlined. Other final protocols remain unchanged.
 //*************************************************************************
 
 #include "V3PchAstNoMT.h"  // VL_MT_DISABLED_CODE_UNIT
@@ -41,6 +43,7 @@ class FinishVisitor final : public VNVisitor {
 
     // STATE
     AstNodeProcedure* m_procp = nullptr;  // Current supported source process
+    const bool m_finalLocal = false;  // Early, separately qualified final body
     VDouble0 m_statExits;  // Source-body exits added
 
     AstJumpBlock* getExitBlock() {
@@ -77,8 +80,130 @@ class FinishVisitor final : public VNVisitor {
 
 public:
     explicit FinishVisitor(AstNetlist* nodep) { iterate(nodep); }
-    ~FinishVisitor() override { V3Stats::addStat("Finish, source body exits", m_statExits); }
+    explicit FinishVisitor(AstFinal* nodep)
+        : m_procp{nodep}
+        , m_finalLocal{true} {
+        iterateAndNextNull(nodep->stmtsp());
+    }
+    ~FinishVisitor() override {
+        V3Stats::addStat(m_finalLocal ? "Finish, final local exits" : "Finish, source body exits",
+                         m_statExits);
+    }
 };
+
+// Inspect the original body before task inlining or expression lifting can
+// erase a call boundary or introduce a local with a nontrivial lifetime.
+class FinalLocalBodyVisitor final : public VNVisitorConst {
+    bool m_blocked = false;
+    bool m_hasFinish = false;
+
+    void visit(AstFinish*) override { m_hasFinish = true; }
+    void visit(AstNodeFTaskRef*) override { m_blocked = true; }
+    void visit(AstNodeCCall*) override { m_blocked = true; }
+    void visit(AstNodeFTask*) override { m_blocked = true; }
+    void visit(AstCFunc*) override { m_blocked = true; }
+    void visit(AstCExpr*) override { m_blocked = true; }
+    void visit(AstCExprUser*) override { m_blocked = true; }
+    void visit(AstCStmt*) override { m_blocked = true; }
+    void visit(AstCStmtUser*) override { m_blocked = true; }
+    void visit(AstCMethodHard*) override { m_blocked = true; }
+    void visit(AstCAwait*) override { m_blocked = true; }
+    void visit(AstCLocalScope*) override { m_blocked = true; }
+    void visit(AstDelay*) override { m_blocked = true; }
+    void visit(AstEventControl*) override { m_blocked = true; }
+    void visit(AstWait*) override { m_blocked = true; }
+    void visit(AstWaitFork*) override { m_blocked = true; }
+    void visit(AstFork*) override { m_blocked = true; }
+    void visit(AstExprStmt*) override { m_blocked = true; }
+    void visit(AstWith*) override { m_blocked = true; }
+    void visit(AstNewCopy*) override { m_blocked = true; }
+    void visit(AstNewDynamic*) override { m_blocked = true; }
+    void visit(AstUnlinkedRef*) override { m_blocked = true; }
+    void visit(AstParseRef*) override { m_blocked = true; }
+    void visit(AstMemberSel*) override { m_blocked = true; }
+    void visit(AstSystemT*) override { m_blocked = true; }
+    void visit(AstSystemF*) override { m_blocked = true; }
+    void visit(AstVar*) override { m_blocked = true; }
+    void visit(AstNodeVarRef* nodep) override {
+        // Unresolved references can remain in dead code before elaboration.
+        const AstVar* const varp = nodep->varp();
+        const AstBasicDType* const dtypep
+            = varp ? VN_CAST(varp->subDTypep(), BasicDType) : nullptr;
+        if (!dtypep || !dtypep->isIntegralOrPacked()) m_blocked = true;
+    }
+    void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
+
+public:
+    explicit FinalLocalBodyVisitor(AstFinal* nodep) { iterateAndNextConstNull(nodep->stmtsp()); }
+    bool eligible() const { return m_hasFinish && !m_blocked; }
+};
+
+class FinalLocalScopeVisitor final : public VNVisitorConst {
+    const AstNodeModule* m_modp = nullptr;
+    const AstNode* m_parentp = nullptr;
+    const AstNodeModule* m_finalModp = nullptr;
+    AstFinal* m_finalp = nullptr;
+    bool m_finalDirect = false;
+    unsigned m_topCount = 0;
+    unsigned m_finalCount = 0;
+
+    void visit(AstNodeModule* nodep) override {
+        VL_RESTORER(m_modp);
+        VL_RESTORER(m_parentp);
+        m_modp = nodep;
+        m_parentp = nodep;
+        if (nodep->isTop() && !VN_IS(nodep, Package) && !VN_IS(nodep, Class)) ++m_topCount;
+        iterateChildrenConst(nodep);
+    }
+    void visit(AstFinal* nodep) override {
+        ++m_finalCount;
+        m_finalp = nodep;
+        m_finalModp = m_modp;
+        m_finalDirect = m_parentp == m_modp;
+    }
+    void visit(AstNode* nodep) override {
+        VL_RESTORER(m_parentp);
+        m_parentp = nodep;
+        iterateChildrenConst(nodep);
+    }
+
+public:
+    explicit FinalLocalScopeVisitor(AstNetlist* nodep) { iterateConst(nodep); }
+    const AstFinal* eligibleFinalp() const {
+        // A source module with one final can have multiple runtime instances.
+        // A generate can also clone one source final during elaboration. Require
+        // a direct item of the sole source top to prove one runtime instance.
+        const AstModule* const modp = VN_CAST(m_finalModp, Module);
+        if (m_topCount != 1 || m_finalCount != 1 || !m_finalDirect || !modp || !modp->isTop()
+            || modp->isProgram() || modp->isChecker()) {
+            return nullptr;
+        }
+        return FinalLocalBodyVisitor{m_finalp}.eligible() ? m_finalp : nullptr;
+    }
+};
+
+class FinalLocalRewriteVisitor final : public VNVisitor {
+    const AstFinal* const m_finalp;
+
+    void visit(AstFinal* nodep) override {
+        if (nodep == m_finalp) FinishVisitor{nodep};
+    }
+    void visit(AstNode* nodep) override { iterateChildren(nodep); }
+
+public:
+    FinalLocalRewriteVisitor(AstNetlist* nodep, const AstFinal* finalp)
+        : m_finalp{finalp} {
+        iterate(nodep);
+    }
+};
+
+void V3Finish::finishFinalLocalAll(AstNetlist* nodep) {
+    UINFO(2, __FUNCTION__ << ":");
+    if (const AstFinal* const finalp = FinalLocalScopeVisitor{nodep}.eligibleFinalp()) {
+        FinalLocalRewriteVisitor{nodep, finalp};
+    }
+    V3Global::dumpCheckGlobalTree("finish-final-local", 0, dumpTreeEitherLevel() >= 3);
+}
 
 void V3Finish::finishAll(AstNetlist* nodep) {
     UINFO(2, __FUNCTION__ << ":");

@@ -1,0 +1,6 @@
+INITIAL case=2 time=1
+LOOP index=0 sum=0
+LOOP index=1 sum=1
+LOOP index=2 sum=3
+LOOP final checks=3 time=1
+*-* All Finished *-*

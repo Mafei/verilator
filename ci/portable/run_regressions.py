@@ -35,7 +35,7 @@ GROUPS = {
         "fourstate_redxor", "fourstate_replicate", "fourstate_sel", "fourstate_shift"
     ],
     "integration": ["fourstate_coverage"],
-    "finish_slice": ["finish_process_exit"],
+    "finish_slice": ["finish_final_local", "finish_process_exit"],
     "fourstate": [
         "fourstate_api", "fourstate_cond", "fourstate_countones", "fourstate_dynarray",
         "fourstate_format", "fourstate_format_bin", "fourstate_format_hex",

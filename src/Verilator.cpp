@@ -173,6 +173,11 @@ static void process() {
         V3LinkLValue::linkLValue(v3Global.rootp());
         // Convert return/continue/disable to jumps
         V3LinkJump::linkJump(v3Global.rootp());
+        // Qualify a sole, call-free source-top final before calls are lowered.
+        if (!v3Global.opt.serializeOnly() && !v3Global.opt.hierarchical()
+            && !v3Global.opt.hierChild()) {
+            V3Finish::finishFinalLocalAll(v3Global.rootp());
+        }
         // Convert --/++ to normal operations. Must be after LinkJump.
         V3LinkInc::linkIncrements(v3Global.rootp());
         V3Error::abortIfErrors();
