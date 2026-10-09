@@ -56,6 +56,7 @@
 #include "V3ExecGraph.h"
 #include "V3Expand.h"
 #include "V3File.h"
+#include "V3Finish.h"
 #include "V3Force.h"
 #include "V3Fork.h"
 #include "V3Fourstate.h"
@@ -387,6 +388,9 @@ static void process() {
         }
 
         if (!v3Global.opt.serializeOnly()) {
+            // Leave source process bodies after finishing calls have been inlined.
+            V3Finish::finishAll(v3Global.rootp());
+
             // Add __PVT's
             // After V3Task so task internal variables will get renamed
             V3Name::nameAll(v3Global.rootp());
