@@ -1,0 +1,12 @@
+BYTES_X len=3 c0=65 c1=66 c2=67
+BYTES_Z len=3 c0=65 c1=66 c2=67
+CLEAR_ONE len=3 c1=64
+ZERO_BYTE len=2 c0=65 c1=67
+FORMAT_X c0=73 code=1 value=1234
+STRING_X code=1 value=1234
+FORMAT_Z c0=72 code=1 value=99
+STRING_Z code=1 value=99
+SKIPPED gate=0 code=0 calls=0 value=xxxxxxxx
+CALLED gate=0 code=1 calls=1 value=99
+FORMAT checks=27
+*-* All Finished *-*

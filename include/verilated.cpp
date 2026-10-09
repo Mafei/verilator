@@ -2580,6 +2580,180 @@ IData VL_VALUEPLUSARGS_INW(int rbits, const std::string& ld, WDataOutP rwp) VL_M
     _vl_clean_inplace_w(rbits, rwp);
     return 1;
 }
+namespace {
+void vl_valueplusargs_unknown(const int bits, WDataOutP const valuep, WDataOutP const xzp,
+                              const bool isZ = false) {
+    if (isZ) {
+        VL_ZERO_W(bits, valuep);
+    } else {
+        VL_ALLONES_W(bits, valuep);
+    }
+    VL_ALLONES_W(bits, xzp);
+}
+
+void vl_valueplusargs_decimal(const int bits, const char* textp, WDataOutP const valuep,
+                              WDataOutP const xzp) {
+    const int words = VL_WORDS_I(bits);
+    bool allX = true;
+    bool allZ = true;
+    bool hasDigit = false;
+    for (const char* posp = textp; *posp; ++posp) {
+        if (*posp == '_') continue;
+        hasDigit = true;
+        const char digit = static_cast<char>(std::tolower(static_cast<unsigned char>(*posp)));
+        allX &= digit == 'x';
+        allZ &= digit == 'z';
+    }
+    if (hasDigit && (allX || allZ)) {
+        vl_valueplusargs_unknown(bits, valuep, xzp, allZ);
+        return;
+    }
+    if (!hasDigit) {
+        VL_ZERO_W(bits, valuep);
+        VL_ZERO_W(bits, xzp);
+        return;
+    }
+    if (*textp == '+') {
+        vl_valueplusargs_unknown(bits, valuep, xzp);
+        return;
+    }
+    const bool negative = *textp == '-';
+    if (negative) ++textp;
+    hasDigit = false;
+    VL_ZERO_W(bits, valuep);
+    VL_ZERO_W(bits, xzp);
+    for (const char* posp = textp; *posp; ++posp) {
+        if (*posp == '_') continue;
+        if (*posp < '0' || *posp > '9') {
+            vl_valueplusargs_unknown(bits, valuep, xzp);
+            return;
+        }
+        hasDigit = true;
+        QData carry = static_cast<IData>(*posp - '0');
+        for (int word = 0; word < words; ++word) {
+            const QData product = QData{valuep[word]} * 10 + carry;
+            valuep[word] = static_cast<EData>(product);
+            carry = product >> VL_EDATASIZE;
+        }
+    }
+    if (!hasDigit) {
+        vl_valueplusargs_unknown(bits, valuep, xzp);
+        return;
+    }
+    if (negative) VL_NEGATE_INPLACE_W(words, valuep);
+    _vl_clean_inplace_w(bits, valuep);
+}
+
+void vl_valueplusargs_setdigit(const int bits, WDataOutP const outp, const int lsb,
+                               const int digitBits, const EData digit) {
+    if (lsb >= bits) return;
+    const int word = VL_BITWORD_I(lsb);
+    const int shift = VL_BITBIT_I(lsb);
+    outp[word] |= digit << shift;
+    if (shift + digitBits > VL_EDATASIZE && word + 1 < VL_WORDS_I(bits)) {
+        outp[word + 1] |= digit >> (VL_EDATASIZE - shift);
+    }
+}
+
+void vl_valueplusargs_based(const int bits, const int digitBits, const char* textp,
+                            WDataOutP const valuep, WDataOutP const xzp) {
+    if (*textp == '_' || *textp == '+') {
+        vl_valueplusargs_unknown(bits, valuep, xzp);
+        return;
+    }
+    const bool negative = *textp == '-';
+    if (negative) ++textp;
+    const char* endp = textp + std::strlen(textp);
+    int lsb = 0;
+    char leading = '0';
+    bool hasDigit = false;
+    bool hasUnknown = false;
+    VL_ZERO_W(bits, valuep);
+    VL_ZERO_W(bits, xzp);
+    while (endp != textp) {
+        const char digit = static_cast<char>(std::tolower(static_cast<unsigned char>(*--endp)));
+        if (digit == '_') continue;
+        const bool isX = digit == 'x';
+        const bool isZ = digit == 'z';
+        const int number = digit >= '0' && digit <= '9'   ? digit - '0'
+                           : digit >= 'a' && digit <= 'f' ? digit - 'a' + 10
+                                                          : -1;
+        if (!isX && !isZ && (number < 0 || number >= (1 << digitBits))) {
+            vl_valueplusargs_unknown(bits, valuep, xzp);
+            return;
+        }
+        const EData mask = VL_MASK_I(digitBits);
+        vl_valueplusargs_setdigit(bits, valuep, lsb, digitBits,
+                                  isX   ? mask
+                                  : isZ ? 0
+                                        : static_cast<EData>(number));
+        if (isX || isZ) vl_valueplusargs_setdigit(bits, xzp, lsb, digitBits, mask);
+        hasDigit = true;
+        hasUnknown |= isX || isZ;
+        leading = digit;
+        // Once the output is full, still validate the remaining input without overflowing lsb.
+        if (lsb < bits) lsb += std::min(digitBits, bits - lsb);
+    }
+    if (!hasDigit || (negative && hasUnknown)) {
+        vl_valueplusargs_unknown(bits, valuep, xzp);
+        return;
+    }
+    if (lsb < bits && (leading == 'x' || leading == 'z')) {
+        const int first = VL_BITWORD_I(lsb);
+        for (int word = first; word < VL_WORDS_I(bits); ++word) {
+            const EData mask = word == first ? ~EData{0} << VL_BITBIT_I(lsb) : ~EData{0};
+            xzp[word] |= mask;
+            if (leading == 'x') valuep[word] |= mask;
+        }
+    }
+    if (negative) VL_NEGATE_INPLACE_W(VL_WORDS_I(bits), valuep);
+    _vl_clean_inplace_w(bits, valuep);
+    _vl_clean_inplace_w(bits, xzp);
+}
+}  // namespace
+
+IData VL_VALUEPLUSARGS_FOURSTATE_INW(int rbits, const std::string& format, WDataOutP valuep,
+                                     WDataOutP xzp) VL_MT_SAFE {
+    std::string prefix;
+    bool inPct = false;
+    char fmt = ' ';
+    for (const char* posp = format.c_str(); *posp; ++posp) {
+        if (!inPct && *posp == '%') {
+            inPct = true;
+        } else if (!inPct) {
+            prefix += *posp;
+        } else if (*posp == '0') {
+        } else if (*posp == '%') {
+            prefix += *posp;
+            inPct = false;
+        } else {
+            fmt = static_cast<char>(std::tolower(static_cast<unsigned char>(*posp)));
+            break;
+        }
+    }
+    // No-match and invalid-format paths preserve both output halves, including wide variables.
+    if (fmt != 'b' && fmt != 'd' && fmt != 'e' && fmt != 'f' && fmt != 'g' && fmt != 'h'
+        && fmt != 'o' && fmt != 's' && fmt != 'x') {
+        return 0;
+    }
+    const std::string& match = Verilated::threadContextp()->impp()->argPlusMatch(prefix.c_str());
+    if (match.empty()) return 0;
+    const char* const textp = match.c_str() + 1 + prefix.length();
+    switch (fmt) {
+    case 'd': vl_valueplusargs_decimal(rbits, textp, valuep, xzp); break;
+    case 'b': vl_valueplusargs_based(rbits, 1, textp, valuep, xzp); break;
+    case 'o': vl_valueplusargs_based(rbits, 3, textp, valuep, xzp); break;
+    case 'h':
+    case 'x': vl_valueplusargs_based(rbits, 4, textp, valuep, xzp); break;
+    default:
+        // String and real formats contain no four-state digits. Preserve their legacy conversion.
+        if (!VL_VALUEPLUSARGS_INW(rbits, format, valuep)) return 0;
+        VL_ZERO_W(rbits, xzp);
+        break;
+    }
+    return 1;
+}
+
 IData VL_VALUEPLUSARGS_INN(int, const std::string& ld, std::string& rdr) VL_MT_SAFE {
     std::string prefix;
     bool inPct = false;

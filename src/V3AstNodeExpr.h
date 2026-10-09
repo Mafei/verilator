@@ -3089,6 +3089,7 @@ class AstValuePlusArgs final : public AstNodeExpr {
     // Search expression. If nullptr then this is a $test$plusargs instead of $value$plusargs.
     // @astgen op1 := searchp : Optional[AstNodeExpr]
     // @astgen op2 := outp : AstNodeExpr // VarRef for result
+    // @astgen op3 := outxzp : Optional[AstNodeExpr] // Lowered four-state X/Z result
 public:
     AstValuePlusArgs(FileLine* fl, AstNodeExpr* searchp, AstNodeExpr* outp)
         : ASTGEN_SUPER_ValuePlusArgs(fl) {

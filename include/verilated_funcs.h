@@ -3735,6 +3735,33 @@ inline IData VL_VALUEPLUSARGS_INQ(int rbits, const std::string& ld, double& rdr)
 }
 extern IData VL_VALUEPLUSARGS_INN(int, const std::string& ld, std::string& rdr) VL_MT_SAFE;
 
+/// Read a plusarg into the value and X/Z halves of an integral variable.
+extern IData VL_VALUEPLUSARGS_FOURSTATE_INW(int rbits, const std::string& format, WDataOutP valuep,
+                                            WDataOutP xzp) VL_MT_SAFE;
+template <typename T>
+inline IData VL_VALUEPLUSARGS_FOURSTATE_INI(int rbits, const std::string& format, T& value,
+                                            T& xz) VL_MT_SAFE {
+    VlWide<2> valuew;
+    VlWide<2> xzw;
+    const IData got = VL_VALUEPLUSARGS_FOURSTATE_INW(rbits, format, valuew, xzw);
+    if (got) {
+        value = static_cast<T>(valuew[0]);
+        xz = static_cast<T>(xzw[0]);
+    }
+    return got;
+}
+inline IData VL_VALUEPLUSARGS_FOURSTATE_INQ(int rbits, const std::string& format, QData& value,
+                                            QData& xz) VL_MT_SAFE {
+    VlWide<2> valuew;
+    VlWide<2> xzw;
+    const IData got = VL_VALUEPLUSARGS_FOURSTATE_INW(rbits, format, valuew, xzw);
+    if (got) {
+        value = VL_SET_QW(valuew);
+        xz = VL_SET_QW(xzw);
+    }
+    return got;
+}
+
 uint64_t VL_MURMUR64_HASH(const char* key) VL_PURE;
 
 //======================================================================

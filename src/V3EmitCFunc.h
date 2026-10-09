@@ -1049,7 +1049,7 @@ public:
         displayNode(nodep, nullptr, nodep->text(), nodep->exprsp(), true);
     }
     void visit(AstValuePlusArgs* nodep) override {
-        putns(nodep, "VL_VALUEPLUSARGS_IN");
+        putns(nodep, nodep->outxzp() ? "VL_VALUEPLUSARGS_FOURSTATE_IN" : "VL_VALUEPLUSARGS_IN");
         emitIQW(nodep->outp());
         puts("(");
         puts(cvtToStr(nodep->outp()->widthMin()));
@@ -1058,6 +1058,10 @@ public:
         puts(", ");
         putbs("");
         iterateAndNextConstNull(nodep->outp());
+        if (nodep->outxzp()) {
+            putbs(", ");
+            iterateConst(nodep->outxzp());
+        }
         puts(")");
     }
     void visit(AstTestPlusArgs* nodep) override {

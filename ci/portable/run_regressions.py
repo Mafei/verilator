@@ -35,7 +35,10 @@ GROUPS = {
         "fourstate_redxor", "fourstate_replicate", "fourstate_sel", "fourstate_shift"
     ],
     "integration": ["fourstate_coverage"],
-    "finish_slice": ["finish_final_local", "finish_process_exit"],
+    "finish_slice": [
+        "finish_final_local", "finish_process_exit", "fourstate_finish_final",
+        "fourstate_finish_process"
+    ],
     "fourstate": [
         "fourstate_api", "fourstate_cond", "fourstate_countones", "fourstate_dynarray",
         "fourstate_format", "fourstate_format_bin", "fourstate_format_hex",
@@ -52,6 +55,10 @@ GROUPS = {
         "struct_array_assignment_delayed", "timing_event_time", "timing_fork_join",
         "timing_intra_assign", "timing_intra_assign_nolocalize", "timing_nba_1", "timing_nba_2",
         "timing_nba_loop", "timing_wait_fork_split", "unroll_delay"
+    ],
+    "plusargs": [
+        "fourstate_plusargs", "fourstate_plusargs_unsup", "sys_plusargs", "fourstate_sys_plusargs",
+        "fourstate_plusargs_format"
     ],
     "pull": ["fourstate_pull_release", "fourstate_pull_release_unsup"],
     "readmem": [
