@@ -17,6 +17,7 @@ base_verilator_flags = test.verilator_flags[:]
 profiles = [('reference', [])] if test.iv else [('two', []),
                                                 ('four', ['--fourstate', '-Wno-FUTURE'])]
 for profile, profile_flags in profiles:
+    test.mkdir_ok(base_dir + '/' + profile)
     for case in range(8):
         timed = case in (0, 2, 4, 6)
         control = case in (5, 7)
