@@ -40,9 +40,11 @@ endmodule
 module t;
   int final_seen = 0;
   bit finish_enable = 0;
+  bit loop_gate = 0;
 
   initial begin
     finish_enable = $test$plusargs("ENABLE_FINAL_FINISH");
+    loop_gate = $test$plusargs("RUN_EXIT_EDGE");
     #1;
     $display("FINALSTART case=%0d time=%0d", `FINAL_MULTI_CASE, $time);
     $finish(0);
@@ -118,5 +120,31 @@ module t;
       finish_leaf #(.ID(1), .STOP(0)) b();
       finish_leaf #(.ID(2), .STOP(0)) c();
     end
+`ifdef FINAL_MULTI_EXIT_EDGE
+    else if (`FINAL_MULTI_CASE == 6) begin : loop_exit
+      // The existing jump after finish exits the loop, not the whole final.
+      // Both finals have the same edge, regardless of which executes first.
+      final begin
+        while (loop_gate) begin
+          `checkd($time, 1);
+          $display("FINALMULTI case=6 tag=A time=%0d", $time);
+          $display("*-* All Finished *-*");
+          $finish(0);
+          break;
+        end
+        $display("UNREACHABLE loop-exit final A body tail");
+      end
+      final begin
+        while (loop_gate) begin
+          `checkd($time, 1);
+          $display("FINALMULTI case=6 tag=B time=%0d", $time);
+          $display("*-* All Finished *-*");
+          $finish(0);
+          break;
+        end
+        $display("UNREACHABLE loop-exit final B body tail");
+      end
+    end
+`endif
   endgenerate
 endmodule

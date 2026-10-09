@@ -281,18 +281,21 @@ LogicClasses gatherLogicClasses(AstNetlist* netlistp) {
 // termination local to one final body, and use a model variable to prevent any
 // later final body or scope dispatch during this invocation of evalFinal.
 class FinalFinishVisitor final : public VNVisitor {
+    // NODE STATE
+    //  AstFinish::user3() -> bool, final request and local exit inserted
+    const VNUser3InUse m_user3InUse;
     AstJumpBlock* const m_exitp;
     AstVarScope* const m_requestedp;
 
     void visit(AstFinish* nodep) override {
+        // Prepending a statement makes the iterator revisit this same finish.
+        if (nodep->user3SetOnce()) return;
         nodep->addHereThisAsNext(new AstAssign{
             nodep->fileline(), new AstVarRef{nodep->fileline(), m_requestedp, VAccess::WRITE},
             new AstConst{nodep->fileline(), AstConst::BitTrue{}}});
-        // The earlier sole-final path may already have a local exit. It must
-        // still request global final termination before taking that exit.
-        if (!VN_IS(nodep->nextp(), JumpGo)) {
-            nodep->addNextHere(new AstJumpGo{nodep->fileline(), m_exitp});
-        }
+        // A following jump can target a loop or named block, rather than this
+        // final body. Always leave this body; any old jump becomes unreachable.
+        nodep->addNextHere(new AstJumpGo{nodep->fileline(), m_exitp});
     }
     void visit(AstNode* nodep) override { iterateChildren(nodep); }
 

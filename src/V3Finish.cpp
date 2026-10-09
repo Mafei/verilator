@@ -71,11 +71,11 @@ class FinishTaskStateVisitor final : public VNVisitorConst {
     bool m_allowExit = false;  // Within one supported source body
 
     static bool eligibleTask(const AstCFunc* nodep) {
-        return nodep->sourceTask() && nodep->rtnTypeVoid() == "void" && !nodep->funcPublic()
-               && !nodep->dpiContext() && !nodep->dpiExportDispatcher() && !nodep->dpiExportImpl()
+        return nodep->sourceTask() && VN_IS(nodep->scopep()->modp(), Module)
+               && nodep->rtnTypeVoid() == "void" && !nodep->funcPublic() && !nodep->dpiContext()
+               && !nodep->dpiExportDispatcher() && !nodep->dpiExportImpl()
                && !nodep->dpiImportPrototype() && !nodep->dpiImportWrapper()
-               && !nodep->isConstructor() && !nodep->isDestructor() && !nodep->isVirtual()
-               && !VN_IS(nodep->scopep()->modp(), Class) && !VN_IS(nodep->scopep()->modp(), Iface);
+               && !nodep->isConstructor() && !nodep->isDestructor() && !nodep->isVirtual();
     }
     FinishVertex* getVertex(const AstNode* nodep) {
         const auto it = m_vertexps.find(nodep);
