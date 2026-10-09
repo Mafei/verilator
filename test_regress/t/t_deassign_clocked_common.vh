@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: CC0-1.0
 `timescale 1ps / 1ps
 
+`ifndef ONLY_TWOSTATE
 module retention #(
     parameter int WIDTH = 1,
     parameter bit USE_NBA = 0
@@ -88,6 +89,7 @@ module retention #(
     done = 1;
   end
 endmodule
+`endif
 
 module t;
   bit [31:0] checks = 0;
