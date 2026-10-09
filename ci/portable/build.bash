@@ -73,6 +73,7 @@ fi
 python3 ci/portable/test_flexfix.py
 python3 ci/portable/test_regression_results.py
 python3 ci/portable/test_icarus_acceptance.py
+python3 ci/portable/test_lint_status.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"

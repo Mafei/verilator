@@ -4,7 +4,10 @@
 ######################################################################
 
 import argparse
+import re
+import subprocess
 import sys
+from typing import Iterable
 
 SUPPRESSES = [
     "**********",
@@ -18,14 +21,20 @@ SUPPRESSES = [
 ######################################################################
 
 
-def process() -> None:
+def process(lines: Iterable[str]) -> int:
     anymsg = False
-    for line in sys.stdin:
+    suppressed_status = 0
+    for line in lines:
         line = line.rstrip()
         show = True
         for msg in SUPPRESSES:
             if msg in line:
                 show = False
+                diagnostic = re.match(r'^.+:\d+:\d+: ([A-Z]\d{4}): ', line)
+                if diagnostic and diagnostic.group(1) == 'E0602':
+                    suppressed_status |= 2
+                elif diagnostic and diagnostic.group(1) == 'W0611':
+                    suppressed_status |= 4
                 continue
         if show:
             print(line)
@@ -33,6 +42,22 @@ def process() -> None:
 
     if anymsg:
         sys.exit("%Error: See messages above")
+    return suppressed_status
+
+
+def run_pylint(command: list[str]) -> None:
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True) as child:
+        assert child.stdout is not None
+        try:
+            suppressed_status = process(child.stdout)
+        finally:
+            status = child.wait()
+    # Pylint reports a bitmask. Only diagnostics actually suppressed above may
+    # account for a nonzero exit; fatal, usage, signals and silent failures fail.
+    if status != suppressed_status:
+        sys.exit(f"%Error: Pylint exited with status {status}, expected {suppressed_status}"
+                 " from suppressed diagnostics")
 
 
 #######################################################################
@@ -52,9 +77,15 @@ SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 """)
 
 parser.add_argument('--debug', action='store_true', help='enable debug')
+parser.add_argument('--pylint', nargs=argparse.REMAINDER, help='pylint command and arguments')
 
 Args = parser.parse_args()
-process()
+if Args.pylint is not None:
+    if not Args.pylint:
+        parser.error('--pylint requires a command')
+    run_pylint(Args.pylint)
+else:
+    process(sys.stdin)
 
 ######################################################################
 # Local Variables:

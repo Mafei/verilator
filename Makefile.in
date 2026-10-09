@@ -654,10 +654,12 @@ lint-py:
 	$(MAKE) -k lint-py-mypy lint-py-mypy-none lint-py-pylint lint-py-pylint-tests lint-py-ruff
 
 lint-py-mypy:
+	status=0; \
 	for filename in `fgrep -l '# mypy' $(PY_PROGRAMS)`; do \
 		echo "$(MYPY) $(MYPY_FLAGS) $$filename" ; \
-		$(MYPY) $(MYPY_FLAGS) $$filename ; \
-	done
+		$(MYPY) $(MYPY_FLAGS) $$filename || status=1; \
+	done; \
+	exit $$status
 
 lint-py-mypy-none:
 	@echo "mypy not checking: " `fgrep -L '# mypy' $(PY_PROGRAMS)`
@@ -666,7 +668,7 @@ lint-py-pylint:
 	$(PYLINT) $(PYLINT_FLAGS) $(PY_PROGRAMS)
 
 lint-py-pylint-tests:
-	$(PYLINT) $(PYLINT_TEST_FLAGS) $(PY_TEST_FILES) | $(PYTHON3) nodist/lint_py_test_filter
+	$(PYTHON3) nodist/lint_py_test_filter --pylint $(PYLINT) $(PYLINT_TEST_FLAGS) $(PY_TEST_FILES)
 
 lint-py-ruff:
 	$(RUFF) $(RUFF_FLAGS) $(PY_PROGRAMS)
