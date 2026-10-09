@@ -76,7 +76,7 @@ module t;
   endtask
 
   initial begin
-    finish_enable = !$test$plusargs("DISABLE_TASK_FINISH");
+    finish_enable = int'(!$test$plusargs("DISABLE_TASK_FINISH"));
     $display("CALLSTART case=%0d time=%0d", `FINISH_CALL_CASE, $time);
     if (`FINISH_CALL_CASE == 0 || `FINISH_CALL_CASE == 1) stop_plain();
     else if (`FINISH_CALL_CASE == 2) outer_plain();
