@@ -25,6 +25,7 @@ class AstNetlist;
 class V3Finish final {
 public:
     static void finishAll(AstNetlist* nodep) VL_MT_DISABLED;
+    static void finishFinalLocalAll(AstNetlist* nodep) VL_MT_DISABLED;
 };
 
 #endif  // Guard
