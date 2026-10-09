@@ -1407,6 +1407,7 @@ class TaskVisitor final : public VNVisitor {
         cfuncp->dontCombine(!nodep->dpiImport());
         cfuncp->entryPoint(!nodep->dpiImport());
         cfuncp->funcPublic(nodep->taskPublic());
+        cfuncp->sourceTask(nodep->verilogTask());
         cfuncp->dpiContext(nodep->dpiContext());
         cfuncp->dpiExportImpl(nodep->dpiExport());
         cfuncp->dpiImportWrapper(nodep->dpiImport());

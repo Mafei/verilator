@@ -277,7 +277,40 @@ LogicClasses gatherLogicClasses(AstNetlist* netlistp) {
 //============================================================================
 // Simple ordering in source order
 
-void orderSequentially(AstCFunc* funcp, const LogicByScope& lbs) {
+// Eligible source finals were qualified before inlining and elaboration. Keep
+// termination local to one final body, and use a model variable to prevent any
+// later final body or scope dispatch during this invocation of evalFinal.
+class FinalFinishVisitor final : public VNVisitor {
+    AstJumpBlock* const m_exitp;
+    AstVarScope* const m_requestedp;
+
+    void visit(AstFinish* nodep) override {
+        nodep->addHereThisAsNext(new AstAssign{
+            nodep->fileline(), new AstVarRef{nodep->fileline(), m_requestedp, VAccess::WRITE},
+            new AstConst{nodep->fileline(), AstConst::BitTrue{}}});
+        // The earlier sole-final path may already have a local exit. It must
+        // still request global final termination before taking that exit.
+        if (!VN_IS(nodep->nextp(), JumpGo)) {
+            nodep->addNextHere(new AstJumpGo{nodep->fileline(), m_exitp});
+        }
+    }
+    void visit(AstNode* nodep) override { iterateChildren(nodep); }
+
+public:
+    FinalFinishVisitor(AstJumpBlock* exitp, AstVarScope* requestedp)
+        : m_exitp{exitp}
+        , m_requestedp{requestedp} {
+        iterateAndNextNull(exitp->stmtsp());
+    }
+};
+
+AstIf* guardFinal(FileLine* flp, AstVarScope* requestedp, AstNode* bodyp) {
+    return new AstIf{flp, new AstLogNot{flp, new AstVarRef{flp, requestedp, VAccess::READ}},
+                     bodyp};
+}
+
+void orderSequentially(AstCFunc* funcp, const LogicByScope& lbs,
+                       AstVarScope* finalRequestedp = nullptr) {
     // Create new subfunc for scope
     const auto createNewSubFuncp = [&](AstScope* const scopep) {
         const string subName{funcp->name() + "__" + scopep->nameDotless()};
@@ -288,7 +321,9 @@ void orderSequentially(AstCFunc* funcp, const LogicByScope& lbs) {
         subFuncp->slow(funcp->slow());
         scopep->addBlocksp(subFuncp);
         // Call it from the top function
-        funcp->addStmtsp(util::callVoidFunc(subFuncp));
+        AstNode* callp = util::callVoidFunc(subFuncp);
+        if (finalRequestedp) callp = guardFinal(scopep->fileline(), finalRequestedp, callp);
+        funcp->addStmtsp(callp);
         return subFuncp;
     };
     const VNUser1InUse user1InUse;  // AstScope -> AstCFunc: the sub-function for the scope
@@ -305,6 +340,16 @@ void orderSequentially(AstCFunc* funcp, const LogicByScope& lbs) {
             if (AstNodeProcedure* const procp = VN_CAST(logicp, NodeProcedure)) {
                 if (AstNode* bodyp = procp->stmtsp()) {
                     bodyp->unlinkFrBackWithNext();
+                    if (finalRequestedp) {
+                        AstFinal* const finalp = VN_CAST(procp, Final);
+                        UASSERT_OBJ(finalp, procp, "Non-final in final scheduling");
+                        if (finalp->finishExitEligible()) {
+                            auto* const exitp = new AstJumpBlock{procp->fileline(), bodyp};
+                            FinalFinishVisitor{exitp, finalRequestedp};
+                            bodyp = exitp;
+                        }
+                        bodyp = guardFinal(procp->fileline(), finalRequestedp, bodyp);
+                    }
                     // If the process is suspendable, we need a separate function (a coroutine)
                     if (procp->isSuspendable()) {
                         funcp->slow(false);
@@ -397,7 +442,21 @@ void createPostponed(AstNetlist* netlistp, const LogicClasses& logicClasses) {
 
 void createFinal(AstNetlist* netlistp, const LogicClasses& logicClasses) {
     AstCFunc* const funcp = netlistp->evalFuncp(VEval::FINAL);
-    orderSequentially(funcp, logicClasses.m_final);
+    bool hasEligibleFinish = false;
+    logicClasses.m_final.foreachLogic([&](AstNode* nodep) {
+        if (const AstFinal* const finalp = VN_CAST(nodep, Final)) {
+            hasEligibleFinish |= finalp->finishExitEligible();
+        }
+    });
+    AstVarScope* requestedp = nullptr;
+    if (hasEligibleFinish) {
+        requestedp = netlistp->topScopep()->createTemp("__VfinalFinishRequested", 1);
+        requestedp->varp()->noReset(true);
+        funcp->addStmtsp(new AstAssign{
+            funcp->fileline(), new AstVarRef{funcp->fileline(), requestedp, VAccess::WRITE},
+            new AstConst{funcp->fileline(), AstConst::BitFalse{}}});
+    }
+    orderSequentially(funcp, logicClasses.m_final, requestedp);
     util::splitCheck(funcp);
 }
 
