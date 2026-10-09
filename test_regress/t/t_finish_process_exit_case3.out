@@ -1,0 +1,4 @@
+PARAMS output=72 inout=84
+BEFORE case=3 time=0 entered=1
+FINAL case=3 checks=11 entered=1 output=19 inout=23 result=29 calls=0 next=0 sum=0
+*-* All Finished *-*

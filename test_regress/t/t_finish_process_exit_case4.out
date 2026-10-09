@@ -1,0 +1,3 @@
+BEFORE case=4 time=0 entered=1
+FINAL case=4 checks=10 entered=1 output=19 inout=23 result=29 calls=1 next=0 sum=0
+*-* All Finished *-*
