@@ -542,6 +542,7 @@ class AstCFunc final : public AstNode {
     bool m_keepIfEmpty : 1;  // Keep declaration and definition separate, even if empty
     bool m_slow : 1;  // Slow routine, called once or just at init time
     bool m_funcPublic : 1;  // From user public task/function
+    bool m_sourceTask : 1;  // Body originates in a user-declared SystemVerilog task
     bool m_isConstructor : 1;  // Is C class constructor
     bool m_isDestructor : 1;  // Is C class destructor
     bool m_isMethod : 1;  // Is inside a class definition
@@ -578,6 +579,7 @@ public:
         m_keepIfEmpty = false;
         m_slow = false;
         m_funcPublic = false;
+        m_sourceTask = false;
         m_isConstructor = false;
         m_isDestructor = false;
         m_isMethod = true;
@@ -606,6 +608,7 @@ public:
         const AstCFunc* const asamep = VN_DBG_AS(samep, CFunc);
         return ((isTrace() == asamep->isTrace()) && (rtnTypeVoid() == asamep->rtnTypeVoid())
                 && (argTypes() == asamep->argTypes()) && isLoose() == asamep->isLoose()
+                && sourceTask() == asamep->sourceTask()
                 && (!(dpiImportPrototype() || dpiExportImpl()) || name() == asamep->name()));
     }
     //
@@ -634,6 +637,8 @@ public:
     void slow(bool flag) { m_slow = flag; }
     bool funcPublic() const { return m_funcPublic; }
     void funcPublic(bool flag) { m_funcPublic = flag; }
+    bool sourceTask() const { return m_sourceTask; }
+    void sourceTask(bool flag) { m_sourceTask = flag; }
     void argTypes(const string& str) { m_argTypes = str; }
     string argTypes() const { return m_argTypes; }
     void ifdef(const string& str) { m_ifdef = str; }
@@ -3396,10 +3401,19 @@ public:
     ASTGEN_MEMBERS_AstAlwaysReactive;
 };
 class AstFinal final : public AstNodeProcedure {
+    bool m_finishExitEligible = false;  // Original body is safe for local finish exits
+
 public:
     AstFinal(FileLine* fl, AstNode* stmtsp)
         : ASTGEN_SUPER_Final(fl, stmtsp) {}
     ASTGEN_MEMBERS_AstFinal;
+    bool finishExitEligible() const { return m_finishExitEligible; }
+    void finishExitEligible(bool flag) { m_finishExitEligible = flag; }
+    bool sameNode(const AstNode* samep) const override {
+        return finishExitEligible() == VN_DBG_AS(samep, Final)->finishExitEligible();
+    }
+    void dump(std::ostream& str = std::cout) const override;
+    void dumpJson(std::ostream& str = std::cout) const override;
 };
 class AstInitial final : public AstNodeProcedure {
 public:

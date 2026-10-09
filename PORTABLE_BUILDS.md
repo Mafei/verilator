@@ -94,6 +94,29 @@ Published artifacts are development snapshots, not releases.
 
 ## SystemVerilog capability checks
 
+The `fourstate-finish-boundaries-20261009` candidate retains all 159 previously
+selected drivers and adds two independent propagation drivers. Their same-source
+Icarus reference covers multiple finals, generated and instantiated finals,
+normal final execution after the initial finish, untaken finish branches,
+non-inlined tasks, nested calls and output/inout copyback. Each new driver runs
+both two-state and four-state profiles in the portable workflow.
+
+Eligible call-free final bodies record a model-local finish request before
+exiting their source body. Remaining final bodies and scope dispatches consult
+that flag. It resets once per generated `evalFinal` invocation and does not
+change the runtime ABI or coroutine protocol. Original qualification is retained
+through elaboration. Final bodies containing calls or local declarations remain
+outside this local-exit implementation.
+
+Separate internal module task calls propagate termination after returning or
+resuming, before output/inout copyback. This applies to direct statement calls
+from supported initial/always processes and internal task chains. Public, DPI,
+virtual, class and interface methods, fork branches, expression lambdas and tasks
+reachable from those boundaries or from final remain outside this extension.
+The old strict NBA/postponed finish expectation is retained as an unresolved
+ordering assumption: the existing Icarus12 reference also executes the strobe
+and commits `q=1`. This candidate does not cancel NBA work to satisfy that oracle.
+
 The `fourstate-sv-20261008` candidate adds four capability regressions and
 nineteen inherited four-state regressions to the upstream candidate's 48 checks,
 for 71 explicitly selected checks. The next bounded follow-up adds fifteen

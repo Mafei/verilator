@@ -791,6 +791,7 @@ void AstCFunc::dump(std::ostream& str) const {
     if (isUnlikely()) str << " [UNL]";
     if (isVirtual()) str << " [VIRT]";
     if (isCoroutine()) str << " [CORO]";
+    if (sourceTask()) str << " [STASK]";
     if (needProcess()) str << " [NPRC]";
     if (entryPoint()) str << " [ENTRY]";
     if (noLife()) str << " [NOLIFE]";
@@ -815,6 +816,7 @@ void AstCFunc::dumpJson(std::ostream& str) const {
     dumpJsonBoolFuncIf(str, isUnlikely);
     dumpJsonBoolFuncIf(str, isVirtual);
     dumpJsonBoolFuncIf(str, isCoroutine);
+    dumpJsonBoolFuncIf(str, sourceTask);
     dumpJsonBoolFuncIf(str, needProcess);
     dumpJsonBoolFuncIf(str, noLife);
     dumpJsonStr(str, "isConst", isConst().ascii());
@@ -3089,6 +3091,16 @@ void AstNodeProcedure::dump(std::ostream& str) const {
 void AstNodeProcedure::dumpJson(std::ostream& str) const {
     dumpJsonBoolFuncIf(str, isSuspendable);
     dumpJsonBoolFuncIf(str, needProcess);
+    dumpJsonGen(str);
+}
+void AstFinal::dump(std::ostream& str) const {
+    Super::dump(str);
+    if (finishExitEligible()) str << " [FINISH_EXIT]";
+}
+void AstFinal::dumpJson(std::ostream& str) const {
+    dumpJsonBoolFuncIf(str, isSuspendable);
+    dumpJsonBoolFuncIf(str, needProcess);
+    dumpJsonBoolFuncIf(str, finishExitEligible);
     dumpJsonGen(str);
 }
 const char* AstNodeQuadop::broken() const {
