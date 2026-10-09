@@ -97,46 +97,44 @@ class FinalLocalBodyVisitor final : public VNVisitorConst {
     bool m_blocked = false;
     bool m_hasFinish = false;
 
-    void visit(const AstFinish*) override { m_hasFinish = true; }
-    void visit(const AstNodeFTaskRef*) override { m_blocked = true; }
-    void visit(const AstNodeCCall*) override { m_blocked = true; }
-    void visit(const AstNodeFTask*) override { m_blocked = true; }
-    void visit(const AstCFunc*) override { m_blocked = true; }
-    void visit(const AstCExpr*) override { m_blocked = true; }
-    void visit(const AstCExprUser*) override { m_blocked = true; }
-    void visit(const AstCStmt*) override { m_blocked = true; }
-    void visit(const AstCStmtUser*) override { m_blocked = true; }
-    void visit(const AstCMethodHard*) override { m_blocked = true; }
-    void visit(const AstCAwait*) override { m_blocked = true; }
-    void visit(const AstCLocalScope*) override { m_blocked = true; }
-    void visit(const AstDelay*) override { m_blocked = true; }
-    void visit(const AstEventControl*) override { m_blocked = true; }
-    void visit(const AstWait*) override { m_blocked = true; }
-    void visit(const AstWaitFork*) override { m_blocked = true; }
-    void visit(const AstFork*) override { m_blocked = true; }
-    void visit(const AstExprStmt*) override { m_blocked = true; }
-    void visit(const AstWith*) override { m_blocked = true; }
-    void visit(const AstNewCopy*) override { m_blocked = true; }
-    void visit(const AstNewDynamic*) override { m_blocked = true; }
-    void visit(const AstUnlinkedRef*) override { m_blocked = true; }
-    void visit(const AstParseRef*) override { m_blocked = true; }
-    void visit(const AstMemberSel*) override { m_blocked = true; }
-    void visit(const AstSystemT*) override { m_blocked = true; }
-    void visit(const AstSystemF*) override { m_blocked = true; }
-    void visit(const AstVar*) override { m_blocked = true; }
-    void visit(const AstNodeVarRef* nodep) override {
+    void visit(AstFinish*) override { m_hasFinish = true; }
+    void visit(AstNodeFTaskRef*) override { m_blocked = true; }
+    void visit(AstNodeCCall*) override { m_blocked = true; }
+    void visit(AstNodeFTask*) override { m_blocked = true; }
+    void visit(AstCFunc*) override { m_blocked = true; }
+    void visit(AstCExpr*) override { m_blocked = true; }
+    void visit(AstCExprUser*) override { m_blocked = true; }
+    void visit(AstCStmt*) override { m_blocked = true; }
+    void visit(AstCStmtUser*) override { m_blocked = true; }
+    void visit(AstCMethodHard*) override { m_blocked = true; }
+    void visit(AstCAwait*) override { m_blocked = true; }
+    void visit(AstCLocalScope*) override { m_blocked = true; }
+    void visit(AstDelay*) override { m_blocked = true; }
+    void visit(AstEventControl*) override { m_blocked = true; }
+    void visit(AstWait*) override { m_blocked = true; }
+    void visit(AstWaitFork*) override { m_blocked = true; }
+    void visit(AstFork*) override { m_blocked = true; }
+    void visit(AstExprStmt*) override { m_blocked = true; }
+    void visit(AstWith*) override { m_blocked = true; }
+    void visit(AstNewCopy*) override { m_blocked = true; }
+    void visit(AstNewDynamic*) override { m_blocked = true; }
+    void visit(AstUnlinkedRef*) override { m_blocked = true; }
+    void visit(AstParseRef*) override { m_blocked = true; }
+    void visit(AstMemberSel*) override { m_blocked = true; }
+    void visit(AstSystemT*) override { m_blocked = true; }
+    void visit(AstSystemF*) override { m_blocked = true; }
+    void visit(AstVar*) override { m_blocked = true; }
+    void visit(AstNodeVarRef* nodep) override {
         // Unresolved references can remain in dead code before elaboration.
         const AstVar* const varp = nodep->varp();
         const AstBasicDType* const dtypep
             = varp ? VN_CAST(varp->subDTypep(), BasicDType) : nullptr;
         if (!dtypep || !dtypep->isIntegralOrPacked()) m_blocked = true;
     }
-    void visit(const AstNode* nodep) override { iterateChildrenConst(nodep); }
+    void visit(AstNode* nodep) override { iterateChildrenConst(nodep); }
 
 public:
-    explicit FinalLocalBodyVisitor(const AstFinal* nodep) {
-        iterateAndNextConstNull(nodep->stmtsp());
-    }
+    explicit FinalLocalBodyVisitor(AstFinal* nodep) { iterateAndNextConstNull(nodep->stmtsp()); }
     bool eligible() const { return m_hasFinish && !m_blocked; }
 };
 
@@ -144,12 +142,12 @@ class FinalLocalScopeVisitor final : public VNVisitorConst {
     const AstNodeModule* m_modp = nullptr;
     const AstNode* m_parentp = nullptr;
     const AstNodeModule* m_finalModp = nullptr;
-    const AstFinal* m_finalp = nullptr;
+    AstFinal* m_finalp = nullptr;
     bool m_finalDirect = false;
     unsigned m_topCount = 0;
     unsigned m_finalCount = 0;
 
-    void visit(const AstNodeModule* nodep) override {
+    void visit(AstNodeModule* nodep) override {
         VL_RESTORER(m_modp);
         VL_RESTORER(m_parentp);
         m_modp = nodep;
@@ -157,20 +155,20 @@ class FinalLocalScopeVisitor final : public VNVisitorConst {
         if (nodep->isTop() && !VN_IS(nodep, Package) && !VN_IS(nodep, Class)) ++m_topCount;
         iterateChildrenConst(nodep);
     }
-    void visit(const AstFinal* nodep) override {
+    void visit(AstFinal* nodep) override {
         ++m_finalCount;
         m_finalp = nodep;
         m_finalModp = m_modp;
         m_finalDirect = m_parentp == m_modp;
     }
-    void visit(const AstNode* nodep) override {
+    void visit(AstNode* nodep) override {
         VL_RESTORER(m_parentp);
         m_parentp = nodep;
         iterateChildrenConst(nodep);
     }
 
 public:
-    explicit FinalLocalScopeVisitor(const AstNetlist* nodep) { iterateConst(nodep); }
+    explicit FinalLocalScopeVisitor(AstNetlist* nodep) { iterateConst(nodep); }
     const AstFinal* eligibleFinalp() const {
         // A source module with one final can have multiple runtime instances.
         // A generate can also clone one source final during elaboration. Require
