@@ -9,13 +9,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
   stale:
+    if: ${{ github.repository == 'verilator/verilator' }}
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+      pull-requests: write
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93  # v11.0.0
