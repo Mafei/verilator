@@ -118,9 +118,17 @@ class FinalLocalBodyVisitor final : public VNVisitorConst {
     void visit(const AstWith*) override { m_blocked = true; }
     void visit(const AstNewCopy*) override { m_blocked = true; }
     void visit(const AstNewDynamic*) override { m_blocked = true; }
+    void visit(const AstUnlinkedRef*) override { m_blocked = true; }
+    void visit(const AstParseRef*) override { m_blocked = true; }
+    void visit(const AstMemberSel*) override { m_blocked = true; }
+    void visit(const AstSystemT*) override { m_blocked = true; }
+    void visit(const AstSystemF*) override { m_blocked = true; }
     void visit(const AstVar*) override { m_blocked = true; }
     void visit(const AstNodeVarRef* nodep) override {
-        const AstBasicDType* const dtypep = VN_CAST(nodep->varp()->subDTypep(), BasicDType);
+        // Unresolved references can remain in dead code before elaboration.
+        const AstVar* const varp = nodep->varp();
+        const AstBasicDType* const dtypep
+            = varp ? VN_CAST(varp->subDTypep(), BasicDType) : nullptr;
         if (!dtypep || !dtypep->isIntegralOrPacked()) m_blocked = true;
     }
     void visit(const AstNode* nodep) override { iterateChildrenConst(nodep); }
@@ -134,31 +142,42 @@ public:
 
 class FinalLocalScopeVisitor final : public VNVisitorConst {
     const AstNodeModule* m_modp = nullptr;
+    const AstNode* m_parentp = nullptr;
     const AstNodeModule* m_finalModp = nullptr;
     const AstFinal* m_finalp = nullptr;
+    bool m_finalDirect = false;
     unsigned m_topCount = 0;
     unsigned m_finalCount = 0;
 
     void visit(const AstNodeModule* nodep) override {
         VL_RESTORER(m_modp);
+        VL_RESTORER(m_parentp);
         m_modp = nodep;
-        if (VN_IS(nodep, Module) && nodep->isTop()) ++m_topCount;
+        m_parentp = nodep;
+        if (nodep->isTop() && !VN_IS(nodep, Package) && !VN_IS(nodep, Class)) ++m_topCount;
         iterateChildrenConst(nodep);
     }
     void visit(const AstFinal* nodep) override {
         ++m_finalCount;
         m_finalp = nodep;
         m_finalModp = m_modp;
+        m_finalDirect = m_parentp == m_modp;
     }
-    void visit(const AstNode* nodep) override { iterateChildrenConst(nodep); }
+    void visit(const AstNode* nodep) override {
+        VL_RESTORER(m_parentp);
+        m_parentp = nodep;
+        iterateChildrenConst(nodep);
+    }
 
 public:
     explicit FinalLocalScopeVisitor(const AstNetlist* nodep) { iterateConst(nodep); }
     const AstFinal* eligibleFinalp() const {
         // A source module with one final can have multiple runtime instances.
-        // Only the sole source top proves one instance without new provenance.
-        if (m_topCount != 1 || m_finalCount != 1 || !VN_IS(m_finalModp, Module)
-            || !m_finalModp->isTop()) {
+        // A generate can also clone one source final during elaboration. Require
+        // a direct item of the sole source top to prove one runtime instance.
+        const AstModule* const modp = VN_CAST(m_finalModp, Module);
+        if (m_topCount != 1 || m_finalCount != 1 || !m_finalDirect || !modp || !modp->isTop()
+            || modp->isProgram() || modp->isChecker()) {
             return nullptr;
         }
         return FinalLocalBodyVisitor{m_finalp}.eligible() ? m_finalp : nullptr;
