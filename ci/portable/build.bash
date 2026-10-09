@@ -126,8 +126,8 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-# Preserve the original 132 drivers and run the 16 AMD repair drivers separately.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair || regress_status=$?
+# Preserve the previous 148 drivers and run the two clocked deassign drivers separately.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1
@@ -135,7 +135,7 @@ fi
 python3 ci/portable/check_results.py
 python3 ci/portable/log_evidence.py results
 # Official inputs and expectations stay pinned and unchanged. All 18 execute;
-# the documented 16 applicable cases have a separate gate from the 148 above.
+# the documented 16 applicable cases have a separate gate from the 150 above.
 icarus_head=$(git rev-parse HEAD)
 icarus_run_status=0
 icarus_check_status=0

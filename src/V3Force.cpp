@@ -161,7 +161,6 @@ private:
     ForceHelperVarsByVar& m_forceHelperVarsByVar;
     std::vector<VarForceInfo> m_varInfos;  // Indexed by stable variable ID
     std::unordered_map<AstVarScope*, int> m_varToId;
-    std::unordered_set<AstVar*> m_clockedWrites;
     std::unordered_map<AstVar*, std::vector<ForceInfo*>> m_rhsDepToForces;
     std::unordered_map<AstScope*, ScopeVarCache> m_scopeVarCaches;
     bool m_doingAssign = false;  // If true, we're processing procedural continuous assign
@@ -535,9 +534,6 @@ public:
         return info;
     }
 
-    void markClockedWrite(AstVar* varp) { m_clockedWrites.insert(varp); }
-    bool hasClockedWrite(AstVar* varp) const { return m_clockedWrites.count(varp); }
-
     bool doingAssign() const { return m_doingAssign; }
 
     const VarForceInfo* getVarInfo(AstVarScope* vscp) const {
@@ -901,7 +897,6 @@ static void splitDeassign(AstDeassign* nodep) {
 
 class ForceDiscoveryVisitor final : public VNVisitorConst {
     ForceState& m_state;
-    bool m_inClockedActive = false;
 
     void buildForceableUnpackedArray(AstVarScope* const nodep,
                                      AstUnpackArrayDType* const arrDtypep) {
@@ -980,21 +975,6 @@ class ForceDiscoveryVisitor final : public VNVisitorConst {
         m_state.addForceAssignment(forcedVarp, lhsVarRefp->varScopep(), rhsExprp, nodep,
                                    rangeInfo.m_rangeLsb, rangeInfo.m_rangeMsb, rangeInfo.m_padLsb,
                                    rangeInfo.m_padMsb, rangeInfo.m_hasArraySel);
-    }
-
-    void visit(AstAssign* nodep) override {
-        if (m_state.doingAssign() && m_inClockedActive) {
-            if (AstVarRef* const lhsp = VN_CAST(nodep->lhsp(), VarRef)) {
-                m_state.markClockedWrite(lhsp->varp());
-            }
-        }
-        iterateChildrenConst(nodep);
-    }
-
-    void visit(AstActive* nodep) override {
-        VL_RESTORER(m_inClockedActive);
-        m_inClockedActive = nodep->hasClocked();
-        iterateChildrenConst(nodep);
     }
 
     void visit(AstVarScope* nodep) override {
@@ -1274,12 +1254,9 @@ class ForceConvertVisitor final : public VNVisitor {
 
         // IEEE 1800-2023 10.6.2: When released, if the variable is not continuously driven,
         // it maintains its current value until the next procedural assignment.
-        const bool fullBitwiseRelease
-            = ForceState::isBitwiseDType(releasedVarp) && !rangeInfo.m_hasArraySel && !selp
-              && rangeInfo.m_rangeLsb == 0 && rangeInfo.m_rangeMsb == releasedVarp->width() - 1;
-        if (!releasedVarp->isContinuously()
-            && !(m_state.doingAssign() && m_state.hasClockedWrite(releasedVarp)
-                 && fullBitwiseRelease)) {
+        // An eligible procedural writer may not have executed while the override was active.
+        // Preserve the effective value regardless of whether the variable has a clocked writer.
+        if (!releasedVarp->isContinuously()) {
             // Member/struct paths on non-bitwise types do not lower to a plain VarRef/bit range,
             // so their current forced value is recovered via the same synthetic path index.
             // if (!continuously_driven) lhs = force_read_current(lhs_path);
