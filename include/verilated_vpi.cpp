@@ -312,19 +312,19 @@ public:
 };
 
 class VerilatedVpioRange final : public VerilatedVpio {
-    const VerilatedRange* const m_rangep;
+    const VerilatedRange m_range;
 
 public:
-    explicit VerilatedVpioRange(const VerilatedRange* rangep)
-        : m_rangep{rangep} {}
+    explicit VerilatedVpioRange(const VerilatedRange& range)
+        : m_range{range} {}
     ~VerilatedVpioRange() override = default;
     // cppcheck-suppress duplInheritedMember
     static VerilatedVpioRange* castp(vpiHandle h) {
         return dynamic_cast<VerilatedVpioRange*>(reinterpret_cast<VerilatedVpio*>(h));
     }
     uint32_t type() const override { return vpiRange; }
-    uint32_t size() const override { return m_rangep->elements(); }
-    const VerilatedRange* rangep() const override { return m_rangep; }
+    uint32_t size() const override { return m_range.elements(); }
+    const VerilatedRange* rangep() const override { return &m_range; }
 };
 
 class VerilatedVpioRangeIter final : public VerilatedVpio {
@@ -347,9 +347,7 @@ public:
             delete this;  // IEEE 37.2.2 vpi_scan at end does a vpi_release_handle
             return nullptr;
         }
-        VerilatedRange* const rangep = new VerilatedRange{*m_iter};
-        ++m_iter;
-        return ((new VerilatedVpioRange{rangep})->castVpiHandle());
+        return ((new VerilatedVpioRange{*m_iter++})->castVpiHandle());
     }
 };
 
@@ -998,7 +996,7 @@ class VerilatedVpiPutHolder final {
         char init = 0;  // to ensure trivial constructor
         std::string str;
         std::vector<s_vpi_vecval> vec;
-        ~Storage() noexcept {/* handled by VerilatedVpiPutHolder */};
+        ~Storage() noexcept { /* handled by VerilatedVpiPutHolder */ };
     } m_storage{};
 
 public:
