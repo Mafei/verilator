@@ -15,7 +15,7 @@ test.compile(verilator_flags2=[
     '--binary', '--fourstate', '--trace', '--debug-check', '-Wno-FUTURE', '-Wno-fatal'
 ])
 test.execute()
-test.file_grep(test.run_log_filename, r'Case item checks: 31')
+test.file_grep(test.run_log_filename, r'^Case item checks: (\d+)$', 31)
 # Literal histories at physical timestamps; these do not infer event-region order.
 expected = {
     'branch_hit': [(0, '0'), (1, '1'), (2, '0'), (4, '1'), (5, '0'), (10, '1'), (11, '0'),

@@ -18,7 +18,6 @@ module t;
   logic [1:0] selector;
   logic [6:0] word = 7'b1010010;
   logic [2:0] index;
-  logic [1:0] selectors[4] = '{2'b10, 2'b11, 2'b1x, 2'b1z};
   bit [3:0] expected_hits[4] = '{4'b0010, 4'b0001, 4'b0100, 4'b0100};
   bit branch_hit;
   bit unknown_hit;
@@ -56,7 +55,12 @@ module t;
         3: guard_value = 1'bz;
       endcase
       for (int sample = 0; sample < 4; sample ++) begin
-        selector = selectors[sample];
+        case (sample)
+          0: selector = 2'b10;
+          1: selector = 2'b11;
+          2: selector = 2'b1x;
+          3: selector = 2'b1z;
+        endcase
         #1;
         `checkh(branch_hit, expected_hits[mode][sample])
       end
