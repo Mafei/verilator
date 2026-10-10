@@ -546,6 +546,15 @@ value and mask remain available, and X/Z bits become zero. The regression keeps
 automatic splitting enabled. Complex lvalues retain their existing temporary
 path, while constant output connections retain their error handling.
 
+The same driver also detects an independent runtime defect after port conversion:
+packed variable splitting creates every fragment as a variable, losing a wire's
+declared net kind. Undriven upper fragments then initialize to X rather than Z.
+Packed splitting now preserves the original net kind, while variable fragments
+keep their existing variable kind. A minimized partial continuous assignment
+fails at runtime with default splitting on the earlier candidate and passes with
+splitting disabled. The correction applies to packed splitting; unpacked splitting
+and its temporary variables are outside this change.
+
 The pinned Icarus implementation directly runs event-controlled assignment
 callbacks in its [event handling code](https://github.com/steveicarus/iverilog/blob/f45ffabed3212a106f01cb362ef42c5d293f4513/vvp/event.cc),
 and [elaboration converts eligible variables to unresolved wires](https://github.com/steveicarus/iverilog/blob/f45ffabed3212a106f01cb362ef42c5d293f4513/elab_net.cc).
