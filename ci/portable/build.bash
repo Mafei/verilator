@@ -134,8 +134,8 @@ if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     exit 1
 fi
 python3 ci/portable/check_results.py
-python3 ci/portable/log_evidence.py semantic-waves
 python3 ci/portable/log_evidence.py results
+python3 ci/portable/log_evidence.py semantic-waves
 # Official inputs and expectations stay pinned and unchanged. All 18 execute;
 # the documented 16 applicable cases have a separate gate from the groups above.
 icarus_head=$(git rev-parse HEAD)
