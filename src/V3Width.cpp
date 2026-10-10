@@ -573,6 +573,14 @@ class WidthVisitor final : public VNVisitor {
         nodep->dtypeSetUInt64();  // A pointer, but not that it matters
     }
 
+    // Whether nodep, an override's value, is an untyped pattern, or a conditional of such
+    static bool isOverridePattern(const AstNode* nodep) {
+        if (const AstPattern* const patternp = VN_CAST(nodep, Pattern)) {
+            return !patternp->childDTypep();
+        }
+        const AstCond* const condp = VN_CAST(nodep, Cond);
+        return condp && isOverridePattern(condp->thenp()) && isOverridePattern(condp->elsep());
+    }
     void visit(AstCond* nodep) override {
         // op = cond ? expr1 : expr2
         // See IEEE-2012 11.4.11 and Table 11-21.
@@ -581,6 +589,32 @@ class WidthVisitor final : public VNVisitor {
         //   Signed: Output signed iff RHS & THS signed  (presumed, not in IEEE)
         //   Real: Output real if either expression is real, non-real argument gets converted
         assertAtExpr(nodep);
+        if (m_inParamOverride) {
+            // Choosing between override patterns, so type and fold only the condition, then
+            // keep the pattern it picks, which the specialized module types as a lone one
+            const int errors = V3Error::errorCount();
+            {
+                VL_RESTORER(m_inParamOverride);
+                m_inParamOverride = false;
+                iterateCheckBool(nodep, "Conditional Test", nodep->condp(), BOTH);
+                V3Const::constifyParamsEdit(nodep->condp());  // Reports a non-constant
+            }
+            const AstConst* const constp = VN_CAST(nodep->condp(), Const);
+            const bool known = constp && !constp->num().isFourState();
+            // Folding reports a non-constant, but leaves x or z, even inside a conditional
+            if (!known && V3Error::errorCount() == errors) {
+                nodep->condp()->v3warn(E_UNSUPPORTED,
+                                       "Unsupported: Parameter override '?:' with assignment"
+                                       " patterns and a condition without a known value.");
+            }
+            // After an error, keep the first pattern, so that no conditional is left untyped
+            AstNodeExpr* const keepp
+                = (known && constp->isZero() ? nodep->elsep() : nodep->thenp())->unlinkFrBack();
+            nodep->replaceWith(keepp);
+            VL_DO_DANGLING(pushDeletep(nodep), nodep);
+            userIterate(keepp, WidthVP{SELF, BOTH}.p());
+            return;
+        }
         if (m_vup->prelim()) {  // First stage evaluation
             // Just once, do the conditional, expect one bit out.
             iterateCheckBool(nodep, "Conditional Test", nodep->condp(), BOTH);
@@ -1539,105 +1573,13 @@ class WidthVisitor final : public VNVisitor {
         }
     }
 
-    bool isCheckedPackedSelect(AstNodePreSel* nodep) const {
-        // Generate-only evaluation and inactive or uninstantiated template modules do not
-        // have the final packed dimensions needed for a range warning.
-        return !m_doGenerate && !(m_modep && (m_modep->dead() || m_modep->parameterizedTemplate()))
-               && VN_IS(nodep->fromp()->dtypep()->skipRefp(), PackArrayDType);
-    }
-    static bool packedSelectIndexValue(const AstConst* nodep, int& value) {
-        if (!nodep || nodep->num().isFourState()) return false;
-        if (nodep->num().width() > 32) {
-            // A wide index may still be a zero or sign extension of a 32-bit coordinate.
-            // Leave other wide values to the normal selection width checks.
-            const bool sign = nodep->dtypep()->isSigned() && nodep->num().bitIs1(31);
-            if (!nodep->dtypep()->isSigned() && nodep->num().bitIs1(31)) return false;
-            for (int bit = 32; bit < nodep->num().width(); ++bit) {
-                if (nodep->num().bitIs1(bit) != sign) return false;
-            }
-            value = static_cast<int>(nodep->num().edataWord(0));
-            return true;
-        }
-        value = nodep->dtypep()->isSigned() && nodep->num().width() < 32
-                    ? nodep->num().toSInt()
-                    : static_cast<int>(nodep->num().toUInt());
-        return true;
-    }
-    bool warnPackedSelectRange(AstNodePreSel* nodep, const VNumRange& selected) const {
-        const AstPackArrayDType* const dtypep
-            = VN_AS(nodep->fromp()->dtypep()->skipRefp(), PackArrayDType);
-        const VNumRange range = dtypep->declRange();
-        if (selected.lo() < range.lo() || selected.hi() > range.hi()) {
-            nodep->v3warn(SELRANGE, "Selection index out of range: "
-                                        << (selected.lo() == selected.hi()
-                                                ? std::to_string(selected.lo())
-                                                : std::to_string(selected.hi()) + ":"
-                                                      + std::to_string(selected.lo()))
-                                        << " outside " << range.hi() << ":" << range.lo());
-            return true;
-        }
-        return false;
-    }
-    static AstNodeExpr* packedSelectIndexp(AstNodePreSel* nodep) {
-        if (AstSelBit* const bitp = VN_CAST(nodep, SelBit)) return bitp->bitp();
-        if (AstSelExtract* const extractp = VN_CAST(nodep, SelExtract)) return extractp->leftp();
-        if (AstSelPlus* const plusp = VN_CAST(nodep, SelPlus)) return plusp->bitp();
-        return VN_AS(nodep, SelMinus)->bitp();
-    }
-    bool checkPackedSelectRange(AstNodePreSel* nodep) const {
-        if (!isCheckedPackedSelect(nodep)) return false;
-        // Try folding every index after its width check. Dynamic references stay
-        // nonconstant; V3WidthSel lowers the resulting expression as usual.
-        V3Const::constifyParamsNoWarnEdit(packedSelectIndexp(nodep));
-        int first = 0;
-        bool valid = packedSelectIndexValue(VN_CAST(packedSelectIndexp(nodep), Const), first);
-        int last = first;
-        if (AstSelExtract* const extractp = VN_CAST(nodep, SelExtract)) {
-            V3Const::constifyParamsNoWarnEdit(extractp->rightp());
-            valid = packedSelectIndexValue(VN_CAST(extractp->rightp(), Const), last) && valid;
-        } else if (AstSelPlus* const plusp = VN_CAST(nodep, SelPlus)) {
-            V3Const::constifyParamsNoWarnEdit(plusp->widthp());
-            int width = 0;
-            valid = packedSelectIndexValue(VN_CAST(plusp->widthp(), Const), width) && valid;
-            if (valid) {
-                valid = width > 0 && first <= std::numeric_limits<int>::max() - (width - 1);
-                if (valid) last = first + width - 1;
-            }
-        } else if (AstSelMinus* const minusp = VN_CAST(nodep, SelMinus)) {
-            V3Const::constifyParamsNoWarnEdit(minusp->widthp());
-            int width = 0;
-            valid = packedSelectIndexValue(VN_CAST(minusp->widthp(), Const), width) && valid;
-            if (valid) {
-                valid = width > 0 && first >= std::numeric_limits<int>::min() + (width - 1);
-                if (valid) last = first - width + 1;
-            }
-        }
-        return valid && warnPackedSelectRange(nodep, VNumRange{first, last});
-    }
-    AstNode* widthPackedSelect(AstNodePreSel* nodep) const {
-        const bool warned = checkPackedSelectRange(nodep);
-        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
-        if (warned) {
-            // The transformed AstSel uses flattened bit offsets. Keep its later range
-            // check from reporting the same selection in misleading bit units.
-            if (AstSel* const bitSelp = VN_CAST(selp, Sel)) {
-                FileLine* const flp = new FileLine{bitSelp->fileline()};
-                flp->warnOff(V3ErrorCode::SELRANGE, true);
-                bitSelp->fileline(flp);
-            }
-        }
-        return selp;
-    }
     void visit(AstSelBit* nodep) override {
         // Just a quick check as after V3Param these nodes instead are AstSel's
         userIterateAndNext(nodep->fromp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->bitp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->thsp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->attrp(), WidthVP{SELF, BOTH}.p());
-        // Packed-array indices become flattened bit offsets in V3WidthSel. A constant index
-        // above the declared range (or below it for ascending ranges) may wrap when that
-        // offset is narrowed, before the later AstSel range checks can see it.
-        AstNode* const selp = widthPackedSelect(nodep);
+        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
         if (selp != nodep) {
             VL_DANGLING(nodep);
             userIterate(selp, m_vup);
@@ -1651,7 +1593,7 @@ class WidthVisitor final : public VNVisitor {
         userIterateAndNext(nodep->leftp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->rightp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->attrp(), WidthVP{SELF, BOTH}.p());
-        AstNode* const selp = widthPackedSelect(nodep);
+        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
         if (selp != nodep) {
             nodep = nullptr;
             userIterate(selp, m_vup);
@@ -1664,7 +1606,7 @@ class WidthVisitor final : public VNVisitor {
         userIterateAndNext(nodep->bitp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->widthp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->attrp(), WidthVP{SELF, BOTH}.p());
-        AstNode* const selp = widthPackedSelect(nodep);
+        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
         if (selp != nodep) {
             nodep = nullptr;
             userIterate(selp, m_vup);
@@ -1677,7 +1619,7 @@ class WidthVisitor final : public VNVisitor {
         userIterateAndNext(nodep->bitp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->widthp(), WidthVP{CONTEXT_DET, PRELIM}.p());  // FINAL in AstSel
         userIterateAndNext(nodep->attrp(), WidthVP{SELF, BOTH}.p());
-        AstNode* const selp = widthPackedSelect(nodep);
+        AstNode* const selp = V3Width::widthSelNoIterEdit(nodep);
         if (selp != nodep) {
             nodep = nullptr;
             userIterate(selp, m_vup);
@@ -6003,6 +5945,9 @@ class WidthVisitor final : public VNVisitor {
             }
             return;
         }
+        // Any other pattern is typed here, so its members aren't override patterns
+        VL_RESTORER(m_inParamOverride);
+        m_inParamOverride = false;
         if (nodep->didWidthAndSet()) return;
         UINFO(9, "PATTERN " << nodep);
         if (nodep->childDTypep()) {  // data_type '{ pattern }
@@ -7568,7 +7513,7 @@ class WidthVisitor final : public VNVisitor {
         if (nodep->modVarp() && nodep->modVarp()->isGParam()) {
             // An override pattern is left for the specialized module to type
             VL_RESTORER(m_inParamOverride);
-            m_inParamOverride = VN_IS(nodep->exprp(), Pattern);
+            m_inParamOverride = isOverridePattern(nodep->exprp());
             userIterateChildren(nodep, WidthVP{SELF, BOTH}.p());
         } else if (!m_paramsOnly) {
             if (!nodep->modVarp()->didWidth()) {

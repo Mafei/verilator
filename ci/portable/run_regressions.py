@@ -81,6 +81,13 @@ GROUPS = {
         "param_type", "paramgraph_iface_template_mismatch", "process_kill", "sampled_sensitivity",
         "struct_pat", "struct_unpacked_clean", "struct_unpacked_init_param", "timing_always",
         "timing_intra_assign_func"
+    ],
+    # Official changes through c265bd444cd9307fad42f03b45068d7662c3adfc.
+    "upstream_sync_20261010": [
+        "case_cond_item", "clocking_ddr", "clocking_timing_off", "cover_sequence_sampled",
+        "covergroup_iff", "fourstate_case_cond", "lint_multidriven_clocking_bad", "math_countbits",
+        "mem_bound_bad", "opt_split_no", "packed_array_index_wide_signed", "param_cond_pattern",
+        "param_cond_pattern_bad", "param_cond_pattern_unsup", "select_bad_range", "vpi_multidim"
     ]
 }
 
