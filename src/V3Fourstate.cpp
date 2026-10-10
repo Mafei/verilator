@@ -4123,11 +4123,14 @@ class FourstateVisitor final : public VNVisitor {
         AstVar* const varp = nodep->modVarp();
         if (!(varp->fourstateComplementp() || varp->isFourstateComplement())) {
             if (AstNodeExpr* const exprp = VN_CAST(nodep->exprp(), NodeExpr)) {
-                if (!(VN_IS(exprp, NodeVarRef) || VN_IS(exprp, Const))
-                    && varp->direction().isOutput()) {
-                    // Output lvalues need a procedural statement to own index captures.
-                    // Connect the child to a simple temporary, then copy its output to
-                    // the original lvalue whenever the value or selection changes.
+                const bool exprFourstate = isFourstate(exprp);
+                if (varp->direction().isOutput() && !VN_IS(exprp, Const)
+                    && (!VN_IS(exprp, NodeVarRef)
+                        || (needsSplitting(varp->dtypep()) && !exprFourstate))) {
+                    // Complex output lvalues need a statement to own index captures.
+                    // Four-state outputs also need both halves before conversion to a
+                    // two-state target; its constant zero mask is not an output lvalue.
+                    // Connect through a formal-type temporary and copy to the target.
                     FileLine* const flp = nodep->fileline();
                     AstVar* const tmpVarp
                         = new AstVar{flp, VVarType::PORT, m_tmpNames.get(nodep), varp->dtypep()};
@@ -4145,7 +4148,6 @@ class FourstateVisitor final : public VNVisitor {
                     iterate(nodep);
                     return;
                 }
-                const bool exprFourstate = isFourstate(exprp);
                 if (!(needsSplitting(varp->dtypep()) || exprFourstate)) {
                     iterateChildren(nodep);
                     return;

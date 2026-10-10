@@ -127,13 +127,14 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-# Preserve all 161 existing drivers and add this sync's upstream coverage.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 || regress_status=$?
+# Preserve all 177 existing drivers and add independent Icarus semantics controls.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1
 fi
 python3 ci/portable/check_results.py
+python3 ci/portable/log_evidence.py semantic-waves
 python3 ci/portable/log_evidence.py results
 # Official inputs and expectations stay pinned and unchanged. All 18 execute;
 # the documented 16 applicable cases have a separate gate from the groups above.

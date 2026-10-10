@@ -514,3 +514,52 @@ regression uses literal mathematical bounds through 95-bit index expressions;
 Icarus 12 truncates indices in the positive and negative `2**40` value
 classes, so the common reference selection explicitly omits those classes
 and is not a full-domain certificate.
+
+## Event-controlled NBA and packed-port controls
+
+The `fourstate-icarus-semantics-20261010` candidate keeps the 177 selected
+drivers from `fourstate-sync-20261010` and adds three independent controls,
+for 180 selected drivers. It freezes the same upstream commits and preserves
+the original Icarus 18-case inputs, expectations and complete failure list.
+The original strict finish selection, including case5, also remains unchanged.
+
+The two event-controlled NBA drivers exercise two-state and four-state RHS and
+target-index capture with changing values, concatenations, ascending and nonzero
+ranges, and 33/65-bit targets. Source assertions separately observe the triggering
+caller's continuation and its module `#0` continuation. Postponed `$strobe`
+output and physical-time VCD histories are checked independently; same-timestamp
+VCD changes do not establish simulation-region ordering.
+
+The packed-port driver separates explicit nets from explicit variables and
+typedef-wrapped packed structures. It checks partially connected or assigned
+values, unwritten bits, X/Z data and two-state coercion. The NBA controls pass
+on the frozen `e301de40` baseline and provide compatibility coverage. The packed
+driver also exposes a separate port-conversion defect: automatic splitting of
+a bit vector can reduce a partial output connection to a simple two-state
+variable. The old lowering then connects the child's X/Z output to a constant
+zero mask and reports `PORTSHORT`. The same minimized input fails at 7/8/33/65/95
+bits with automatic splitting enabled and compiles with `-fno-var-split`.
+
+Four-state output conversion now uses a temporary of the formal port type before
+copying to a two-state target through the existing assignment conversion. Both
+value and mask remain available, and X/Z bits become zero. The regression keeps
+automatic splitting enabled. Complex lvalues retain their existing temporary
+path, while constant output connections retain their error handling.
+
+The pinned Icarus implementation directly runs event-controlled assignment
+callbacks in its [event handling code](https://github.com/steveicarus/iverilog/blob/f45ffabed3212a106f01cb362ef42c5d293f4513/vvp/event.cc),
+and [elaboration converts eligible variables to unresolved wires](https://github.com/steveicarus/iverilog/blob/f45ffabed3212a106f01cb362ef42c5d293f4513/elab_net.cc).
+These paths explain the observed tool differences; they are not a language
+standard. The [current IEEE publication page](https://standards.ieee.org/ieee/1800/7743/)
+is readable, but its linked Get-program clause text was inaccessible during
+this investigation. The scheduling and default-value interpretation remains
+explicitly an inference pending access to that primary normative text.
+Neither original failing expectation is rewritten, and no NBA scheduling or
+variable initialization is changed to make those expectations pass.
+
+Portable CI includes all three controls in its original result gate. It also
+prints their complete public VCD bytes and SHA256 values under a combined
+64 KiB limit, allowing independent waveform inspection from the raw job log
+when artifact downloads are unavailable. Missing, empty or oversized waveform
+evidence fails that step. Portable SDK artifacts retain their existing format;
+the final review evidence bundle is a separate, compact artifact.

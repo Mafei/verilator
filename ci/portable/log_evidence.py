@@ -70,15 +70,56 @@ def results_evidence(root):
     print("OUTPUT_SHA256SUMS_BEGIN\n" + contents + "OUTPUT_SHA256SUMS_END")
 
 
+def semantic_wave_evidence(root):
+    """Print all bytes of the three public semantic fixtures within a hard budget."""
+    fixtures = ("t_fourstate_nba_event_concat", "t_fourstate_packed_port_kind",
+                "t_timing_nba_event_concat")
+    base = root / "test_regress/obj_vlt"
+    budget = 64 * 1024
+    total = 0
+    records = []
+    for fixture in fixtures:
+        directory = base / fixture
+        if directory.is_symlink() or not directory.resolve().is_relative_to(root.resolve()):
+            raise ValueError("Symlinked semantic fixture: " + fixture)
+        paths = sorted(directory.glob("*.vcd"))
+        if not paths:
+            raise FileNotFoundError("Missing semantic VCD: " + fixture)
+        for path in paths:
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("Nonregular semantic VCD: " + str(path))
+            size = path.stat().st_size
+            if not size or total + size > budget:
+                raise ValueError("Empty or oversized semantic VCD collection")
+            with path.open("rb") as stream:
+                raw = stream.read(budget - total + 1)
+            total += len(raw)
+            if len(raw) != size or total > budget:
+                raise ValueError("Empty or oversized semantic VCD collection")
+            records.append({
+                "fixture": fixture,
+                "path": str(path.relative_to(root)),
+                "bytes": len(raw),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "contents_utf8": raw.decode("utf-8")
+            })
+    evidence = {"total_bytes": total, "budget_bytes": budget, "records": records}
+    (root / "out").mkdir(exist_ok=True)
+    (root / "out/semantic-wave-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
+    print("SEMANTIC_WAVE_BYTES " + json.dumps(evidence))
+
+
 def main():
     """Report the compiler after building or the outputs after validation."""
-    if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results"):
-        raise SystemExit("Usage: log_evidence.py compiler|results")
+    if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results", "semantic-waves"):
+        raise SystemExit("Usage: log_evidence.py compiler|results|semantic-waves")
     root = Path.cwd()
     if sys.argv[1] == "compiler":
         compiler_evidence(root)
-    else:
+    elif sys.argv[1] == "results":
         results_evidence(root)
+    else:
+        semantic_wave_evidence(root)
 
 
 if __name__ == "__main__":
