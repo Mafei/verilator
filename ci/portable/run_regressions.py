@@ -88,7 +88,9 @@ GROUPS = {
         "covergroup_iff", "fourstate_case_cond", "lint_multidriven_clocking_bad", "math_countbits",
         "mem_bound_bad", "opt_split_no", "packed_array_index_wide_signed", "param_cond_pattern",
         "param_cond_pattern_bad", "param_cond_pattern_unsup", "select_bad_range", "vpi_multidim"
-    ]
+    ],
+    "icarus_semantics":
+    ["fourstate_nba_event_concat", "fourstate_packed_port_kind", "timing_nba_event_concat"]
 }
 
 

@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -36,6 +36,9 @@ jobs:
             logs/
             test_regress/obj_vlt/*/*.log
             test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
+            test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
+            test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
+            test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
           if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
@@ -87,4 +90,7 @@ jobs:
             rocky-image.txt
             test_regress/obj_vlt/*/*.log
             test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
+            test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
+            test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
+            test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
           if-no-files-found: error

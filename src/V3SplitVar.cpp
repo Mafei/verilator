@@ -1124,7 +1124,10 @@ class SplitPackedVarVisitor final : public VNVisitor, public SplitVarImpl {
             }
             dtypep->rangep(new AstRange{
                 varp->fileline(), VNumRange{newvar.msb(), newvar.lsb(), basicp->ascending()}});
-            newvar.varp(new AstVar{varp->fileline(), VVarType::VAR, name, dtypep});
+            // Undriven fragments of a net retain their net initialization semantics.
+            newvar.varp(new AstVar{varp->fileline(),
+                                   varp->isNet() ? varp->varType() : VVarType{VVarType::VAR}, name,
+                                   dtypep});
             newvar.varp()->lifetime(varp->lifetime());
             newvar.varp()->propagateAttrFrom(varp);
             newvar.varp()->funcLocal(varp->isFuncLocal() || varp->isFuncReturn());
