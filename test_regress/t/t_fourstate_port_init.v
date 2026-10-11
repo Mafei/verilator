@@ -44,8 +44,11 @@ module port_init_case #(parameter int WIDTH = 7) (output bit done = 0);
   logic [2*WIDTH-1:0] net_logic;
   var logic [2*WIDTH-1:0] net_var;
   wire logic [2*WIDTH-1:0] net_wire;
+  // Ascending packed ranges are deliberate controls.
+  // verilator lint_off ASCRANGE
   logic [0:2*WIDTH-1] ascending_default;
   wire logic [0:2*WIDTH-1] ascending_net;
+  // verilator lint_on ASCRANGE
   logic [2*WIDTH-1:0] output_unconnected_default;
   wire logic [2*WIDTH-1:0] output_unconnected_net;
   int unsigned checks = 0;
@@ -119,8 +122,10 @@ endmodule
 
 module port_init_ascending #(parameter int WIDTH = 7) (
     input wire [WIDTH-1:0] data,
+    // verilator lint_off ASCRANGE
     output logic [0:2*WIDTH-1] default_out,
     output wire logic [0:2*WIDTH-1] net_out
+    // verilator lint_on ASCRANGE
 );
   assign default_out[WIDTH:2*WIDTH-1] = data;
   assign net_out[WIDTH:2*WIDTH-1] = data;

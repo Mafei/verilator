@@ -14,7 +14,7 @@ from fourstate_resolve_oracle import check_trace
 test.scenarios('vlt')
 test.compile(verilator_flags2=[
     '--binary', '--fourstate', '--trace', '--trace-depth', '2', '--debug-check', '-Wno-FUTURE',
-    '-Wno-ASCRANGE', '--output-split', '10000', '--output-split-cfuncs', '100'
+    '--output-split', '10000', '--output-split-cfuncs', '100'
 ])
 test.execute()
 test.file_grep(test.run_log_filename, r'^Partial output initialization checks: (\d+)$', 320)

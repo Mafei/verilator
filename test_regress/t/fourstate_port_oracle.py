@@ -6,7 +6,6 @@
 # or the Perl Artistic License Version 2.0.
 # SPDX-FileCopyrightText: 2026 Mafei
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
-
 """Character-vector port oracles independent of generated value/XZ halves."""
 
 from fourstate_resolve_oracle import add, append
@@ -32,17 +31,18 @@ def port_init():
         scope = f't.w{width}.'
         add(expected, widths, scope + 'data', width, '0' * width)
         ports = {
-            **{f'{kind}_{target}': default
-               for kind, default in (('default', 'x'), ('explicit', 'x'),
-                                     ('implicit', 'z'), ('net', 'z'))
-               for target in ('logic', 'var', 'wire')},
+            **{
+                f'{kind}_{target}': default
+                for kind, default in (('default', 'x'), ('explicit', 'x'), ('implicit', 'z'), ('net', 'z'))
+                for target in ('logic', 'var', 'wire')
+            },
             'ascending_default': 'x',
             'ascending_net': 'z',
         }
         for name, default in ports.items():
             add(expected, widths, scope + name, 2 * width, default * width + '0' * width)
-        for name, default in (('output_unconnected_default', 'x'),
-                              ('output_unconnected_net', 'z')):
+        for name, default in (('output_unconnected_default', 'x'), ('output_unconnected_net',
+                                                                    'z')):
             add(expected, widths, scope + name, 2 * width, default * (2 * width))
         add(expected, widths, scope + 'checks', 32, '0' * 32)
         add(expected, widths, scope + 'done', 1, '0')
@@ -66,8 +66,13 @@ def port_partial():
         scope = f't.w{width}.'
         cut = width // 2
         add(expected, widths, scope + 'data', width, '0' * width)
-        ports = {'output_default': 'x', 'output_explicit_var': 'x', 'output_net': 'z',
-                 'variable_to_net': 'x', 'net_to_variable': 'z'}
+        ports = {
+            'output_default': 'x',
+            'output_explicit_var': 'x',
+            'output_net': 'z',
+            'variable_to_net': 'x',
+            'net_to_variable': 'z'
+        }
         for name, default in ports.items():
             add(expected, widths, scope + name, 2 * width, default * width + '0' * width)
         packed = {'concat_variable': 'x', 'concat_explicit_var': 'x', 'concat_net': 'z'}
@@ -85,8 +90,7 @@ def port_partial():
             for name, default in ports.items():
                 append(expected, scope + name, timestamp, default * width + value)
             for name, default in packed.items():
-                low = (default * (width - 1) + value[0] + default * width
-                       + value[1:] + default)
+                low = (default * (width - 1) + value[0] + default * width + value[1:] + default)
                 append(expected, scope + name, timestamp, default * (3 * width) + low)
             for name, default in (('cross_variable', 'x'), ('cross_net', 'z')):
                 vector = default * (width - cut) + value[:cut] + default * cut + value[cut:]
@@ -95,4 +99,27 @@ def port_partial():
         append(expected, scope + 'done', 6000, '1')
     for phase in range(5):
         append(expected, 't.total_checks', (phase + 2) * 1000, format(76 * (phase + 1), '032b'))
+    return expected, widths
+
+
+def port_static():
+    expected = {}
+    widths = {}
+    add(expected, widths, 't.total_checks', 32, '0' * 32)
+    for width in WIDTHS:
+        scope = f't.w{width}.'
+        add(expected, widths, scope + 'data', width, '0' * width)
+        add(expected, widths, scope + 'static_value', width, 'x' * width)
+        add(expected, widths, scope + 'checks', 32, '0' * 32)
+        add(expected, widths, scope + 'done', 1, '0')
+        append(expected, scope + 'checks', 1000, format(1, '032b'))
+        for phase, value in enumerate(_values(width)):
+            timestamp = (2 * phase + 1) * 1000
+            append(expected, scope + 'data', timestamp, value)
+            append(expected, scope + 'static_value', timestamp + 1000, value)
+            append(expected, scope + 'checks', timestamp + 2000, format(phase + 2, '032b'))
+        append(expected, scope + 'done', 11000, '1')
+    append(expected, 't.total_checks', 1000, format(4, '032b'))
+    for phase in range(5):
+        append(expected, 't.total_checks', (2 * phase + 3) * 1000, format(4 * (phase + 2), '032b'))
     return expected, widths

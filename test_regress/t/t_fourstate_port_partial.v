@@ -47,7 +47,10 @@ module port_partial_case #(
   wire logic [2*WIDTH-1:0] variable_to_net;
   var logic [2*WIDTH-1:0] net_to_variable;
   word_t [1:0][3:1] concat_variable;
+  // This receiving array deliberately uses ascending packed dimensions.
+  // verilator lint_off ASCRANGE
   var word_t [0:1][1:3] concat_explicit_var;
+  // verilator lint_on ASCRANGE
   wire word_t [1:0][3:1] concat_net;
   logic [2*WIDTH-1:0] cross_variable;
   wire logic [2*WIDTH-1:0] cross_net;

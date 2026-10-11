@@ -93,7 +93,7 @@ class LinkResolveVisitor final : public VNVisitor {
         if (v3Global.opt.fourstate() && nodep->varType() == VVarType::PORT) {
             // Resolve omitted kinds while subroutine ownership is still available.
             const bool isNetPort = !m_ftaskp && !nodep->isRef() && !nodep->isConstRef()
-                                   && !(nodep->isOutput() && nodep->isDeclTyped());
+                                   && !(nodep->direction().isOutput() && nodep->isDeclTyped());
             nodep->varType(isNetPort ? VVarType::WIRE : VVarType::VAR);
         }
         if (nodep->isSigModPublic()) {
