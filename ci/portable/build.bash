@@ -128,8 +128,8 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-# Preserve all 180 existing drivers and gate the eight newly synchronized official tests.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 || regress_status=$?
+# Preserve all 188 existing drivers and gate three new strict-repair regressions.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1
@@ -152,7 +152,7 @@ finish9_run_status=0
 finish9_check_status=0
 python3 ci/portable/finish_acceptance.py run --expected-head "$icarus_head" || finish9_run_status=$?
 python3 ci/portable/finish_acceptance.py check --expected-head "$icarus_head" || finish9_check_status=$?
-printf 'ORIGINAL_ACCEPTANCE_EXITS applicable18_run=%s applicable16_check=%s full18_check=%s finish9_run=%s finish9_check=%s\n' \
+printf 'ORIGINAL_ACCEPTANCE_EXITS icarus18_run=%s applicable16_check=%s full18_check=%s finish9_run=%s finish9_check=%s\n' \
     "$icarus_run_status" "$icarus_check_status" "$icarus_full18_status" "$finish9_run_status" "$finish9_check_status"
 python3 ci/portable/log_evidence.py results
 if [[ $icarus_run_status != 0 || $icarus_check_status != 0 || $finish9_run_status != 0 || $finish9_check_status != 0 ]]; then
