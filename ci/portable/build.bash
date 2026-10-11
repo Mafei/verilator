@@ -74,6 +74,7 @@ python3 ci/portable/test_flexfix.py
 python3 ci/portable/test_regression_results.py
 python3 ci/portable/test_icarus_acceptance.py
 python3 ci/portable/test_lint_status.py
+python3 ci/portable/test_finish_acceptance.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
@@ -143,8 +144,18 @@ icarus_run_status=0
 icarus_check_status=0
 python3 ci/portable/icarus_acceptance.py run --expected-head "$icarus_head" || icarus_run_status=$?
 python3 ci/portable/icarus_acceptance.py check --expected-head "$icarus_head" || icarus_check_status=$?
+icarus_full18_status=0
+python3 ci/portable/icarus_acceptance.py check --full18 --expected-head "$icarus_head" || icarus_full18_status=$?
+# Preserve the original finish9 criterion, including case5's q=0 expectation.
+# Collect every profile before propagating its strict output failure.
+finish9_run_status=0
+finish9_check_status=0
+python3 ci/portable/finish_acceptance.py run --expected-head "$icarus_head" || finish9_run_status=$?
+python3 ci/portable/finish_acceptance.py check --expected-head "$icarus_head" || finish9_check_status=$?
+printf 'ORIGINAL_ACCEPTANCE_EXITS applicable18_run=%s applicable16_check=%s full18_check=%s finish9_run=%s finish9_check=%s\n' \
+    "$icarus_run_status" "$icarus_check_status" "$icarus_full18_status" "$finish9_run_status" "$finish9_check_status"
 python3 ci/portable/log_evidence.py results
-if [[ $icarus_run_status != 0 || $icarus_check_status != 0 ]]; then
-    echo "Official Icarus validation failed: run=$icarus_run_status, check=$icarus_check_status"
+if [[ $icarus_run_status != 0 || $icarus_check_status != 0 || $finish9_run_status != 0 || $finish9_check_status != 0 ]]; then
+    echo "Original acceptance validation failed: Icarus-run=$icarus_run_status, applicable16=$icarus_check_status, full18=$icarus_full18_status, finish9-run=$finish9_run_status, finish9-check=$finish9_check_status"
     exit 1
 fi
