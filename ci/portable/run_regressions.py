@@ -89,6 +89,12 @@ GROUPS = {
         "mem_bound_bad", "opt_split_no", "packed_array_index_wide_signed", "param_cond_pattern",
         "param_cond_pattern_bad", "param_cond_pattern_unsup", "select_bad_range", "vpi_multidim"
     ],
+    # Official changes through 87f76381f71c411811942d29ed4fb5877b623b5b.
+    "upstream_sync_20261011": [
+        "always_reorder_class", "opt_decompose_packed", "opt_decompose_unpacked",
+        "opt_decompose_packed_attr_bad", "opt_decompose_unpacked_attr_bad",
+        "sys_readmem_descend", "vpi_packed_struct", "vpi_struct_members_many"
+    ],
     "icarus_semantics":
     ["fourstate_nba_event_concat", "fourstate_packed_port_kind", "timing_nba_event_concat"]
 }
