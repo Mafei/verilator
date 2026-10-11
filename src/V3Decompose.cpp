@@ -390,6 +390,11 @@ class DecomposeRecord final : public VNVisitorConst, public DecomposeBase {
 
     // Reason why the properties of the variable prevent splitting, nullptr if none
     static const char* cannotSplitKindReason(const AstVar* varp) {
+        // Decomposition does not rebuild the value/mask pairing used by four-state reset
+        // and tracing. Keep both halves intact until component pairs can be reconstructed.
+        if (varp->fourstateComplementp() || varp->isFourstateComplement()) {
+            return "it is a four-state value or unknown-bit mask";
+        }
         if (!varp->isSignal() && !varp->isTemp()) return "it is not a regular signal or temporary";
         if (varp->isConst()) return "it is a constant";
         if (varp->isPrimaryIO()) return "it is a primary input or output";
