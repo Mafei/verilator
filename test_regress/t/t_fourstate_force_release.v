@@ -12,7 +12,7 @@
 // verilog_format: on
 
 module t;
-  wire [3:0] done;
+  wire [ 3:0] done;
   wire [31:0] total_checks = w7.checks + w33.checks + w65.checks + w95.checks;
   force_release #(7) w7 (done[0]);
   force_release #(33) w33 (done[1]);

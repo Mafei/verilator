@@ -1,5 +1,18 @@
 # Experimental four-state builds
 
+The `fourstate-strict-fix-20261011` candidate starts from the PR17 commit
+`eca3e7779126a81b297a7af2af6ecc26240ccae2`. It adds a single-wait lowering for
+blocking four-state event assignments and releases both halves of forced
+packed variables. Three independent regressions extend the existing 188
+drivers to 191, covering invocation-local RHS capture, target-index timing,
+7/31/65/95-bit event assignments, and 7/33/65/95-bit packed force/release.
+The tests check complete signal histories as well as simulation assertions.
+Packed unions and general resolved-net forces retain their unsupported
+boundaries. Original Icarus18 and finish9 inputs and expectations stay unchanged.
+The finish9 strict gate reports a nonzero exit when case5 observes a pending
+NBA or postponed strobe after `$finish`; identical Icarus behavior is evidence
+of a reference-criterion difference, not a certification of either behavior.
+
 The `fourstate-upstream-20261008` branch additionally merges the official
 `verilator/verilator` master commit
 `4a2989705657d506d50dee5772bc17b3f689d9d5`, retrieved on 2026-10-08 UTC.

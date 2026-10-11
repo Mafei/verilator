@@ -11,8 +11,8 @@ import vltest_bootstrap
 from fourstate_resolve_oracle import add, append, check_trace
 
 test.scenarios('vlt')
-test.compile(verilator_flags2=['--binary', '--fourstate', '--trace', '--debug-check',
-                             '-Wno-FUTURE'])
+test.compile(
+    verilator_flags2=['--binary', '--fourstate', '--trace', '--debug-check', '-Wno-FUTURE'])
 test.execute()
 test.file_grep(test.run_log_filename, r'^Four-state force release checks: (\d+)$', 64)
 
