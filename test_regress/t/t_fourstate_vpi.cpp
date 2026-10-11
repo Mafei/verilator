@@ -7,9 +7,10 @@
 // SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 //*************************************************************************
 
-#include "Vt_fourstate_vpi.h"
 #include "verilated.h"
 #include "verilated_vpi.h"
+
+#include "Vt_fourstate_vpi.h"
 
 #include <memory>
 
@@ -43,12 +44,18 @@ int main(int argc, char** argv) {
     vpiHandle scalar = vpi_handle_by_name(const_cast<char*>("TOP.t.scalar"), nullptr);
     vpiHandle wide = vpi_handle_by_name(const_cast<char*>("TOP.t.wide"), nullptr);
     vpiHandle memory = vpi_handle_by_name(const_cast<char*>("TOP.t.memory"), nullptr);
+    vpiHandle packed = vpi_handle_by_name(const_cast<char*>("TOP.t.packed_words"), nullptr);
     TEST_CHECK_NZ(scalar);
     TEST_CHECK_NZ(wide);
     TEST_CHECK_NZ(memory);
+    TEST_CHECK_NZ(packed);
     if (errors) return 1;
     vpiHandle word = vpi_handle_by_index(memory, 2);
     TEST_CHECK_NZ(word);
+    vpiHandle lower = vpi_handle_by_index(packed, 0);
+    vpiHandle upper = vpi_handle_by_index(packed, 1);
+    TEST_CHECK_NZ(lower);
+    TEST_CHECK_NZ(upper);
     if (errors) return 1;
 
     int callbacks = 0;
@@ -79,8 +86,43 @@ int main(int argc, char** argv) {
     checkVector(wide, wideValue, 3);
     s_vpi_vecval memoryValue[] = {{0x2468ace0, 0x13579bdf}, {0x1234, 0xabcd}};
     checkVector(word, memoryValue, 2);
+
+    // An indexed callback observes its slice's X/Z mask and ignores its sibling's bits.
+    int packedCallbacks = 0;
+    callback.obj = upper;
+    callback.user_data = reinterpret_cast<PLI_BYTE8*>(&packedCallbacks);
+    vpiHandle packedCallbackHandle = vpi_register_cb(&callback);
+    TEST_CHECK_NZ(packedCallbackHandle);
+    checkVector(upper, unknown, 1);
+    VerilatedVpi::callValueCbs();
+    TEST_CHECK_EQ(packedCallbacks, 1);
+    s_vpi_vecval lowerValue[] = {{0x35, 0x12}};
+    checkVector(lower, lowerValue, 1);
+    VerilatedVpi::callValueCbs();
+    TEST_CHECK_EQ(packedCallbacks, 1);
+    checkVector(upper, known, 1);
+    VerilatedVpi::callValueCbs();
+    TEST_CHECK_EQ(packedCallbacks, 2);
+
+    // A mask-only change in the final word must not be hidden by unchanged earlier words.
+    int wideCallbacks = 0;
+    callback.obj = wide;
+    callback.user_data = reinterpret_cast<PLI_BYTE8*>(&wideCallbacks);
+    vpiHandle wideCallbackHandle = vpi_register_cb(&callback);
+    TEST_CHECK_NZ(wideCallbackHandle);
+    wideValue[2].bval = 0;
+    checkVector(wide, wideValue, 3);
+    VerilatedVpi::callValueCbs();
+    TEST_CHECK_EQ(wideCallbacks, 1);
+    VerilatedVpi::callValueCbs();
+    TEST_CHECK_EQ(wideCallbacks, 1);
     // vpi_remove_cb also releases its callback handle.
+    vpi_remove_cb(wideCallbackHandle);
+    vpi_remove_cb(packedCallbackHandle);
     vpi_remove_cb(callbackHandle);
+    vpi_release_handle(upper);
+    vpi_release_handle(lower);
+    vpi_release_handle(packed);
     vpi_release_handle(word);
     vpi_release_handle(memory);
     vpi_release_handle(wide);

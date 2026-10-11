@@ -7,9 +7,11 @@ module t;
   logic [6:0] scalar /*verilator public_flat_rw*/;
   logic [64:0] wide /*verilator public_flat_rw*/;
   logic [47:0] memory [3:1] /*verilator public_flat_rw*/;
+  logic [1:0][6:0] packed_words /*verilator public_flat_rw*/;
   initial begin
     scalar = '0;
     wide = '0;
     memory[2] = '0;
+    packed_words = '0;
   end
 endmodule

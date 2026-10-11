@@ -500,6 +500,10 @@ class ActiveVisitor final : public VNVisitor {
 
     void visit(AstInitialStatic* nodep) override { moveUnderSpecial<AstSenItem::Static>(nodep); }
     void visit(AstInitial* nodep) override {
+        if (!nodep->stmtsp()) {  // Empty initial. Do not let it determine active ordering.
+            VL_DO_DANGLING(nodep->unlinkFrBack()->deleteTree(), nodep);
+            return;
+        }
         visitSenItems(nodep);
         moveUnderSpecial<AstSenItem::Initial>(nodep);
     }
