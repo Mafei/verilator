@@ -11,6 +11,7 @@ import runpy
 
 import vltest_bootstrap
 
+test.scenarios('vlt')
 test.top_filename = 't/t_timing_finish_boundary.v'
 test.verilator_flags += ['--fourstate', '-Wno-FUTURE']
 runpy.run_path('t/t_timing_finish_boundary.py', globals())

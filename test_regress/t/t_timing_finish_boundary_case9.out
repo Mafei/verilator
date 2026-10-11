@@ -1,0 +1,3 @@
+BEFORE case=9 time=1 q=0
+FINAL case=9 time=1 q=0 checks=15 final=1 entered=1 inactive=0 result=41
+*-* All Finished *-*

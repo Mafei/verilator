@@ -75,6 +75,7 @@ python3 ci/portable/test_regression_results.py
 python3 ci/portable/test_icarus_acceptance.py
 python3 ci/portable/test_lint_status.py
 python3 ci/portable/test_finish_acceptance.py
+python3 ci/portable/test_finish_wave_evidence.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"

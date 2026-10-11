@@ -15,9 +15,11 @@ import log_evidence
 
 
 class FinishWaveEvidenceTest(unittest.TestCase):
+    """Reject incomplete or indirect collections and preserve all wave bytes."""
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
+        # unittest cleanups own the directory across each test's lifecycle.
+        self.temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.files = []

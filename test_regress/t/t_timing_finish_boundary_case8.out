@@ -1,0 +1,7 @@
+GOOD postponed case=8 q=1 word7=20
+NORMAL noninline value=20
+NORMAL ref value=20
+NORMAL ref owner target=17
+CONTROL case=8 time=2 q=1
+FINAL case=8 time=2 q=1 checks=18 final=1 entered=1 inactive=0 result=41
+*-* All Finished *-*
