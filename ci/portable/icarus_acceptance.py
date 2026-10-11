@@ -534,6 +534,9 @@ def main():
     """Run or independently audit this separate official acceptance gate."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['run', 'check'])
+    parser.add_argument('--full18',
+                        action='store_true',
+                        help='Check and return the original full18 output gate separately')
     parser.add_argument('--contract', type=Path, default=CONTRACT)
     parser.add_argument('--repository', type=Path, default=SOURCE_ROOT)
     parser.add_argument('--compiler', type=Path, default=SOURCE_ROOT / 'bin/verilator_bin')
@@ -544,6 +547,8 @@ def main():
     parser.add_argument('--output', type=Path, default=SOURCE_ROOT / 'out/icarus')
     parser.add_argument('--make', default='make')
     args = parser.parse_args()
+    if args.full18 and args.action != 'check':
+        parser.error('--full18 is an independent check-only gate')
     try:
         # Set this inherited limit in the single-threaded CLI, avoiding preexec_fn.
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
@@ -551,12 +556,12 @@ def main():
             return collect(args)
         audit = verify(args.output.resolve(), args.contract, args.repository.resolve(),
                        args.expected_head, args.compiler.resolve())
-        receipt = args.output / 'check-2.json'
+        receipt = args.output / ('check-full18.json' if args.full18 else 'check-2.json')
         if receipt.exists():
             raise FileExistsError('Refuse to overwrite independent audit')
         save(receipt, audit)
         print(json.dumps({key: value for key, value in audit.items() if key != 'rows'}))
-        return audit['strict_gate_exit']
+        return audit['full18_gate_exit'] if args.full18 else audit['strict_gate_exit']
     except (ValueError, OSError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         print('Official Icarus acceptance rejected: ' + str(error))
         return 1

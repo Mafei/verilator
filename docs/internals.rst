@@ -707,8 +707,11 @@ timing control into a ``co_await``.
   ``VlForkSync::done`` call at the end.
 
 Assignments with intra-assignment timing controls are simplified into
-assignments after those timing controls, with the LHS and RHS values
-evaluated before them and stored in temporary variables.
+assignments after those timing controls. The RHS is evaluated before the
+control and stored in temporary variables. Blocking assignments evaluate
+their target selections after the wait; nonblocking assignments capture
+their target indices before it. Four-state blocking controls preserve both
+the value and X/Z mask in invocation-local snapshots across a single wait.
 
 ``wait`` statements are transformed into while loops that check the
 condition and then await changes in variables used in the condition. If the

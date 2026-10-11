@@ -1269,6 +1269,7 @@ class FourstateVisitor final : public VNVisitor {
     uint32_t m_statTristateBuffers = 0;  // Isolated buffer-gate expressions lowered
     uint32_t m_statDeassigns = 0;  // Whole local deassign statements split into both halves
     uint32_t m_statBlockingDelays = 0;  // Activation-local blocking delay snapshots
+    uint32_t m_statBlockingEvents = 0;  // Activation-local blocking event snapshots
     uint32_t m_statValuePlusArgs = 0;  // Whole integral four-state plusargs outputs lowered
     uint32_t m_statPackedStrings = 0;  // Packed string operands converted from four-state bits
 
@@ -3457,8 +3458,9 @@ class FourstateVisitor final : public VNVisitor {
     void visit(AstNodeAssign* const nodep) override {
         if (AstAssign* const assignp = VN_CAST(nodep, Assign)) {
             if (isFourstate(nodep->lhsp())) {
-                if (AstDelay* const delayp = VN_CAST(nodep->timingControlp(), Delay)) {
-                    lowerBlockingDelay(assignp, delayp);
+                AstNode* const controlp = nodep->timingControlp();
+                if (VN_IS(controlp, Delay) || VN_IS(controlp, SenTree)) {
+                    lowerBlockingControl(assignp, controlp);
                     return;
                 }
             }
@@ -3483,7 +3485,7 @@ class FourstateVisitor final : public VNVisitor {
         lowerOrdinaryAssignment(nodep);
     }
 
-    void lowerBlockingDelay(AstAssign* const nodep, AstDelay* const delayp) {
+    void lowerBlockingControl(AstAssign* const nodep, AstNode* const controlp) {
         FileLine* const flp = nodep->fileline();
         // Each invocation owns the snapshots across its wait, including repeated executions
         // of one source statement in a fork. The C scope also protects jumps around locals.
@@ -3515,10 +3517,25 @@ class FourstateVisitor final : public VNVisitor {
             addPrecalculation(new AstAssign{flp, new AstVarRef{flp, xzVarp, VAccess::WRITE},
                                             getFourstateExpressionXZ(rhsp)});
             pushDeletep(rhsp);
-            // Normalize X/Z delays and consume any delay-function outputs before waiting.
-            // Only the original control remains, so the procedure suspends exactly once.
-            delayp->unlinkFrBack();
-            lowerFourstateDelay(delayp);
+            // Snapshot the RHS before waiting once. Blocking intra-assignment controls
+            // evaluate the LHS only after waiting, including its index side effects.
+            controlp->unlinkFrBack();
+            AstNodeStmt* waitp = nullptr;
+            if (AstDelay* const delayp = VN_CAST(controlp, Delay)) {
+                lowerFourstateDelay(delayp);
+                waitp = delayp;
+                ++m_statBlockingDelays;
+            } else {
+                waitp = new AstEventControl{flp, VN_AS(controlp, SenTree), nullptr};
+                ++m_statBlockingEvents;
+            }
+            scopep->addStmtsp(waitp);
+            StatementPlaceHolder lhsPlaceholder{*this, flp};
+            if (AstDelay* const delayp = VN_CAST(waitp, Delay)) {
+                delayp->addStmtsp(lhsPlaceholder.stmtp());
+            } else {
+                VN_AS(waitp, EventControl)->addStmtsp(lhsPlaceholder.stmtp());
+            }
             AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
             AstNodeExpr* const valueLhsp = getFourstateExpressionValue(lhsp);
             AstNodeExpr* const xzLhsp = getFourstateExpressionXZ(lhsp);
@@ -3526,12 +3543,10 @@ class FourstateVisitor final : public VNVisitor {
             nodep->lhsp(valueLhsp);
             nodep->rhsp(new AstVarRef{flp, valueVarp, VAccess::READ});
             nodep->dtypeFrom(valueLhsp);
-            delayp->addStmtsp(nodep);
-            delayp->addStmtsp(
+            lhsPlaceholder.stmtp()->addNextHere(
                 new AstAssign{flp, xzLhsp, new AstVarRef{flp, xzVarp, VAccess::READ}});
-            scopep->addStmtsp(delayp);
+            lhsPlaceholder.stmtp()->addNextHere(nodep);
         }
-        ++m_statBlockingDelays;
         FourstateLogicTypePropagator{scopep};
         iterateChildren(scopep);
     }
@@ -3594,6 +3609,18 @@ class FourstateVisitor final : public VNVisitor {
             addNextCalculation(new AstDeassign{nodep->fileline(), getFourstateExpressionXZ(lhsp)});
             pushDeletep(lhsp);
             ++m_statDeassigns;
+        }
+        iterateChildren(nodep);
+    }
+    void visit(AstRelease* const nodep) override {
+        StmtHelper stmtHelper{*this, nodep};
+        if (isFourstate(nodep->lhsp())) {
+            AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+            // Release the value and unknown-bit forces on the same packed selection.
+            // V3Force preserves variable retention and net-driver behavior for each half.
+            nodep->lhsp(getFourstateExpressionValue(lhsp));
+            addNextCalculation(new AstRelease{nodep->fileline(), getFourstateExpressionXZ(lhsp)});
+            pushDeletep(lhsp);
         }
         iterateChildren(nodep);
     }
@@ -4655,6 +4682,7 @@ public:
         V3Stats::addStat("Fourstate, Isolated tristate buffers", m_statTristateBuffers);
         V3Stats::addStat("Fourstate, Local procedural deassigns", m_statDeassigns);
         V3Stats::addStat("Fourstate, Blocking delay snapshots", m_statBlockingDelays);
+        V3Stats::addStat("Fourstate, Blocking event snapshots", m_statBlockingEvents);
         V3Stats::addStat("Fourstate, Whole integral value plusargs", m_statValuePlusArgs);
         V3Stats::addStat("Fourstate, Packed string conversions", m_statPackedStrings);
     }

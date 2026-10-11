@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -39,6 +39,10 @@ jobs:
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
+            test_regress/obj_vlt/t_timing_blocking_event/*.vcd
+            test_regress/obj_vlt/t_fourstate_blocking_event/*.vcd
+            test_regress/obj_vlt/t_fourstate_force_release/*.vcd
+            test_regress/obj_vlt/t_force_packed_release/*.vcd
           if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
@@ -54,8 +58,26 @@ jobs:
           docker pull rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e
           docker image inspect rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e --format '{{json .RepoDigests}}' > rocky-image.txt
           docker run --rm -e GITHUB_ACTIONS=true -e CC=gcc -e CXX=g++ \
+            -e ARTIFACT_UID="$(id -u)" -e ARTIFACT_GID="$(id -g)" \
             -v "$PWD:/work" -w /work rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e bash -c '
               set -e
+              publish_artifact_ownership() {
+                local result=$?
+                trap - EXIT
+                local ownership_result=0
+                local path
+                for path in out logs test_regress/obj_vlt; do
+                  if [[ -e "$path" ]]; then
+                    chown -hR -P -- "$ARTIFACT_UID:$ARTIFACT_GID" "$path" || ownership_result=$?
+                  fi
+                done
+                if (( ownership_result != 0 )); then
+                  printf "Artifact ownership transfer failed: exit %s\n" "$ownership_result" >&2
+                  if (( result == 0 )); then result=$ownership_result; fi
+                fi
+                exit "$result"
+              }
+              trap publish_artifact_ownership EXIT
               dnf -y install dnf-plugins-core
               dnf config-manager --set-enabled powertools
               dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
@@ -93,4 +115,8 @@ jobs:
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
+            test_regress/obj_vlt/t_timing_blocking_event/*.vcd
+            test_regress/obj_vlt/t_fourstate_blocking_event/*.vcd
+            test_regress/obj_vlt/t_fourstate_force_release/*.vcd
+            test_regress/obj_vlt/t_force_packed_release/*.vcd
           if-no-files-found: error

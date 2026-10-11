@@ -105,7 +105,7 @@ sys.exit(item.get('build_exit',0))
                                 FIXTURE_CONFIG=str(self.config_path))
         self.output = self.root / 'out'
 
-    def cli(self, action, *, expected=0, head=None, contract=None):
+    def cli(self, action, *, expected=0, head=None, contract=None, full18=False):
         self.config_path.write_text(json.dumps(self.config))
         argv = [
             sys.executable,
@@ -117,6 +117,8 @@ sys.exit(item.get('build_exit',0))
             str(self.output), '--make',
             str(self.make)
         ]
+        if full18:
+            argv.append('--full18')
         result = subprocess.run(argv,
                                 env=self.environment,
                                 text=True,
@@ -171,6 +173,9 @@ sys.exit(item.get('build_exit',0))
         self.assertEqual(result['unrun_selected'], 0)
         self.assertEqual(result['reference_stages_executed'], 0)
         self.cli('check')
+        self.cli('check', full18=True, expected=1)
+        self.assertEqual(
+            json.loads((self.output / 'check-full18.json').read_text())['full18_gate_exit'], 1)
 
     def test_nonzero_native_despite_green_stdout(self):
         for code, text in [(7, 'PASSED\n'), (0, '%Error: injected error\n[0] %Fatal: injected\n')]:

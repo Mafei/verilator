@@ -3846,6 +3846,10 @@ class ConstVisitor final : public VNVisitor {
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
             visit(newLp);
             visit(newRp);
+        } else {
+            // Split lvalue concatenations above before expression rewrites can merge paths.
+            // Fold packed selector strides before force lowering requires constant bit offsets.
+            iterateChildren(nodep);
         }
     }
 
