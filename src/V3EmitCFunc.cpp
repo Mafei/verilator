@@ -690,19 +690,8 @@ string EmitCFunc::emitVarResetRecurse(const AstVar* varp, bool constructing,
             } else if (v3Global.opt.fourstate()
                        && (varp->fourstateComplementp() || varp->isFourstateComplement())) {
                 V3Number xNum{varp->fileline(), varp->width(), 0};
-                const bool isTop = varp->isTopLevelPort();
-                bool moduleLevel = false;
-                if (varp->varType() == VVarType::PORT) {
-                    const AstNode* iter = varp;
-                    while (!iter->firstAbovep()) iter = iter->backp();
-                    if (AstModule* const modep = VN_CAST(iter->firstAbovep(), Module)) {
-                        moduleLevel = true;
-                    }
-                }
-                if ((!v3Global.opt.fourstateApi() || !isTop)
-                    && (varp->isFourstateComplement()
-                        || !(varp->varType().isNet()
-                             || (moduleLevel && varp->varType() == VVarType::PORT)))) {
+                if ((!v3Global.opt.fourstateApi() || !varp->isTopLevelPort())
+                    && (varp->isFourstateComplement() || !varp->varType().isNet())) {
                     xNum.setAllBits1();
                 }
                 out += " = ";
