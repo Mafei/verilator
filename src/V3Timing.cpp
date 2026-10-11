@@ -1283,6 +1283,8 @@ class TimingControlVisitor final : public VNVisitor {
             iterateChildren(nodep);
             return;
         }
+        // The timing control, if any, which is put in a fork for an NBA
+        AstNode* const timingp = controlp;
         // Function temporaries are local to the invocation. NBA temporaries must also be local
         // so each generated fork receives its own values rather than shared module storage.
         AstNode* insertBeforep = m_underProcedure ? nullptr : controlp;
@@ -1342,6 +1344,15 @@ class TimingControlVisitor final : public VNVisitor {
         }
         // Replace the RHS with an intermediate value var
         replaceWithIntermediate(nodep->rhsp(), m_intraValueNames.get(nodep));
+        if (!inAssignDly) return;
+        // The process executing the NBA evaluates its delay (IEEE 1800-2023 4.9.4), not the forked
+        // process, if it has side effects, e.g. calling a function that checks its process. A pure
+        // one is evaluated as the forked process starts, at once.
+        if (AstDelay* const delayp = VN_CAST(timingp, Delay)) {
+            if (!delayp->lhsp()->isPure()) {
+                replaceWithIntermediate(delayp->lhsp(), m_intraValueNames.get(nodep));
+            }
+        }
     }
     void visit(AstFireEvent* nodep) override {
         // V3Delayed handles '->>' of a variable in a process. Like NBAs in non-inlined functions,
