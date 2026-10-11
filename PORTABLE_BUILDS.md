@@ -3,9 +3,11 @@
 The `fourstate-strict-fix-20261011` candidate starts from the PR17 commit
 `eca3e7779126a81b297a7af2af6ecc26240ccae2`. It adds a single-wait lowering for
 blocking four-state event assignments and releases both halves of forced
-packed variables. Three independent regressions extend the existing 188
-drivers to 191, covering invocation-local RHS capture, target-index timing,
-7/31/65/95-bit event assignments, and 7/33/65/95-bit packed force/release.
+packed variables, including constant-offset folding before release lowering.
+Four independent regressions extend the existing 188 drivers to 192,
+covering invocation-local RHS capture, target-index timing,
+7/31/65/95-bit event assignments, 7/33/65/95-bit packed force/release,
+and 65/95-bit packed-array offsets and release concatenations.
 The tests check complete signal histories as well as simulation assertions.
 Packed unions and general resolved-net forces retain their unsupported
 boundaries. Original Icarus18 and finish9 inputs and expectations stay unchanged.

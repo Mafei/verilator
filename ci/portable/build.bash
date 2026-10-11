@@ -128,7 +128,7 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-# Preserve all 188 existing drivers and gate three new strict-repair regressions.
+# Preserve all 188 existing drivers and gate four new strict-repair regressions.
 python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"

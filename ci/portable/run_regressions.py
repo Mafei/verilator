@@ -97,8 +97,10 @@ GROUPS = {
     ],
     "icarus_semantics":
     ["fourstate_nba_event_concat", "fourstate_packed_port_kind", "timing_nba_event_concat"],
-    "strict_repairs_20261011":
-    ["timing_blocking_event", "fourstate_blocking_event", "fourstate_force_release"]
+    "strict_repairs_20261011": [
+        "timing_blocking_event", "fourstate_blocking_event", "fourstate_force_release",
+        "force_packed_release"
+    ]
 }
 
 
