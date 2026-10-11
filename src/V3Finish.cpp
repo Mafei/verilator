@@ -18,8 +18,8 @@
 // block immediately after requesting termination. This also skips the caller's
 // remaining statements and copyback after an inlined finishing call.
 //
-// Internal source tasks also get local exits. A direct statement call to a
-// finishing task checks the termination request before output copyback or
+// Internal source tasks and value functions also get local exits. A direct
+// statement call checks the termination request before output copyback or
 // further source statements. Timing later changes these calls into awaits,
 // keeping the check after resumption. Calls from final, fork, expression
 // lambdas and other unsupported boundaries exclude the shared task and its

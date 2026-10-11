@@ -30,6 +30,18 @@ void VlCoroutineHandle::resume() {
     // Only null if we have a fork..join_any and one of the other child processes resumed the
     // main process
     if (VL_LIKELY(m_coro)) {
+        // A preceding resumption in this scheduler's batch may have finished
+        // simulation. Cancel this suspended stack without running its SV tail.
+        const VerilatedContext* const contextp = Verilated::threadContextp();
+        if (VL_UNLIKELY(contextp->gotFinish() || contextp->finishPending())) {
+            if (m_process && m_process->state() != VlProcess::KILLED
+                && !m_coro.promise().m_forever) {
+                m_process->state(VlProcess::FINISHED);
+            }
+            const auto corop = std::exchange(m_coro, nullptr);
+            corop.destroy();
+            return;
+        }
         VL_DEBUG_IF(VL_DBG_MSGF("             Resuming: "); dump(););
         if (m_process) {  // If process state is managed with std::process
             if (m_process->state() == VlProcess::KILLED) {
@@ -351,8 +363,10 @@ std::suspend_never VlPromise::final_suspend() noexcept {
         // it's destroyed
         m_corop = nullptr;
     }
-    // If there is a continuation, resume it
-    if (m_continuation) {
+    // A finishing callee must not resume a suspended caller's SV tail. Leave
+    // ownership with this promise so its destructor destroys that stack once.
+    const VerilatedContext* const contextp = Verilated::threadContextp();
+    if (m_continuation && !contextp->gotFinish() && !contextp->finishPending()) {
         m_continuation();
         m_continuation = nullptr;
     }

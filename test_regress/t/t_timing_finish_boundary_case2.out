@@ -1,0 +1,4 @@
+GOOD postponed case=2 q=1 word7=20
+BEFORE case=2 time=2 q=1
+FINAL case=2 time=2 q=1 checks=14 final=1 entered=1 inactive=0 result=41
+*-* All Finished *-*

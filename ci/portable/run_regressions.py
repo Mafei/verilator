@@ -100,7 +100,8 @@ GROUPS = {
     "strict_repairs_20261011": [
         "timing_blocking_event", "fourstate_blocking_event", "fourstate_force_release",
         "force_packed_release"
-    ]
+    ],
+    "finish_boundary_20261011": ["timing_finish_boundary", "fourstate_finish_boundary"]
 }
 
 

@@ -75,6 +75,7 @@ python3 ci/portable/test_regression_results.py
 python3 ci/portable/test_icarus_acceptance.py
 python3 ci/portable/test_lint_status.py
 python3 ci/portable/test_finish_acceptance.py
+python3 ci/portable/test_finish_wave_evidence.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
@@ -128,8 +129,8 @@ fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
 regress_status=0
-# Preserve all 188 existing drivers and gate four new strict-repair regressions.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 || regress_status=$?
+# Preserve all 192 existing drivers and gate two new finish-boundary regressions.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1
@@ -137,6 +138,7 @@ fi
 python3 ci/portable/check_results.py
 python3 ci/portable/log_evidence.py results
 python3 ci/portable/log_evidence.py semantic-waves
+python3 ci/portable/log_evidence.py finish-waves
 # Official inputs and expectations stay pinned and unchanged. All 18 execute;
 # the documented 16 applicable cases have a separate gate from the groups above.
 icarus_head=$(git rev-parse HEAD)
