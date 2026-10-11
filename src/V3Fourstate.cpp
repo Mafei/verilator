@@ -3612,6 +3612,18 @@ class FourstateVisitor final : public VNVisitor {
         }
         iterateChildren(nodep);
     }
+    void visit(AstRelease* const nodep) override {
+        StmtHelper stmtHelper{*this, nodep};
+        if (isFourstate(nodep->lhsp())) {
+            AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+            // Release the value and unknown-bit forces on the same packed selection.
+            // V3Force preserves variable retention and net-driver behavior for each half.
+            nodep->lhsp(getFourstateExpressionValue(lhsp));
+            addNextCalculation(new AstRelease{nodep->fileline(), getFourstateExpressionXZ(lhsp)});
+            pushDeletep(lhsp);
+        }
+        iterateChildren(nodep);
+    }
     void visit(AstCMethodHard* const nodep) override {
         // Queue insertion coerces an element to the queue's element type. A
         // two-state queue must discard unknown bits without duplicating calls.
