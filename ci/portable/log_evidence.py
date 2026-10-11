@@ -74,7 +74,8 @@ def semantic_wave_evidence(root):
     """Print all bytes of the public semantic fixtures within a hard budget."""
     fixtures = ("t_fourstate_nba_event_concat", "t_fourstate_packed_port_kind",
                 "t_timing_nba_event_concat", "t_timing_blocking_event",
-                "t_fourstate_blocking_event", "t_fourstate_force_release")
+                "t_fourstate_blocking_event", "t_fourstate_force_release",
+                "t_force_packed_release")
     base = root / "test_regress/obj_vlt"
     budget = 128 * 1024
     total = 0

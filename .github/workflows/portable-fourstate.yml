@@ -42,6 +42,7 @@ jobs:
             test_regress/obj_vlt/t_timing_blocking_event/*.vcd
             test_regress/obj_vlt/t_fourstate_blocking_event/*.vcd
             test_regress/obj_vlt/t_fourstate_force_release/*.vcd
+            test_regress/obj_vlt/t_force_packed_release/*.vcd
           if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
@@ -99,4 +100,5 @@ jobs:
             test_regress/obj_vlt/t_timing_blocking_event/*.vcd
             test_regress/obj_vlt/t_fourstate_blocking_event/*.vcd
             test_regress/obj_vlt/t_fourstate_force_release/*.vcd
+            test_regress/obj_vlt/t_force_packed_release/*.vcd
           if-no-files-found: error
