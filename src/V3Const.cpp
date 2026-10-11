@@ -3836,9 +3836,6 @@ class ConstVisitor final : public VNVisitor {
         }
     }
     void visit(AstRelease* nodep) override {
-        // Fold packed selector strides before force lowering requires constant bit offsets.
-        // Write-access references keep the released variable intact.
-        iterateChildren(nodep);
         // cppcheck-suppress constVariablePointer // children unlinked below
         if (AstConcat* const concatp = VN_CAST(nodep->lhsp(), Concat)) {
             FileLine* const flp = nodep->fileline();
@@ -3849,6 +3846,10 @@ class ConstVisitor final : public VNVisitor {
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
             visit(newLp);
             visit(newRp);
+        } else {
+            // Split lvalue concatenations above before expression rewrites can merge paths.
+            // Fold packed selector strides before force lowering requires constant bit offsets.
+            iterateChildren(nodep);
         }
     }
 

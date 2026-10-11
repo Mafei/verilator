@@ -74,8 +74,8 @@ module packed_release #(
     #1;
     `checkh(words[0], HIGH);
     `checkh(words[1], LOW);
-    // Release concatenation must continue to release both constant packed selections.
-    release {words[1], words[0]};
+    // Nested duplicate selections keep their individual release paths.
+    release {{words[1], words[1]}, words[0]};
     #1;
     `checkh(words[0], HIGH);
     `checkh(words[1], LOW);
