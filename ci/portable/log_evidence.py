@@ -77,11 +77,29 @@ def semantic_wave_evidence(root):
                 "t_fourstate_blocking_event", "t_fourstate_force_release",
                 "t_force_packed_release")
     base = root / "test_regress/obj_vlt"
-    budget = 128 * 1024
+    collections = [(fixture, base / fixture) for fixture in fixtures]
+    wave_evidence(root, collections, "semantic-wave-evidence.json", "SEMANTIC_WAVE_BYTES",
+                  128 * 1024)
+
+
+def finish_wave_evidence(root):
+    """Print every deterministic finish profile's complete wave bytes."""
+    base = root / "test_regress/obj_vlt"
+    fixtures = ("t_timing_finish_boundary", "t_fourstate_finish_boundary")
+    collections = [(fixture + "/case" + str(case), base / fixture / ("case" + str(case)))
+                   for fixture in fixtures for case in range(10)]
+    for fixture, directory in collections:
+        paths = sorted(directory.glob("*.vcd"))
+        if len(paths) != 1 or paths[0].name != "simx.vcd":
+            raise ValueError("Missing or unexpected finish VCD: " + fixture)
+    wave_evidence(root, collections, "finish-wave-evidence.json", "FINISH_WAVE_BYTES", 64 * 1024)
+
+
+def wave_evidence(root, collections, filename, prefix, budget):
+    """Emit regular public wave files with bounded size and exact byte hashes."""
     total = 0
     records = []
-    for fixture in fixtures:
-        directory = base / fixture
+    for fixture, directory in collections:
         if directory.is_symlink() or not directory.resolve().is_relative_to(root.resolve()):
             raise ValueError("Symlinked semantic fixture: " + fixture)
         paths = sorted(directory.glob("*.vcd"))
@@ -107,21 +125,24 @@ def semantic_wave_evidence(root):
             })
     evidence = {"total_bytes": total, "budget_bytes": budget, "records": records}
     (root / "out").mkdir(exist_ok=True)
-    (root / "out/semantic-wave-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print("SEMANTIC_WAVE_BYTES " + json.dumps(evidence))
+    (root / "out" / filename).write_text(json.dumps(evidence, indent=2) + "\n")
+    print(prefix + " " + json.dumps(evidence))
 
 
 def main():
     """Report the compiler after building or the outputs after validation."""
-    if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results", "semantic-waves"):
-        raise SystemExit("Usage: log_evidence.py compiler|results|semantic-waves")
+    if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results", "semantic-waves",
+                                                 "finish-waves"):
+        raise SystemExit("Usage: log_evidence.py compiler|results|semantic-waves|finish-waves")
     root = Path.cwd()
     if sys.argv[1] == "compiler":
         compiler_evidence(root)
     elif sys.argv[1] == "results":
         results_evidence(root)
-    else:
+    elif sys.argv[1] == "semantic-waves":
         semantic_wave_evidence(root)
+    else:
+        finish_wave_evidence(root)
 
 
 if __name__ == "__main__":

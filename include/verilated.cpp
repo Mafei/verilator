@@ -4685,6 +4685,13 @@ template <bool Profiling>
 void VerilatedEvalLoop::evalImpl() {
     VL_DEBUG_IF(VL_DBG_MSGF("+ Eval\n"););
 
+    // A worker can post a termination request before the main-thread callback
+    // sets gotFinish. Stop entering SV scheduling regions in either case, but
+    // retain evalEnd and the profiling pops so queued callbacks and cleanup run.
+    const VerilatedContext* const contextp = m_model.contextp();
+    const auto running
+        = [contextp]() { return VL_LIKELY(!contextp->gotFinish() && !contextp->finishPending()); };
+
     if VL_CONSTEXPR_CXX17 (Profiling) {
         // Advance the profiling window
         if (VL_UNLIKELY(m_profTopLevel)) m_profilerp->configure();
@@ -4697,28 +4704,30 @@ void VerilatedEvalLoop::evalImpl() {
     if (VL_UNLIKELY(!m_model.m_didInit)) {
         VL_DEBUG_IF(VL_DBG_MSGF("+ Initial\n"););
         // Static initializers
-        m_model.evalStatic();
+        if (running()) m_model.evalStatic();
         // Initial blocks
-        m_model.evalInitial();
+        if (running()) m_model.evalInitial();
         // The 'Settle' region, iterated until it converges
         uint32_t stlIterCount = 0;
         do {
+            if (!running()) break;
             checkConvergence(++stlIterCount, "Settle", &VerilatedModel::dumpTriggersStl);
-        } while (m_model.evalStl(stlIterCount == 1));
+        } while (running() && m_model.evalStl(stlIterCount == 1));
         m_model.m_didInit = true;
     }
 
     // Sampled values are collected before anything can read them
-    m_model.evalSample();
+    if (running()) m_model.evalSample();
 
     // The 'Input combinational' region updates combinational logic driven from primary inputs
     {
         if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPush("loop ico");
         uint32_t icoIterCount = 0;
         do {
+            if (!running()) break;
             checkConvergence(++icoIterCount, "Input combinational",
                              &VerilatedModel::dumpTriggersIco);
-        } while (m_model.evalIco(icoIterCount == 1));
+        } while (running() && m_model.evalIco(icoIterCount == 1));
         if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop ico
     }
 
@@ -4727,37 +4736,42 @@ void VerilatedEvalLoop::evalImpl() {
     if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPush("loop react");
     uint32_t reactIterCount = 0;
     do {
+        if (!running()) break;
         checkConvergence(++reactIterCount, "Reactive", &VerilatedModel::dumpTriggersReact);
         if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPush("loop obs");
         uint32_t obsIterCount = 0;
         do {
+            if (!running()) break;
             checkConvergence(++obsIterCount, "Observed", &VerilatedModel::dumpTriggersObs);
             if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPush("loop nba");
             uint32_t nbaIterCount = 0;
             do {
+                if (!running()) break;
                 checkConvergence(++nbaIterCount, "NBA", &VerilatedModel::dumpTriggersNba);
                 if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPush("loop inact");
                 uint32_t inactIterCount = 0;
                 do {
+                    if (!running()) break;
                     checkConvergence(++inactIterCount, "Inactive");
                     if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPush("loop act");
                     uint32_t actIterCount = 0;
                     do {
+                        if (!running()) break;
                         checkConvergence(++actIterCount, "Active",
                                          &VerilatedModel::dumpTriggersAct);
-                    } while (m_model.evalAct());
+                    } while (running() && m_model.evalAct());
                     if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop act
-                } while (m_model.evalInact());
+                } while (running() && m_model.evalInact());
                 if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop inact
-            } while (m_model.evalNba());
+            } while (running() && m_model.evalNba());
             if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop nba
-        } while (m_model.evalObs());
+        } while (running() && m_model.evalObs());
         if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop obs
-    } while (m_model.evalReact());
+    } while (running() && m_model.evalReact());
     if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop react
 
     // The 'Postponed' region runs once, at the end of the time step
-    m_model.evalPostponed();
+    if (running()) m_model.evalPostponed();
 
     m_model.evalEnd();
 
@@ -4977,8 +4991,8 @@ VerilatedVar* VerilatedScope::varInsertSized(const char* namep, void* datap, voi
     return &(m_varsp->find(namep)->second);
 }
 
-VerilatedVar* VerilatedScope::varInsertMember(const char* namep, void* datap, void* dataxzp, bool isParam,
-                                              VerilatedVarType vltype, int vlflags,
+VerilatedVar* VerilatedScope::varInsertMember(const char* namep, void* datap, void* dataxzp,
+                                              bool isParam, VerilatedVarType vltype, int vlflags,
                                               uint32_t bitOffset, uint32_t entSize, int pdims,
                                               ...) VL_MT_UNSAFE {
     // Member is a bit slice of the parent: datap/vltype/entSize are the parent's.

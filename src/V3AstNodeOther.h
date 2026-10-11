@@ -542,7 +542,7 @@ class AstCFunc final : public AstNode {
     bool m_keepIfEmpty : 1;  // Keep declaration and definition separate, even if empty
     bool m_slow : 1;  // Slow routine, called once or just at init time
     bool m_funcPublic : 1;  // From user public task/function
-    bool m_sourceTask : 1;  // Body originates in a user-declared SystemVerilog task
+    bool m_sourceTask : 1;  // Body originates in a user-declared SV task/function
     bool m_isConstructor : 1;  // Is C class constructor
     bool m_isDestructor : 1;  // Is C class destructor
     bool m_isMethod : 1;  // Is inside a class definition

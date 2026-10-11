@@ -36,6 +36,7 @@
 #include "V3Stats.h"
 
 #include <tuple>
+#include <unordered_set>
 
 VL_DEFINE_DEBUG_FUNCTIONS;
 
@@ -118,6 +119,8 @@ class TaskStateVisitor final : public VNVisitor {
     AstNodeFTask* m_ctorp = nullptr;  // Class constructor
     AstClass* m_classp = nullptr;  // Current class
     V3Graph m_callGraph;  // Task call graph
+    // Source functions whose return assignment must wait for normal completion
+    std::unordered_set<TaskFTaskVertex*> m_finishingTasks;
     TaskBaseVertex* m_curVxp;  // Current vertex we're adding to
     std::vector<AstInitialAutomatic*> m_initialps;  // Initial blocks to move
     bool m_underPortVar = false;  // Visiting under a port AstVar; any expression there
@@ -155,6 +158,9 @@ public:
         m_funcToClassMap[newp] = getClassp(nodep);
     }
     bool ftaskNoInline(AstNodeFTask* nodep) { return getFTaskVertex(nodep)->noInline(); }
+    bool ftaskMayFinish(AstNodeFTask* nodep) {
+        return m_finishingTasks.count(getFTaskVertex(nodep));
+    }
     bool ftaskNeedsNonInlineCFunc(AstNodeFTask* nodep) {
         return getFTaskVertex(nodep)->needsNonInlineCFunc();
     }
@@ -169,6 +175,30 @@ private:
     TaskFTaskVertex* getFTaskVertex(AstNodeFTask* nodep) {
         if (!nodep->user4p()) nodep->user4p(new TaskFTaskVertex{&m_callGraph, nodep});
         return static_cast<TaskFTaskVertex*>(nodep->user4u().toGraphVertex());
+    }
+
+    void gatherFinishingTasks() {
+        std::vector<TaskFTaskVertex*> workList;
+        for (V3GraphVertex& vtx : m_callGraph.vertices()) {
+            TaskFTaskVertex* const ftVtxp = vtx.cast<TaskFTaskVertex>();
+            if (!ftVtxp || !ftVtxp->nodep()->exists([](AstNode* nodep) {
+                    return VN_IS(nodep, Finish) || VN_IS(nodep, FinishFork);
+                })) {
+                continue;
+            }
+            m_finishingTasks.insert(ftVtxp);
+            workList.push_back(ftVtxp);
+        }
+        while (!workList.empty()) {
+            TaskFTaskVertex* const calleep = workList.back();
+            workList.pop_back();
+            for (V3GraphEdge& edge : calleep->inEdges()) {
+                TaskFTaskVertex* const callerp = edge.fromp()->cast<TaskFTaskVertex>();
+                if (callerp && m_finishingTasks.insert(callerp).second) {
+                    workList.push_back(callerp);
+                }
+            }
+        }
     }
 
     void propagateImpureReason() {
@@ -353,6 +383,7 @@ public:
         iterate(nodep);
         //
         m_callGraph.removeRedundantEdgesSum(&TaskEdge::followAlwaysTrue);
+        gatherFinishingTasks();
         propagateImpureReason();
         decideInlining();
         if (dumpGraphLevel()) m_callGraph.dumpDotFilePrefixed("task_call");
@@ -1407,7 +1438,9 @@ class TaskVisitor final : public VNVisitor {
         cfuncp->dontCombine(!nodep->dpiImport());
         cfuncp->entryPoint(!nodep->dpiImport());
         cfuncp->funcPublic(nodep->taskPublic());
-        cfuncp->sourceTask(nodep->verilogTask());
+        // Private value functions also lower to void CFuncs with an output
+        // argument. Preserve their source origin for termination propagation.
+        cfuncp->sourceTask(nodep->verilogTask() || nodep->verilogFunction());
         cfuncp->dpiContext(nodep->dpiContext());
         cfuncp->dpiExportImpl(nodep->dpiExport());
         cfuncp->dpiImportWrapper(nodep->dpiImport());
@@ -1709,7 +1742,8 @@ class TaskVisitor final : public VNVisitor {
                     if (vscp->varp()->lifetime().isAutomatic()
                         && vscp->varp()->dtypep()->skipRefp()->sameTree(
                             fvarp->dtypep()->skipRefp())
-                        && !hasRefArgument(nodep->taskp())) {
+                        && !hasRefArgument(nodep->taskp())
+                        && !m_statep->ftaskMayFinish(nodep->taskp())) {
                         outvscp = vscp;
                     }
                 }
