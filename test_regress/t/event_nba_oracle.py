@@ -8,7 +8,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 """Check complete physical VCD histories and phase output against independent literals."""
 import hashlib
-from pathlib import Path
 import re
 
 COUNTS = {'capture': 38, 'unknown': 13, 'race': 20, 'tasks': 36, 'trigger': 24}
@@ -16,8 +15,7 @@ COUNTS = {'capture': 38, 'unknown': 13, 'race': 20, 'tasks': 36, 'trigger': 24}
 
 def payload(width, phase):
     # This literal digit sequence is independent of the SV case-based producer.
-    return ''.join('01xz'[(bitno + phase) % 4]
-                   for bitno in range(width - 1, -1, -1))
+    return ''.join('01xz'[(bitno + phase) % 4] for bitno in range(width - 1, -1, -1))
 
 
 def bits(width, value):
@@ -44,8 +42,7 @@ def parse_vcd(path, wanted):
             timestamp = int(line[1:])
         elif fields and (line[0] in 'bB' or line[0] in '01xzXZ'):
             value, code = (fields[0][1:].lower(),
-                           fields[1]) if line[0] in 'bB' else (
-                               line[0].lower(), line[1:].strip())
+                           fields[1]) if line[0] in 'bB' else (line[0].lower(), line[1:].strip())
             for name in codes.get(code, []):
                 fill = value[0] if value[0] in 'xz' else '0'
                 value = value.rjust(widths[name], fill)
@@ -63,8 +60,7 @@ def expected(name):
     result = {}
     if name == 'capture':
         for slot in range(1, 4):
-            for label, width, offset in [('bank', 33, 0), ('hi', 33, 32),
-                                         ('lo', 32, 0)]:
+            for label, width, offset in [('bank', 33, 0), ('hi', 33, 32), ('lo', 32, 0)]:
                 result[f't.{label}{slot}'] = [(0, '0' * width)]
                 for phase in range(4):
                     full = payload(65, phase + slot)
@@ -75,59 +71,46 @@ def expected(name):
         for phase in range(4):
             result['t.partial'].append(
                 (2 * phase + 1, '0' * 15 + payload(15, phase + 1) + '0' * 3))
-            result['t.ascending'].append(
-                (2 * phase + 1, payload(33, phase + 1)))
-        result['t.rearmed'] = [(0, '0' * 33)] + [
-            (9 + 3 * phase, payload(33, phase)) for phase in range(3)
-        ]
+            result['t.ascending'].append((2 * phase + 1, payload(33, phase + 1)))
+        result['t.rearmed'] = [(0, '0' * 33)] + [(9 + 3 * phase, payload(33, phase))
+                                                 for phase in range(3)]
     elif name == 'unknown':
-        result = {
-            f't.bank{slot}': [(0, bits(7, slot * 0x11))]
-            for slot in range(1, 4)
-        }
+        result = {f't.bank{slot}': [(0, bits(7, slot * 0x11))] for slot in range(1, 4)}
         result['t.partial'] = [(0, bits(15, 0x3535))]
-        result['t.other'] = [(0, bits(7, 0x23)), (3, 'x01z101'),
-                             (6, 'z10x010')]
+        result['t.other'] = [(0, bits(7, 0x23)), (3, 'x01z101'), (6, 'z10x010')]
     elif name == 'tasks':
         for slot in range(1, 4):
             for label in ['bank', 'plain']:
                 result[f't.{label}{slot}'] = [(0, '0' * 33)] + [
-                    (3 + 4 * phase, payload(33, phase + slot))
-                    for phase in range(3)
+                    (3 + 4 * phase, payload(33, phase + slot)) for phase in range(3)
                 ]
     elif name == 'trigger':
         result = {
-            f't.count{slot}':
-            [(0, bits(32, 0))] + [(1 + 2 * phase, bits(32, phase + 1))
-                                  for phase in range(4)]
+            f't.count{slot}': [(0, bits(32, 0))] + [(1 + 2 * phase, bits(32, phase + 1))
+                                                    for phase in range(4)]
             for slot in range(1, 4)
         }
     elif name == 'race':
         for label, reset in [('active_value', 0x11), ('nba_value', 0x22)]:
             result['t.' + label] = [(0, '0' * 7)]
             for phase in range(4):
-                result['t.' + label] += [
-                    (3 * phase + 1, bits(7, reset)),
-                    (3 * phase + 2, 'z10x010' if phase % 2 else 'x01z101')
-                ]
+                result['t.' + label] += [(3 * phase + 1, bits(7, reset)),
+                                         (3 * phase + 2, 'z10x010' if phase % 2 else 'x01z101')]
         result['t.payload'] = [(0, '0' * 7)] + [
-            (3 * phase + 1, 'z10x010' if phase % 2 else 'x01z101')
-            for phase in range(4)
+            (3 * phase + 1, 'z10x010' if phase % 2 else 'x01z101') for phase in range(4)
         ]
         result['t.nba_seen'] = [(0, '0' * 7), (2, bits(7, 0x22))]
     return result
 
 
-def check(name, wave, log):
+# Keep each scenario's complete histories and phase/race checks together.
+def check(name, wave, log):  # pylint: disable=too-many-locals
     golden = expected(name)
-    actual = parse_vcd(
-        wave,
-        set(golden) | ({'t.active_seen'} if name == 'race' else set()))
+    actual = parse_vcd(wave, set(golden) | ({'t.active_seen'} if name == 'race' else set()))
     for signal, history in golden.items():
         if actual[signal] != history:
             raise ValueError(
-                f'{name}: complete history differs: {signal}: {actual[signal]} != {history}'
-            )
+                f'{name}: complete history differs: {signal}: {actual[signal]} != {history}')
     text = log.read_text()
     marker = {
         'capture': 'CONTROLS',
@@ -136,28 +119,21 @@ def check(name, wave, log):
         'tasks': 'TASKS',
         'trigger': 'TRIGGER'
     }[name]
-    if len(
-            re.findall(rf'^EVENT_NBA_{marker}_PASS checks={COUNTS[name]}$',
-                       text, re.M)) != 1:
-        raise ValueError('Missing/duplicate exact semantic pass count: ' +
-                         name)
+    if len(re.findall(rf'^EVENT_NBA_{marker}_PASS checks={COUNTS[name]}$', text, re.M)) != 1:
+        raise ValueError('Missing/duplicate exact semantic pass count: ' + name)
     if name == 'capture':
         for phase in range(4):
             old_bank = '0' * 33 if phase == 0 else payload(33, phase)
-            old_partial = '0' * 33 if phase == 0 else '0' * 15 + payload(
-                15, phase) + '0' * 3
+            old_partial = '0' * 33 if phase == 0 else '0' * 15 + payload(15, phase) + '0' * 3
             bank = payload(33, phase + 1)
             partial = '0' * 15 + payload(15, phase + 1) + '0' * 3
-            for prefix, time, bvalue, pvalue in [
-                ('ARM', 2 * phase + 1, old_bank, old_partial),
-                ('ACTIVE', 2 * phase + 1, old_bank, old_partial),
-                ('POST', 2 * phase + 1, bank, partial),
-                ('FINAL', 2 * phase + 2, bank, partial)
-            ]:
+            for prefix, time, bvalue, pvalue in [('ARM', 2 * phase + 1, old_bank, old_partial),
+                                                 ('ACTIVE', 2 * phase + 1, old_bank, old_partial),
+                                                 ('POST', 2 * phase + 1, bank, partial),
+                                                 ('FINAL', 2 * phase + 2, bank, partial)]:
                 line = f'{prefix} phase={phase} t={time} bank1={bvalue} partial={pvalue}'
                 if text.splitlines().count(line) != 1:
-                    raise ValueError('Exact phase observation differs: ' +
-                                     line)
+                    raise ValueError('Exact phase observation differs: ' + line)
     if name == 'race':
         history = actual['t.active_seen']
         if not history or history[0] != (0, '0' * 7):
@@ -166,8 +142,7 @@ def check(name, wave, log):
             phase = (timestamp - 2) // 3
             if timestamp not in (2, 5, 8, 11) or value not in (bits(
                     7, 0x11), 'z10x010' if phase % 2 else 'x01z101'):
-                raise ValueError(
-                    'Active race outside legal timestamp/value set')
+                raise ValueError('Active race outside legal timestamp/value set')
         for phase in range(4):
             value = 'z10x010' if phase % 2 else 'x01z101'
             pattern = rf'^RACE phase={phase} active_seen=({bits(7, 0x11)}|{value}) nba_seen={bits(7, 0x22)} final={value}$'

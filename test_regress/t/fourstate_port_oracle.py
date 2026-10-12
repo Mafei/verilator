@@ -94,7 +94,7 @@ def port_partial():
             for name, default in ports.items():
                 append(expected, scope + name, timestamp, default * width + value)
             for name, default in packed.items():
-                low = (default * (width - 1) + value[0] + default * width + value[1:] + default)
+                low = default * (width - 1) + value[0] + default * width + value[1:] + default
                 append(expected, scope + name, timestamp, default * (3 * width) + low)
             for name, default in (('cross_variable', 'x'), ('cross_net', 'z')):
                 vector = default * (width - cut) + value[:cut] + default * cut + value[cut:]

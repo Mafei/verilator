@@ -27,8 +27,7 @@ test.compile(verilator_flags2=[
 ])
 test.execute()
 try:
-    result = check('tasks', Path(test.trace_filename),
-                   Path(test.run_log_filename))
+    result = check('tasks', Path(test.trace_filename), Path(test.run_log_filename))
 except ValueError as error:
     test.error(str(error))
 else:
