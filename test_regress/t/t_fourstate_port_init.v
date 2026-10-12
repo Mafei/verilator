@@ -51,6 +51,10 @@ module port_init_case #(parameter int WIDTH = 7) (output bit done = 0);
   // verilator lint_on ASCRANGE
   logic [2*WIDTH-1:0] output_unconnected_default;
   wire logic [2*WIDTH-1:0] output_unconnected_net;
+  logic [2*WIDTH-1:0] inherited_typed_first;
+  logic [2*WIDTH-1:0] inherited_typed_follow;
+  logic [2*WIDTH-1:0] inherited_net_first;
+  logic [2*WIDTH-1:0] inherited_net_follow;
   int unsigned checks = 0;
 
   port_init_leaf #(WIDTH) logic_targets (
@@ -64,6 +68,9 @@ module port_init_case #(parameter int WIDTH = 7) (output bit done = 0);
   );
   port_init_ascending #(WIDTH) ascending_source (data, ascending_default, ascending_net);
   port_init_unwritten #(WIDTH) unwritten (output_unconnected_default, output_unconnected_net);
+  port_init_inherited #(WIDTH) inherited_source (
+      data, inherited_typed_first, inherited_typed_follow, inherited_net_first, inherited_net_follow
+  );
 
   initial begin
     #1;
@@ -99,6 +106,10 @@ module port_init_case #(parameter int WIDTH = 7) (output bit done = 0);
       `checkh(net_wire, {{WIDTH{1'bz}}, data});
       `checkh(ascending_default, {{WIDTH{1'bx}}, data});
       `checkh(ascending_net, {{WIDTH{1'bz}}, data});
+      `checkh(inherited_typed_first, {{WIDTH{1'bx}}, data});
+      `checkh(inherited_typed_follow, {{WIDTH{1'bx}}, data});
+      `checkh(inherited_net_first, {{WIDTH{1'bz}}, data});
+      `checkh(inherited_net_follow, {{WIDTH{1'bz}}, data});
       `checkh(output_unconnected_default, {2*WIDTH{1'bx}});
       `checkh(output_unconnected_net, {2*WIDTH{1'bz}});
     end
@@ -135,4 +146,15 @@ module port_init_unwritten #(parameter int WIDTH = 7) (
     output logic [2*WIDTH-1:0] default_out,
     output wire logic [2*WIDTH-1:0] net_out
 );
+endmodule
+
+module port_init_inherited #(parameter int WIDTH = 7) (
+    input wire [WIDTH-1:0] data,
+    output logic [2*WIDTH-1:0] typed_first, typed_follow,
+    output [2*WIDTH-1:0] implicit_first, implicit_follow
+);
+  assign typed_first[WIDTH-1:0] = data;
+  assign typed_follow[WIDTH-1:0] = data;
+  assign implicit_first[WIDTH-1:0] = data;
+  assign implicit_follow[WIDTH-1:0] = data;
 endmodule

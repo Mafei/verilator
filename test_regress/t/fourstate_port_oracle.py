@@ -38,6 +38,10 @@ def port_init():
             },
             'ascending_default': 'x',
             'ascending_net': 'z',
+            'inherited_typed_first': 'x',
+            'inherited_typed_follow': 'x',
+            'inherited_net_first': 'z',
+            'inherited_net_follow': 'z',
         }
         for name, default in ports.items():
             add(expected, widths, scope + name, 2 * width, default * width + '0' * width)
@@ -51,10 +55,10 @@ def port_init():
             append(expected, scope + 'data', timestamp, value)
             for name, default in ports.items():
                 append(expected, scope + name, timestamp, default * width + value)
-            append(expected, scope + 'checks', timestamp + 1000, format(16 * (phase + 1), '032b'))
+            append(expected, scope + 'checks', timestamp + 1000, format(20 * (phase + 1), '032b'))
         append(expected, scope + 'done', 6000, '1')
     for phase in range(5):
-        append(expected, 't.total_checks', (phase + 2) * 1000, format(64 * (phase + 1), '032b'))
+        append(expected, 't.total_checks', (phase + 2) * 1000, format(80 * (phase + 1), '032b'))
     return expected, widths
 
 

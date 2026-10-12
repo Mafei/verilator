@@ -17,7 +17,7 @@ test.compile(verilator_flags2=[
     '--output-split', '10000', '--output-split-cfuncs', '100'
 ])
 test.execute()
-test.file_grep(test.run_log_filename, r'^Partial output initialization checks: (\d+)$', 320)
+test.file_grep(test.run_log_filename, r'^Partial output initialization checks: (\d+)$', 400)
 expected, widths = port_init()
 check_trace(test, expected, widths)
 test.passes()
