@@ -98,18 +98,21 @@ def finish_wave_evidence(root):
 
 
 def controls_wave_evidence(root):
-    """Require nine flat controls and all three array-width profiles."""
+    """Require nine flat controls and every array, API, and trace profile."""
     root = root.resolve()
     base = root / "test_regress/obj_vlt"
     fixtures = ("t_fourstate_port_init", "t_fourstate_port_partial", "t_fourstate_port_static",
                 "t_fourstate_nba_capture", "t_fourstate_nba_race", "t_fourstate_nba_tasks",
                 "t_fourstate_nba_trigger", "t_fourstate_nba_unknown", "t_fourstate_array_guard")
     collections = [(fixture, base / fixture) for fixture in fixtures]
-    array = "t_fourstate_array_init"
-    collections += [(array + "/width" + str(width), base / array / ("width" + str(width)))
-                    for width in (7, 33, 65)]
     expected = {fixture: {base / fixture / "simx.vcd"} for fixture in fixtures}
-    expected[array] = {base / array / ("width" + str(width)) / "simx.vcd" for width in (7, 33, 65)}
+    profiled = (("t_fourstate_array_init", ("width7", "width33", "width65")),
+                ("t_fourstate_port_api", ("default", "on", "off")), ("t_fourstate_trace_resume",
+                                                                     ("two_state", "four_state")))
+    for fixture, profiles in profiled:
+        collections += [(fixture + "/" + profile, base / fixture / profile)
+                        for profile in profiles]
+        expected[fixture] = {base / fixture / profile / "simx.vcd" for profile in profiles}
     for fixture, wanted in expected.items():
         directory = base / fixture
         for ancestor in (base.parent, base, directory):

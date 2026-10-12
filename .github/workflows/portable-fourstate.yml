@@ -82,6 +82,20 @@ jobs:
             test_regress/obj_vlt/t_fourstate_array_init/width33/*.log
             test_regress/obj_vlt/t_fourstate_array_init/width65/simx.vcd
             test_regress/obj_vlt/t_fourstate_array_init/width65/*.log
+            test_regress/obj_vlt/t_fourstate_port_api/*.log
+            test_regress/obj_vlt/t_fourstate_port_api/*.status
+            test_regress/obj_vlt/t_fourstate_port_api/default/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_api/default/*.log
+            test_regress/obj_vlt/t_fourstate_port_api/on/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_api/on/*.log
+            test_regress/obj_vlt/t_fourstate_port_api/off/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_api/off/*.log
+            test_regress/obj_vlt/t_fourstate_trace_resume/*.log
+            test_regress/obj_vlt/t_fourstate_trace_resume/*.status
+            test_regress/obj_vlt/t_fourstate_trace_resume/two_state/simx.vcd
+            test_regress/obj_vlt/t_fourstate_trace_resume/two_state/*.log
+            test_regress/obj_vlt/t_fourstate_trace_resume/four_state/simx.vcd
+            test_regress/obj_vlt/t_fourstate_trace_resume/four_state/*.log
             test_regress/obj_vlt/t_assign_automatic_bad/*.status
             test_regress/obj_vlt/t_ast_dump_patterns/*.status
             test_regress/obj_vlt/t_clocking_drive_cycle/*.status
@@ -214,6 +228,20 @@ jobs:
             test_regress/obj_vlt/t_fourstate_array_init/width33/*.log
             test_regress/obj_vlt/t_fourstate_array_init/width65/simx.vcd
             test_regress/obj_vlt/t_fourstate_array_init/width65/*.log
+            test_regress/obj_vlt/t_fourstate_port_api/*.log
+            test_regress/obj_vlt/t_fourstate_port_api/*.status
+            test_regress/obj_vlt/t_fourstate_port_api/default/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_api/default/*.log
+            test_regress/obj_vlt/t_fourstate_port_api/on/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_api/on/*.log
+            test_regress/obj_vlt/t_fourstate_port_api/off/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_api/off/*.log
+            test_regress/obj_vlt/t_fourstate_trace_resume/*.log
+            test_regress/obj_vlt/t_fourstate_trace_resume/*.status
+            test_regress/obj_vlt/t_fourstate_trace_resume/two_state/simx.vcd
+            test_regress/obj_vlt/t_fourstate_trace_resume/two_state/*.log
+            test_regress/obj_vlt/t_fourstate_trace_resume/four_state/simx.vcd
+            test_regress/obj_vlt/t_fourstate_trace_resume/four_state/*.log
             test_regress/obj_vlt/t_assign_automatic_bad/*.status
             test_regress/obj_vlt/t_ast_dump_patterns/*.status
             test_regress/obj_vlt/t_clocking_drive_cycle/*.status

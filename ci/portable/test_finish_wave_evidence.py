@@ -81,7 +81,7 @@ class FinishWaveEvidenceTest(unittest.TestCase):
 
 
 class ControlsWaveEvidenceTest(unittest.TestCase):
-    """Check all twelve control profiles using independent complete wave fixtures."""
+    """Check all seventeen control profiles using independent complete wave fixtures."""
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
@@ -98,6 +98,15 @@ class ControlsWaveEvidenceTest(unittest.TestCase):
             self.root / "test_regress/obj_vlt/t_fourstate_array_init" / ("width" + str(width)) /
             "simx.vcd" for width in (7, 33, 65)
         ]
+        self.api_paths = [
+            self.root / "test_regress/obj_vlt/t_fourstate_port_api" / profile / "simx.vcd"
+            for profile in ("default", "on", "off")
+        ]
+        self.trace_paths = [
+            self.root / "test_regress/obj_vlt/t_fourstate_trace_resume" / profile / "simx.vcd"
+            for profile in ("two_state", "four_state")
+        ]
+        self.paths += self.api_paths + self.trace_paths
         self.raw = (b"$timescale 1ps $end\n$scope module t $end\n"
                     b"$var wire 1 ! q $end\n$upscope $end\n"
                     b" $enddefinitions $end\n#0\n0!\n#1\n1!\n")
@@ -111,10 +120,10 @@ class ControlsWaveEvidenceTest(unittest.TestCase):
             log_evidence.controls_wave_evidence(self.root)
         return output.getvalue()
 
-    def test_all_twelve_controls_preserve_complete_bytes(self):
+    def test_all_seventeen_controls_preserve_complete_bytes(self):
         console = self.emit()
         result = json.loads((self.root / "out/controls-wave-evidence.json").read_text())
-        self.assertEqual(len(result["records"]), 12)
+        self.assertEqual(len(result["records"]), 17)
         self.assertEqual(result["budget_bytes"], 512 * 1024)
         self.assertEqual(result["total_bytes"], sum(path.stat().st_size for path in self.paths))
         self.assertEqual(json.loads(console.removeprefix("CONTROLS_WAVE_BYTES ")), result)
@@ -129,9 +138,26 @@ class ControlsWaveEvidenceTest(unittest.TestCase):
             self.emit()
 
     def test_missing_array_width_rejects_partial_collection(self):
-        self.paths[-1].unlink()
+        path = self.root / "test_regress/obj_vlt/t_fourstate_array_init/width65/simx.vcd"
+        path.unlink()
         with self.assertRaisesRegex(ValueError, "Missing or unexpected control VCD"):
             self.emit()
+
+    def test_missing_api_profile_rejects_partial_collection(self):
+        for path in self.api_paths:
+            with self.subTest(profile=path.parent.name):
+                path.unlink()
+                with self.assertRaisesRegex(ValueError, "Missing or unexpected control VCD"):
+                    self.emit()
+                path.write_bytes(self.raw)
+
+    def test_missing_trace_profile_rejects_partial_collection(self):
+        for path in self.trace_paths:
+            with self.subTest(profile=path.parent.name):
+                path.unlink()
+                with self.assertRaisesRegex(ValueError, "Missing or unexpected control VCD"):
+                    self.emit()
+                path.write_bytes(self.raw)
 
     def test_extra_flat_or_nested_wave_rejects_stale_collection(self):
         for extra in (self.paths[0].with_name("stale.vcd"),
@@ -151,7 +177,7 @@ class ControlsWaveEvidenceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Symlinked control output"):
             self.emit()
 
-    def test_symlinked_width_rejects_redirected_collection(self):
+    def test_symlinked_profile_rejects_redirected_collection(self):
         directory = self.paths[-1].parent
         moved = directory.with_name("redirected")
         directory.rename(moved)

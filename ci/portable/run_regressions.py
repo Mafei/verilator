@@ -113,8 +113,8 @@ GROUPS = {
     "sv_controls_20261012": [
         "fourstate_array_guard", "fourstate_array_init", "fourstate_nba_capture",
         "fourstate_nba_race", "fourstate_nba_tasks", "fourstate_nba_trigger",
-        "fourstate_nba_unknown", "fourstate_port_init", "fourstate_port_partial",
-        "fourstate_port_static"
+        "fourstate_nba_unknown", "fourstate_port_api", "fourstate_port_init",
+        "fourstate_port_partial", "fourstate_port_static", "fourstate_trace_resume"
     ]
 }
 
