@@ -98,12 +98,12 @@ def finish_wave_evidence(root):
 
 
 def controls_wave_evidence(root):
-    """Require eight flat controls and all three array-width profiles."""
+    """Require nine flat controls and all three array-width profiles."""
     root = root.resolve()
     base = root / "test_regress/obj_vlt"
     fixtures = ("t_fourstate_port_init", "t_fourstate_port_partial", "t_fourstate_port_static",
                 "t_fourstate_nba_capture", "t_fourstate_nba_race", "t_fourstate_nba_tasks",
-                "t_fourstate_nba_trigger", "t_fourstate_nba_unknown")
+                "t_fourstate_nba_trigger", "t_fourstate_nba_unknown", "t_fourstate_array_guard")
     collections = [(fixture, base / fixture) for fixture in fixtures]
     array = "t_fourstate_array_init"
     collections += [(array + "/width" + str(width), base / array / ("width" + str(width)))

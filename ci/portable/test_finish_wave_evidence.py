@@ -81,7 +81,7 @@ class FinishWaveEvidenceTest(unittest.TestCase):
 
 
 class ControlsWaveEvidenceTest(unittest.TestCase):
-    """Check all eleven control profiles using independent complete wave fixtures."""
+    """Check all twelve control profiles using independent complete wave fixtures."""
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
@@ -89,7 +89,8 @@ class ControlsWaveEvidenceTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         fixtures = ("t_fourstate_port_init", "t_fourstate_port_partial", "t_fourstate_port_static",
                     "t_fourstate_nba_capture", "t_fourstate_nba_race", "t_fourstate_nba_tasks",
-                    "t_fourstate_nba_trigger", "t_fourstate_nba_unknown")
+                    "t_fourstate_nba_trigger", "t_fourstate_nba_unknown",
+                    "t_fourstate_array_guard")
         self.paths = [
             self.root / "test_regress/obj_vlt" / fixture / "simx.vcd" for fixture in fixtures
         ]
@@ -110,10 +111,10 @@ class ControlsWaveEvidenceTest(unittest.TestCase):
             log_evidence.controls_wave_evidence(self.root)
         return output.getvalue()
 
-    def test_all_eleven_controls_preserve_complete_bytes(self):
+    def test_all_twelve_controls_preserve_complete_bytes(self):
         console = self.emit()
         result = json.loads((self.root / "out/controls-wave-evidence.json").read_text())
-        self.assertEqual(len(result["records"]), 11)
+        self.assertEqual(len(result["records"]), 12)
         self.assertEqual(result["budget_bytes"], 512 * 1024)
         self.assertEqual(result["total_bytes"], sum(path.stat().st_size for path in self.paths))
         self.assertEqual(json.loads(console.removeprefix("CONTROLS_WAVE_BYTES ")), result)
