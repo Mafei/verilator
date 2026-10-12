@@ -72,10 +72,11 @@ public:
     LifeVarEntry() = default;
     ~LifeVarEntry() = default;
 
-    void init(bool setBeforeUse) {
+    void init(bool setBeforeUse, AstConst* const constp = nullptr) {
         UASSERT(m_isNew, "Not a new entry");
         m_isNew = false;
         m_setBeforeUse = setBeforeUse;
+        m_constp = constp;
     }
     string ascii() const {  // LCOV_EXCL_START
         std::ostringstream os;
@@ -182,25 +183,36 @@ public:
     }
     void clearReplaced() { m_replacedVref = false; }
     bool replaced() const { return m_replacedVref; }
-    void varUsageReplace(AstVarScope* nodep, AstVarRef* varrefp) {
+    AstConst* constNodep(AstVarScope* const nodep) const {
+        if (m_noopt) return nullptr;
+        const auto it = m_map.find(nodep);
+        return it != m_map.end() ? it->second.constNodep() : nullptr;
+    }
+    void varUsageReplace(AstVarScope* nodep, AstVarRef* varrefp,
+                         const bool allowInheritedConstants) {
         // Variable rvalue.  If it references a constant, we can replace it
         LifeVarEntry& entr = m_map[nodep];
         if (entr.isNew()) {
-            entr.init(false);
-        } else {
-            if (AstConst* const constp = entr.constNodep()) {
-                if (!varrefp->varp()->isSigPublic() && !varrefp->varp()->isWrittenByDpi()
-                    && !varrefp->varp()->isVirtIface()) {
-                    // Aha, variable is constant; substitute in.
-                    // We'll later constant propagate
-                    UINFO(4, "     replaceconst: " << varrefp);
-                    UINFO(9, "     replaceval: " << constp);
-                    varrefp->replaceWith(constp->cloneTree(false));
-                    m_replacedVref = true;
-                    VL_DO_DANGLING(varrefp->deleteTree(), varrefp);
-                    ++m_statep->m_statAssnCon;
-                    return;  // **DONE, no longer a var reference**
-                }
+            // Only compiler temporaries inherit the value fact; assignment/access history stays
+            // local. Loops, jumps and opaque operations must not reuse an enclosing value.
+            AstConst* const inheritedp = allowInheritedConstants && !m_noopt && m_aboveLifep
+                                                 && nodep->varp()->isStatementTemp()
+                                             ? m_aboveLifep->constNodep(nodep)
+                                             : nullptr;
+            entr.init(false, inheritedp);
+        }
+        if (AstConst* const constp = entr.constNodep()) {
+            if (!varrefp->varp()->isSigPublic() && !varrefp->varp()->isWrittenByDpi()
+                && !varrefp->varp()->isVirtIface()) {
+                // Aha, variable is constant; substitute in.
+                // We'll later constant propagate
+                UINFO(4, "     replaceconst: " << varrefp);
+                UINFO(9, "     replaceval: " << constp);
+                varrefp->replaceWith(constp->cloneTree(false));
+                m_replacedVref = true;
+                VL_DO_DANGLING(varrefp->deleteTree(), varrefp);
+                ++m_statep->m_statAssnCon;
+                return;  // **DONE, no longer a var reference**
             }
             UINFO(4, "     usage: " << nodep);
         }
@@ -327,7 +339,7 @@ class LifeVisitor final : public VNVisitor {
             m_sideEffect = true;  // $sscanf etc may have RHS vars that are lvalues
             m_lifep->complexAssign(vscp);
         } else {
-            VL_DO_DANGLING(m_lifep->varUsageReplace(vscp, nodep), nodep);
+            VL_DO_DANGLING(m_lifep->varUsageReplace(vscp, nodep, !m_noopt), nodep);
         }
     }
     void visit(AstNodeAssign* nodep) override {
@@ -439,16 +451,29 @@ class LifeVisitor final : public VNVisitor {
         if (nodep->recursive()) setNoopt("recursive");
         if (nodep->noLife()) setNoopt("nolife");
         if (nodep->dpiImportPrototype() && !nodep->dpiPure()) {
+            setNoopt("impure DPI import");
             m_sideEffect = true;  // If appears on assign RHS, don't ever delete the assignment
         }
         iterateChildren(nodep);
     }
     void visit(AstCExprUser* nodep) override {
+        if (!nodep->isPure()) setNoopt("opaque C++ expression");
         m_sideEffect = true;  // If appears on assign RHS, don't ever delete the assignment
         iterateChildren(nodep);
     }
     void visit(AstCExpr* nodep) override {
+        if (!nodep->isPure()) setNoopt("opaque C++ expression");
         m_sideEffect = true;  // If appears on assign RHS, don't ever delete the assignment
+        iterateChildren(nodep);
+    }
+
+    void visit(AstCStmtUser* nodep) override {
+        setNoopt("opaque C++ statement");
+        iterateChildren(nodep);
+    }
+
+    void visit(AstCStmt* nodep) override {
+        setNoopt("opaque C++ statement");
         iterateChildren(nodep);
     }
 
