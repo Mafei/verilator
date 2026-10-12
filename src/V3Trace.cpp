@@ -1219,15 +1219,17 @@ class TraceVisitor final : public VNVisitor {
                 TraceActivityVertex* const activityVtxp
                     = getActivityVertexp(nodep, callp->funcp()->slow());
                 for (AstNode* nextp = nodep; nextp; nextp = nextp->nextp()) {
-                    if (AstStmtExpr* const stmtp = VN_CAST(nextp, StmtExpr)) {
-                        if (AstCCall* const ccallp = VN_CAST(stmtp->exprp(), CCall)) {
-                            stmtp->user2(true);  // Processed
-                            UINFO(8, "     SubCCALL " << ccallp);
-                            V3GraphVertex* const ccallFuncVtxp = getCFuncVertexp(ccallp->funcp());
-                            activityVtxp->slow(ccallp->funcp()->slow());
-                            new V3GraphEdge{&m_graph, activityVtxp, ccallFuncVtxp, 1};
-                        }
-                    }
+                    // Only consecutive calls share activity. An intervening await may
+                    // suspend until tracing has cleared the preceding call's flag.
+                    AstStmtExpr* const stmtp = VN_CAST(nextp, StmtExpr);
+                    if (!stmtp) break;
+                    AstCCall* const ccallp = VN_CAST(stmtp->exprp(), CCall);
+                    if (!ccallp) break;
+                    stmtp->user2(true);  // Processed
+                    UINFO(8, "     SubCCALL " << ccallp);
+                    V3GraphVertex* const ccallFuncVtxp = getCFuncVertexp(ccallp->funcp());
+                    activityVtxp->slow(ccallp->funcp()->slow());
+                    new V3GraphEdge{&m_graph, activityVtxp, ccallFuncVtxp, 1};
                 }
             }
         }

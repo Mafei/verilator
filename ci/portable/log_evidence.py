@@ -9,6 +9,8 @@ import re
 import sys
 from pathlib import Path
 
+CONTROLS_WAVE_BUDGET = 512 * 1024
+
 
 def compiler_evidence(root):
     """Record the compiler bytes that produced the models and portable package."""
@@ -95,7 +97,43 @@ def finish_wave_evidence(root):
     wave_evidence(root, collections, "finish-wave-evidence.json", "FINISH_WAVE_BYTES", 64 * 1024)
 
 
-def wave_evidence(root, collections, filename, prefix, budget):
+def controls_wave_evidence(root):
+    """Require nine flat controls and every array, API, and trace profile."""
+    root = root.resolve()
+    base = root / "test_regress/obj_vlt"
+    fixtures = ("t_fourstate_port_init", "t_fourstate_port_partial", "t_fourstate_port_static",
+                "t_fourstate_nba_capture", "t_fourstate_nba_race", "t_fourstate_nba_tasks",
+                "t_fourstate_nba_trigger", "t_fourstate_nba_unknown", "t_fourstate_array_guard")
+    collections = [(fixture, base / fixture) for fixture in fixtures]
+    expected = {fixture: {base / fixture / "simx.vcd"} for fixture in fixtures}
+    profiled = (("t_fourstate_array_init", ("width7", "width33", "width65")),
+                ("t_fourstate_port_api", ("default", "on", "off")), ("t_fourstate_trace_resume",
+                                                                     ("two_state", "four_state")))
+    for fixture, profiles in profiled:
+        collections += [(fixture + "/" + profile, base / fixture / profile)
+                        for profile in profiles]
+        expected[fixture] = {base / fixture / profile / "simx.vcd" for profile in profiles}
+    for fixture, wanted in expected.items():
+        directory = base / fixture
+        for ancestor in (base.parent, base, directory):
+            if ancestor.is_symlink():
+                raise ValueError("Symlinked control fixture: " + fixture)
+        if not directory.is_dir():
+            raise ValueError("Missing or unexpected control VCD: " + fixture)
+        for path in directory.rglob("*"):
+            if path.is_symlink() and (path.suffix == ".vcd" or path.is_dir()):
+                raise ValueError("Symlinked control output: " + str(path))
+        if set(directory.rglob("*.vcd")) != wanted:
+            raise ValueError("Missing or unexpected control VCD: " + fixture)
+    wave_evidence(root,
+                  collections,
+                  "controls-wave-evidence.json",
+                  "CONTROLS_WAVE_BYTES",
+                  CONTROLS_WAVE_BUDGET,
+                  require_complete=True)
+
+
+def wave_evidence(root, collections, filename, prefix, budget, require_complete=False):
     """Emit regular public wave files with bounded size and exact byte hashes."""
     total = 0
     records = []
@@ -116,6 +154,11 @@ def wave_evidence(root, collections, filename, prefix, budget):
             total += len(raw)
             if len(raw) != size or total > budget:
                 raise ValueError("Empty or oversized semantic VCD collection")
+            if require_complete and (
+                    not raw.endswith(b"\n") or not re.search(rb"(?m)^[ \t]*\$var[ \t]", raw)
+                    or not re.search(rb"(?m)^[ \t]*\$enddefinitions[ \t]+\$end[ \t]*\r?$", raw)
+                    or not re.search(rb"(?m)^#[0-9]+[ \t]*\r?$", raw)):
+                raise ValueError("Incomplete control VCD: " + str(path))
             records.append({
                 "fixture": fixture,
                 "path": str(path.relative_to(root)),
@@ -132,8 +175,9 @@ def wave_evidence(root, collections, filename, prefix, budget):
 def main():
     """Report the compiler after building or the outputs after validation."""
     if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results", "semantic-waves",
-                                                 "finish-waves"):
-        raise SystemExit("Usage: log_evidence.py compiler|results|semantic-waves|finish-waves")
+                                                 "finish-waves", "controls-waves"):
+        raise SystemExit(
+            "Usage: log_evidence.py compiler|results|semantic-waves|finish-waves|controls-waves")
     root = Path.cwd()
     if sys.argv[1] == "compiler":
         compiler_evidence(root)
@@ -141,8 +185,10 @@ def main():
         results_evidence(root)
     elif sys.argv[1] == "semantic-waves":
         semantic_wave_evidence(root)
-    else:
+    elif sys.argv[1] == "finish-waves":
         finish_wave_evidence(root)
+    else:
+        controls_wave_evidence(root)
 
 
 if __name__ == "__main__":

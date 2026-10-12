@@ -207,7 +207,8 @@ class UnknownVisitor final : public VNVisitor {
         VL_RESTORER(m_allowXUnique);
         if (nodep->isParam()) {
             m_allowXUnique = false;
-        } else if (m_modp && m_modp->isTop() && nodep->varType() == VVarType::PORT) {
+        } else if (m_modp && m_modp->isTop() && nodep->isPrimaryInish()
+                   && v3Global.opt.fourstateApi()) {
             nodep->setIsTopLevelPort();
         }
         iterateChildren(nodep);

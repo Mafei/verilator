@@ -221,6 +221,37 @@ static bool needsSplitting(const AstNodeDType* const dtypep) {
     return false;
 }
 
+// Resolve omitted port kinds after type checking, before Fork/Begin can lift task storage.
+class FourstatePortKindVisitor final : public VNVisitor {
+    AstNodeFTask* m_ftaskp = nullptr;  // Function or task containing the declaration
+    uint64_t m_statPortKinds = 0;  // Source declarations whose omitted kind was resolved
+
+    void visit(AstNodeFTask* const nodep) override {
+        VL_RESTORER(m_ftaskp);
+        m_ftaskp = nodep;
+        iterateChildren(nodep);
+    }
+    void visit(AstVar* const nodep) override {
+        if (nodep->varType() == VVarType::PORT) {
+            const bool isNetPort = !m_ftaskp && !nodep->isRef() && !nodep->isConstRef()
+                                   && nodep->dtypep()->skipRefp()->isFourstate()
+                                   && !(nodep->declDirection().isOutput() && nodep->isDeclTyped());
+            nodep->varType(isNetPort ? VVarType::WIRE : VVarType::VAR);
+            ++m_statPortKinds;
+        }
+        iterateChildren(nodep);
+    }
+    void visit(AstNode* const nodep) override { iterateChildren(nodep); }
+
+    explicit FourstatePortKindVisitor(AstNetlist* const netlistp) { iterateAndNextNull(netlistp); }
+    ~FourstatePortKindVisitor() override {
+        V3Stats::addStat("Fourstate, Resolved omitted port kinds", m_statPortKinds);
+    }
+
+public:
+    static void apply(AstNetlist* const netlistp) { FourstatePortKindVisitor{netlistp}; }
+};
+
 class FTaskPortsHelper final {
     std::vector<AstVar*>
         m_currentFTaskRefPortps;  // Ports of FTask in order so we can connect AstArgs to them
@@ -4687,6 +4718,12 @@ public:
         V3Stats::addStat("Fourstate, Packed string conversions", m_statPackedStrings);
     }
 };
+
+void V3Fourstate::normalizePortKindsAll(AstNetlist* const netlistp) {
+    UINFO(2, __FUNCTION__ << ":");
+    FourstatePortKindVisitor::apply(netlistp);
+    V3Global::dumpCheckGlobalTree("fourstate_port_kinds", 0, dumpTreeEitherLevel() >= 6);
+}
 
 void V3Fourstate::fourstateAll(AstNetlist* netlistp) {
     UINFO(2, __FUNCTION__ << ":");
