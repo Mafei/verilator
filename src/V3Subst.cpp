@@ -119,8 +119,8 @@ public:
     AstNodeExpr* substWord(uint32_t word) { return substRecord(m_wordRecords[word]); }
 
     void deleteUnusedAssignments(size_t& nWordAssignDeleted, size_t& nWholeAssignDeleted) {
-        // Delete assignments to temporaries if they are not used
-        if (!m_varp->isStatementTemp()) return;
+        // Only function-local temporaries can be proven unused by this per-function analysis.
+        if (!m_varp->isStatementTemp() || !m_varp->isFuncLocal()) return;
         for (Record& wordRecord : m_wordRecords)
             deleteAssignmentIfUnused(wordRecord, nWordAssignDeleted);
         deleteAssignmentIfUnused(m_wholeRecord, nWholeAssignDeleted);
