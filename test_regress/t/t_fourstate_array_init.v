@@ -7,13 +7,15 @@
 // verilog_format: off
 `define stop $stop
 `define checkh(gotv, expv) do if ((gotv) !== (expv)) begin $write("%%Error: %s:%0d: got=%b exp=%b\n", `__FILE__, `__LINE__, (gotv), (expv)); `stop; end while (0)
+`define STRINGIFY_(value) `"value`"
+`define STRINGIFY(value) `STRINGIFY_(value)
 // verilog_format: on
 
 `ifndef ARRAY_INIT_WIDTH
 `define ARRAY_INIT_WIDTH 7
 `endif
 `ifndef TEST_DUMPFILE
-`define TEST_DUMPFILE "t_fourstate_array_init.vcd"
+`define TEST_DUMPFILE t_fourstate_array_init.vcd
 `endif
 
 `timescale 1ps/1ps
@@ -27,7 +29,7 @@ module t;
   wire [WIDTH - 1:0] bank2 = bank[2];
   wire [WIDTH - 1:0] bank3 = bank[3];
   initial begin
-    $dumpfile(`TEST_DUMPFILE);
+    $dumpfile(`STRINGIFY(`TEST_DUMPFILE));
     $dumpvars(0, bank1, bank2, bank3);
     // The value and X/Z write must share the snapshot, even across generated C functions.
     bank[1] = FIRST;
