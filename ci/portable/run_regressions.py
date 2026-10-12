@@ -101,7 +101,20 @@ GROUPS = {
         "timing_blocking_event", "fourstate_blocking_event", "fourstate_force_release",
         "force_packed_release"
     ],
-    "finish_boundary_20261011": ["timing_finish_boundary", "fourstate_finish_boundary"]
+    "finish_boundary_20261011": ["timing_finish_boundary", "fourstate_finish_boundary"],
+    # Official changes through b7515159bb194d0da6077ff180ef312039aadcdf.
+    "upstream_daily_20261012": [
+        "assign_automatic_bad", "ast_dump_patterns", "clocking_drive_cycle", "dfg_peephole",
+        "disable_task_arg", "event_nba_timing", "flag_deprecated_bad", "nba_struct_array",
+        "opt_bitblast", "opt_bitblast_attr", "opt_bitblast_attr_bad", "opt_bitblast_off",
+        "param_name_unresolved", "param_name_unresolved_bad", "queue_bounded", "timing_debug1",
+        "timing_osc"
+    ],
+    "sv_controls_20261012": [
+        "fourstate_array_init", "fourstate_nba_capture", "fourstate_nba_race",
+        "fourstate_nba_tasks", "fourstate_nba_trigger", "fourstate_nba_unknown",
+        "fourstate_port_init", "fourstate_port_partial", "fourstate_port_static"
+    ]
 }
 
 

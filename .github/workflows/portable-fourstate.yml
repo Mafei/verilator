@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -47,6 +47,55 @@ jobs:
             test_regress/obj_vlt/t_fourstate_finish_boundary/**/*.vcd
             test_regress/obj_vlt/t_timing_finish_boundary/**/*.log
             test_regress/obj_vlt/t_fourstate_finish_boundary/**/*.log
+            test_regress/obj_vlt/t_fourstate_port_init/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_init/*.log
+            test_regress/obj_vlt/t_fourstate_port_init/*.status
+            test_regress/obj_vlt/t_fourstate_port_partial/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_partial/*.log
+            test_regress/obj_vlt/t_fourstate_port_partial/*.status
+            test_regress/obj_vlt/t_fourstate_port_static/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_static/*.log
+            test_regress/obj_vlt/t_fourstate_port_static/*.status
+            test_regress/obj_vlt/t_fourstate_nba_capture/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_capture/*.log
+            test_regress/obj_vlt/t_fourstate_nba_capture/*.status
+            test_regress/obj_vlt/t_fourstate_nba_race/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_race/*.log
+            test_regress/obj_vlt/t_fourstate_nba_race/*.status
+            test_regress/obj_vlt/t_fourstate_nba_tasks/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_tasks/*.log
+            test_regress/obj_vlt/t_fourstate_nba_tasks/*.status
+            test_regress/obj_vlt/t_fourstate_nba_trigger/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_trigger/*.log
+            test_regress/obj_vlt/t_fourstate_nba_trigger/*.status
+            test_regress/obj_vlt/t_fourstate_nba_unknown/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_unknown/*.log
+            test_regress/obj_vlt/t_fourstate_nba_unknown/*.status
+            test_regress/obj_vlt/t_fourstate_array_init/*.log
+            test_regress/obj_vlt/t_fourstate_array_init/*.status
+            test_regress/obj_vlt/t_fourstate_array_init/width7/simx.vcd
+            test_regress/obj_vlt/t_fourstate_array_init/width7/*.log
+            test_regress/obj_vlt/t_fourstate_array_init/width33/simx.vcd
+            test_regress/obj_vlt/t_fourstate_array_init/width33/*.log
+            test_regress/obj_vlt/t_fourstate_array_init/width65/simx.vcd
+            test_regress/obj_vlt/t_fourstate_array_init/width65/*.log
+            test_regress/obj_vlt/t_assign_automatic_bad/*.status
+            test_regress/obj_vlt/t_ast_dump_patterns/*.status
+            test_regress/obj_vlt/t_clocking_drive_cycle/*.status
+            test_regress/obj_vlt/t_dfg_peephole/*.status
+            test_regress/obj_vlt/t_disable_task_arg/*.status
+            test_regress/obj_vlt/t_event_nba_timing/*.status
+            test_regress/obj_vlt/t_flag_deprecated_bad/*.status
+            test_regress/obj_vlt/t_nba_struct_array/*.status
+            test_regress/obj_vlt/t_opt_bitblast/*.status
+            test_regress/obj_vlt/t_opt_bitblast_attr/*.status
+            test_regress/obj_vlt/t_opt_bitblast_attr_bad/*.status
+            test_regress/obj_vlt/t_opt_bitblast_off/*.status
+            test_regress/obj_vlt/t_param_name_unresolved/*.status
+            test_regress/obj_vlt/t_param_name_unresolved_bad/*.status
+            test_regress/obj_vlt/t_queue_bounded/*.status
+            test_regress/obj_vlt/t_timing_debug1/*.status
+            test_regress/obj_vlt/t_timing_osc/*.status
           if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
@@ -127,4 +176,53 @@ jobs:
             test_regress/obj_vlt/t_fourstate_finish_boundary/**/*.vcd
             test_regress/obj_vlt/t_timing_finish_boundary/**/*.log
             test_regress/obj_vlt/t_fourstate_finish_boundary/**/*.log
+            test_regress/obj_vlt/t_fourstate_port_init/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_init/*.log
+            test_regress/obj_vlt/t_fourstate_port_init/*.status
+            test_regress/obj_vlt/t_fourstate_port_partial/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_partial/*.log
+            test_regress/obj_vlt/t_fourstate_port_partial/*.status
+            test_regress/obj_vlt/t_fourstate_port_static/simx.vcd
+            test_regress/obj_vlt/t_fourstate_port_static/*.log
+            test_regress/obj_vlt/t_fourstate_port_static/*.status
+            test_regress/obj_vlt/t_fourstate_nba_capture/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_capture/*.log
+            test_regress/obj_vlt/t_fourstate_nba_capture/*.status
+            test_regress/obj_vlt/t_fourstate_nba_race/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_race/*.log
+            test_regress/obj_vlt/t_fourstate_nba_race/*.status
+            test_regress/obj_vlt/t_fourstate_nba_tasks/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_tasks/*.log
+            test_regress/obj_vlt/t_fourstate_nba_tasks/*.status
+            test_regress/obj_vlt/t_fourstate_nba_trigger/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_trigger/*.log
+            test_regress/obj_vlt/t_fourstate_nba_trigger/*.status
+            test_regress/obj_vlt/t_fourstate_nba_unknown/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_unknown/*.log
+            test_regress/obj_vlt/t_fourstate_nba_unknown/*.status
+            test_regress/obj_vlt/t_fourstate_array_init/*.log
+            test_regress/obj_vlt/t_fourstate_array_init/*.status
+            test_regress/obj_vlt/t_fourstate_array_init/width7/simx.vcd
+            test_regress/obj_vlt/t_fourstate_array_init/width7/*.log
+            test_regress/obj_vlt/t_fourstate_array_init/width33/simx.vcd
+            test_regress/obj_vlt/t_fourstate_array_init/width33/*.log
+            test_regress/obj_vlt/t_fourstate_array_init/width65/simx.vcd
+            test_regress/obj_vlt/t_fourstate_array_init/width65/*.log
+            test_regress/obj_vlt/t_assign_automatic_bad/*.status
+            test_regress/obj_vlt/t_ast_dump_patterns/*.status
+            test_regress/obj_vlt/t_clocking_drive_cycle/*.status
+            test_regress/obj_vlt/t_dfg_peephole/*.status
+            test_regress/obj_vlt/t_disable_task_arg/*.status
+            test_regress/obj_vlt/t_event_nba_timing/*.status
+            test_regress/obj_vlt/t_flag_deprecated_bad/*.status
+            test_regress/obj_vlt/t_nba_struct_array/*.status
+            test_regress/obj_vlt/t_opt_bitblast/*.status
+            test_regress/obj_vlt/t_opt_bitblast_attr/*.status
+            test_regress/obj_vlt/t_opt_bitblast_attr_bad/*.status
+            test_regress/obj_vlt/t_opt_bitblast_off/*.status
+            test_regress/obj_vlt/t_param_name_unresolved/*.status
+            test_regress/obj_vlt/t_param_name_unresolved_bad/*.status
+            test_regress/obj_vlt/t_queue_bounded/*.status
+            test_regress/obj_vlt/t_timing_debug1/*.status
+            test_regress/obj_vlt/t_timing_osc/*.status
           if-no-files-found: error
