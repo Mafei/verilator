@@ -90,12 +90,6 @@ class LinkResolveVisitor final : public VNVisitor {
     void visit(AstVar* nodep) override {
         iterateChildren(nodep);
         if (m_ftaskp) nodep->funcLocal(true);
-        if (v3Global.opt.fourstate() && nodep->varType() == VVarType::PORT) {
-            // Resolve omitted kinds while subroutine ownership is still available.
-            const bool isNetPort = !m_ftaskp && !nodep->isRef() && !nodep->isConstRef()
-                                   && !(nodep->direction().isOutput() && nodep->isDeclTyped());
-            nodep->varType(isNetPort ? VVarType::WIRE : VVarType::VAR);
-        }
         if (nodep->isSigModPublic()) {
             nodep->sigModPublic(false);  // We're done with this attribute
             m_modp->modPublic(true);  // Avoid flattening if signals are exposed

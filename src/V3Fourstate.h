@@ -31,6 +31,7 @@ class V3Fourstate final {
 public:
     // Read-only membership for passes that must preserve independent net drivers.
     static std::set<const AstVar*> collectMultiDrivenNets(AstNetlist* nodep) VL_MT_DISABLED;
+    static void normalizePortKindsAll(AstNetlist* nodep) VL_MT_DISABLED;
     static void fourstateAll(AstNetlist* nodep) VL_MT_DISABLED;
 };
 

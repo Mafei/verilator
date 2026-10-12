@@ -294,6 +294,8 @@ static void process() {
         if (v3Global.opt.fConstBeforeDfg()) V3Const::constifyAllLint(v3Global.rootp());
 
         if (!(v3Global.opt.serializeOnly() && !v3Global.opt.flatten())) {
+            // Width has validated source ports; task ownership is still intact.
+            if (v3Global.opt.fourstate()) V3Fourstate::normalizePortKindsAll(v3Global.rootp());
             if (v3Global.opt.timing().isSetTrue()) {
                 // Generate classes and tasks required to maintain proper lifetimes for references
                 // in forks
