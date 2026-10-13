@@ -162,9 +162,22 @@ jobs:
               dnf -y install dnf-plugins-core
               dnf config-manager --set-enabled powertools
               dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
+                gcc-toolset-13-libasan-devel \
                 autoconf automake make perl git curl tar gzip xz findutils diffutils \
                 python3.11 python3.11-pip zlib-devel lz4-devel help2man
               ln -s /usr/bin/python3.11 /usr/local/bin/python3
+              source /opt/rh/gcc-toolset-13/enable
+              asan_probe_directory=$(mktemp -d /tmp/verilator-asan-probe.XXXXXX)
+              printf "%s\n" "int main() { int* value = new int[1]; value[0] = 13; int result = value[0] - 13; delete[] value; return result; }" \
+                | g++ -fsanitize=address -x c++ - -o "$asan_probe_directory/probe"
+              "$asan_probe_directory/probe"
+              rpm -q gcc-toolset-13-libasan-devel libasan8
+              rpm -q --requires gcc-toolset-13-libasan-devel
+              g++ -print-file-name=libasan_preinit.o
+              g++ -print-file-name=libasan.so
+              ldd "$asan_probe_directory/probe"
+              sha256sum "$asan_probe_directory/probe"
+              printf "ASAN_TOOLSET13_PREFLIGHT_PASSED\n"
               bash ci/portable/build.bash rocky8-x86_64
             '
       - name: Verify package in a fresh Rocky 8.10 container
