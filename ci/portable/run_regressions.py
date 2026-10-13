@@ -115,6 +115,13 @@ GROUPS = {
         "fourstate_nba_race", "fourstate_nba_tasks", "fourstate_nba_trigger",
         "fourstate_nba_unknown", "fourstate_port_api", "fourstate_port_init",
         "fourstate_port_partial", "fourstate_port_static", "fourstate_trace_resume"
+    ],
+    # Official changes through b8e7f1e4b508f7827894784145cf52cffc3d08d5.
+    "upstream_daily_20261013": [
+        "covergroup_args_expr_bad", "covergroup_cross_opt_unsup", "covergroup_cross_ref_bad",
+        "covergroup_cross_with", "covergroup_cross_with_limits", "covergroup_unsup",
+        "covergroup_unsup_ign2", "covergroup_with_type_bad", "covergroup_with_unsup", "enum_type",
+        "enum_type_bad", "flag_top_module_encode", "string_type_methods"
     ]
 }
 

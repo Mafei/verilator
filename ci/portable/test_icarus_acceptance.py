@@ -206,11 +206,14 @@ sys.exit(int(os.environ[action.upper() + '_FIXTURE_STATUS']))
 ''')
         python.chmod(0o755)
         shell = os.environ.get('BASH_BIN') or shutil.which('bash')
-        for run_exit, check_exit in [(0, 0), (7, 0), (0, 9), (7, 9)]:
+        for exits in [(0, 0, 0, 0), (7, 0, 0, 0), (0, 9, 0, 0), (7, 9, 0, 0), (0, 0, 7, 0),
+                      (0, 0, 0, 9)]:
             environment = dict(self.environment,
                                PATH=str(fake_bin) + os.pathsep + os.environ['PATH'],
-                               RUN_FIXTURE_STATUS=str(run_exit),
-                               CHECK_FIXTURE_STATUS=str(check_exit))
+                               RUN_FIXTURE_STATUS=str(exits[0]),
+                               CHECK_FIXTURE_STATUS=str(exits[1]),
+                               thread_controls_status=str(exits[2]),
+                               ram_matrix_status=str(exits[3]))
             command = [shell, '-c', 'set -euo pipefail\n' + block]
             result = subprocess.run(command,
                                     cwd=self.repository,
@@ -218,7 +221,7 @@ sys.exit(int(os.environ[action.upper() + '_FIXTURE_STATUS']))
                                     capture_output=True,
                                     text=True,
                                     check=False)
-            expected = 0 if (run_exit, check_exit) == (0, 0) else 1
+            expected = 0 if exits == (0, 0, 0, 0) else 1
             self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
             self.assertIn('RUN_CALLED', result.stdout)
             self.assertIn('CHECK_CALLED', result.stdout)
@@ -228,8 +231,10 @@ sys.exit(int(os.environ[action.upper() + '_FIXTURE_STATUS']))
                 'command': command,
                 'native_exit': result.returncode,
                 'expected_exit': expected,
-                'run_exit': run_exit,
-                'check_exit': check_exit,
+                'run_exit': exits[0],
+                'check_exit': exits[1],
+                'thread_control_exit': exits[2],
+                'ram_matrix_exit': exits[3],
                 'stdout': result.stdout,
                 'stderr': result.stderr
             })
