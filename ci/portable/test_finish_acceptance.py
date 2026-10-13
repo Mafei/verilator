@@ -200,7 +200,9 @@ sys.exit(json.loads(os.environ['GATE_FIXTURE_STATUSES']).get(key,0))
         }, 1)]:
             environment = dict(self.environment,
                                PATH=str(fake) + os.pathsep + os.environ['PATH'],
-                               GATE_FIXTURE_STATUSES=json.dumps(statuses))
+                               GATE_FIXTURE_STATUSES=json.dumps(statuses),
+                               thread_controls_status="0",
+                               ram_matrix_status="0")
             result = subprocess.run([shell, "-c", "set -euo pipefail\n" + block],
                                     cwd=self.repository,
                                     env=environment,

@@ -133,6 +133,43 @@ def controls_wave_evidence(root):
                   require_complete=True)
 
 
+def ram_wave_evidence(root):
+    """Print every byte of the original RAM wave after complete-history acceptance."""
+    directory = root / "out/ram-matrix/original"
+    result = json.loads((directory / "oracle.json").read_text())
+    if (result["status"] != "PASS_LITERAL_OUTPUT_AND_COMPLETE_HISTORIES"
+            or result["assertions_total"] != 318 or result["complete_signal_histories"] != 30):
+        raise ValueError("Original RAM matrix acceptance is incomplete")
+    if {path.name for path in directory.glob("*.vcd")} != {"t_fourstate_array_tmp.vcd"}:
+        raise ValueError("Missing or unexpected original RAM wave")
+    wave_evidence(root, [("original-six-lane-ram", directory)],
+                  "ram-wave-evidence.json",
+                  "RAM_WAVE_BYTES",
+                  64 * 1024,
+                  require_complete=True)
+
+
+def thread_wave_evidence(root):
+    """Preserve both complete clocked MT control waves in bounded CI output."""
+    directory = root / "test_regress/obj_vltmt/t_fourstate_mt_trace"
+    records = json.loads((directory / "whole-wave-results.json").read_text())
+    if ([record["profile"] for record in records] != ["two_state", "four_state"]
+            or [record["complete_records"] for record in records] != [25, 26]
+            or any(record["complete_histories"] != 3 for record in records)):
+        raise ValueError("Clocked MT complete-wave acceptance is incomplete")
+    collections = [("clocked-MT/" + name, directory / name)
+                   for name in ("two_state", "four_state")]
+    for name, path in collections:
+        if {wave.name for wave in path.glob("*.vcd")} != {"simx.vcd"}:
+            raise ValueError("Missing or unexpected MT wave: " + name)
+    wave_evidence(root,
+                  collections,
+                  "thread-wave-evidence.json",
+                  "THREAD_WAVE_BYTES",
+                  128 * 1024,
+                  require_complete=True)
+
+
 def wave_evidence(root, collections, filename, prefix, budget, require_complete=False):
     """Emit regular public wave files with bounded size and exact byte hashes."""
     total = 0
@@ -175,9 +212,10 @@ def wave_evidence(root, collections, filename, prefix, budget, require_complete=
 def main():
     """Report the compiler after building or the outputs after validation."""
     if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results", "semantic-waves",
-                                                 "finish-waves", "controls-waves"):
-        raise SystemExit(
-            "Usage: log_evidence.py compiler|results|semantic-waves|finish-waves|controls-waves")
+                                                 "finish-waves", "controls-waves", "ram-waves",
+                                                 "thread-waves"):
+        raise SystemExit("Usage: log_evidence.py compiler|results|semantic-waves|finish-waves|"
+                         "controls-waves|ram-waves|thread-waves")
     root = Path.cwd()
     if sys.argv[1] == "compiler":
         compiler_evidence(root)
@@ -187,8 +225,12 @@ def main():
         semantic_wave_evidence(root)
     elif sys.argv[1] == "finish-waves":
         finish_wave_evidence(root)
-    else:
+    elif sys.argv[1] == "controls-waves":
         controls_wave_evidence(root)
+    elif sys.argv[1] == "ram-waves":
+        ram_wave_evidence(root)
+    else:
+        thread_wave_evidence(root)
 
 
 if __name__ == "__main__":

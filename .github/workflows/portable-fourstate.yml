@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -36,6 +36,17 @@ jobs:
             logs/
             test_regress/obj_vlt/*/*.log
             test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
+            test_regress/obj_vltmt/t_threads_counter_2/*.log
+            test_regress/obj_vltmt/t_threads_counter_2/*.status
+            test_regress/obj_vltmt/t_threads_nondeterminism/*.log
+            test_regress/obj_vltmt/t_threads_nondeterminism/*.status
+            test_regress/obj_vltmt/t_fourstate_mt_trace/**/*.log
+            test_regress/obj_vltmt/t_fourstate_mt_trace/**/*.vcd
+            test_regress/obj_vltmt/t_fourstate_mt_trace/*.status
+            test_regress/obj_vltmt/t_fourstate_mt_trace/*.json
+            test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.log
+            test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.vcd
+            test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.status
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
@@ -151,9 +162,22 @@ jobs:
               dnf -y install dnf-plugins-core
               dnf config-manager --set-enabled powertools
               dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
+                gcc-toolset-13-libasan-devel \
                 autoconf automake make perl git curl tar gzip xz findutils diffutils \
                 python3.11 python3.11-pip zlib-devel lz4-devel help2man
               ln -s /usr/bin/python3.11 /usr/local/bin/python3
+              source /opt/rh/gcc-toolset-13/enable
+              asan_probe_directory=$(mktemp -d /tmp/verilator-asan-probe.XXXXXX)
+              printf "%s\n" "int main() { int* value = new int[1]; value[0] = 13; int result = value[0] - 13; delete[] value; return result; }" \
+                | g++ -fsanitize=address -x c++ - -o "$asan_probe_directory/probe"
+              "$asan_probe_directory/probe"
+              rpm -q gcc-toolset-13-libasan-devel libasan8
+              rpm -q --requires gcc-toolset-13-libasan-devel
+              g++ -print-file-name=libasan_preinit.o
+              g++ -print-file-name=libasan.so
+              ldd "$asan_probe_directory/probe"
+              sha256sum "$asan_probe_directory/probe"
+              printf "ASAN_TOOLSET13_PREFLIGHT_PASSED\n"
               bash ci/portable/build.bash rocky8-x86_64
             '
       - name: Verify package in a fresh Rocky 8.10 container
@@ -182,6 +206,17 @@ jobs:
             rocky-image.txt
             test_regress/obj_vlt/*/*.log
             test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
+            test_regress/obj_vltmt/t_threads_counter_2/*.log
+            test_regress/obj_vltmt/t_threads_counter_2/*.status
+            test_regress/obj_vltmt/t_threads_nondeterminism/*.log
+            test_regress/obj_vltmt/t_threads_nondeterminism/*.status
+            test_regress/obj_vltmt/t_fourstate_mt_trace/**/*.log
+            test_regress/obj_vltmt/t_fourstate_mt_trace/**/*.vcd
+            test_regress/obj_vltmt/t_fourstate_mt_trace/*.status
+            test_regress/obj_vltmt/t_fourstate_mt_trace/*.json
+            test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.log
+            test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.vcd
+            test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.status
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
