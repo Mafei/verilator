@@ -129,7 +129,9 @@ GROUPS = {
         "property_nested_instance", "property_nested_instance_bad",
         "property_nested_instance_cover", "property_nested_instance_unsup",
         "property_recursive_unsup"
-    ]
+    ],
+    # Official changes through 75b107a6e94265102850fca288ff493948051f20.
+    "upstream_daily_20261014_followup": ["clocking_event_or"]
 }
 
 
