@@ -50,7 +50,16 @@ PYHASH
 fi
 # The scanner and FlexLexer.h must be from the same GNU Flex release.
 cd .ci-tools-src
-curl --fail --location --retry 3 --proto '=https' -o bison.tar.xz https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz
+# Bound a stalled primary connection; both endpoints must yield the same pinned bytes.
+if curl --fail --location --retry 2 --retry-max-time 60 --connect-timeout 15 --max-time 120 \
+    --proto '=https' --proto-redir '=https' -o bison.tar.xz https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz; then
+    :
+else
+    bison_download_status=$?
+    printf 'Bison primary download failed: exit %s; trying HTTPS mirror\n' "$bison_download_status"
+    curl --fail --location --retry 2 --retry-max-time 60 --connect-timeout 15 --max-time 120 \
+        --proto '=https' --proto-redir '=https' -o bison.tar.xz https://mirrors.kernel.org/gnu/bison/bison-3.8.2.tar.xz
+fi
 curl --fail --location --retry 3 --proto '=https' -o flex.tar.gz https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz
 python3 - <<'PY'
 import hashlib
