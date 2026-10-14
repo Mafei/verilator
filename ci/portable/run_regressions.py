@@ -122,6 +122,13 @@ GROUPS = {
         "covergroup_cross_with", "covergroup_cross_with_limits", "covergroup_unsup",
         "covergroup_unsup_ign2", "covergroup_with_type_bad", "covergroup_with_unsup", "enum_type",
         "enum_type_bad", "flag_top_module_encode", "string_type_methods"
+    ],
+    # Official changes through cf89d898e2e6a047231a886d41179d099ff9a46f.
+    "upstream_daily_20261014": [
+        "clocking_output_iface", "clocking_output_unsup", "covergroup_incdec", "math_signed3",
+        "property_nested_instance", "property_nested_instance_bad",
+        "property_nested_instance_cover", "property_nested_instance_unsup",
+        "property_recursive_unsup"
     ]
 }
 

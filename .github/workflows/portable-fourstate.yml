@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -47,6 +47,10 @@ jobs:
             test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.log
             test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.vcd
             test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.status
+            test_regress/obj_vltmt/t_variable_order_writers/*.log
+            test_regress/obj_vltmt/t_variable_order_writers/*.status
+            test_regress/obj_vltmt/t_variable_order_writers/*__stats.txt
+            test_regress/obj_vltmt/t_variable_order_writers/*.cpp
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
@@ -217,6 +221,10 @@ jobs:
             test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.log
             test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.vcd
             test_regress/obj_vltmt/t_trace_basic_cc_vcd/*.status
+            test_regress/obj_vltmt/t_variable_order_writers/*.log
+            test_regress/obj_vltmt/t_variable_order_writers/*.status
+            test_regress/obj_vltmt/t_variable_order_writers/*__stats.txt
+            test_regress/obj_vltmt/t_variable_order_writers/*.cpp
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd

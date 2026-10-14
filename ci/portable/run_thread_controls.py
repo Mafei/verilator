@@ -11,7 +11,8 @@ from pathlib import Path
 
 from run_regressions import parse_summary, passed_counts
 
-NAMES = ("threads_counter_2", "threads_nondeterminism", "fourstate_mt_trace", "trace_basic_cc_vcd")
+NAMES = ("threads_counter_2", "threads_nondeterminism", "fourstate_mt_trace", "trace_basic_cc_vcd",
+         "variable_order_writers")
 
 
 def main():
