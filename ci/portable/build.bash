@@ -50,7 +50,16 @@ PYHASH
 fi
 # The scanner and FlexLexer.h must be from the same GNU Flex release.
 cd .ci-tools-src
-curl --fail --location --retry 3 --proto '=https' -o bison.tar.xz https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz
+# Bound a stalled primary connection; both endpoints must yield the same pinned bytes.
+if curl --fail --location --retry 2 --retry-max-time 60 --connect-timeout 15 --max-time 120 \
+    --proto '=https' --proto-redir '=https' -o bison.tar.xz https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz; then
+    :
+else
+    bison_download_status=$?
+    printf 'Bison primary download failed: exit %s; trying HTTPS mirror\n' "$bison_download_status"
+    curl --fail --location --retry 2 --retry-max-time 60 --connect-timeout 15 --max-time 120 \
+        --proto '=https' --proto-redir '=https' -o bison.tar.xz https://mirrors.kernel.org/gnu/bison/bison-3.8.2.tar.xz
+fi
 curl --fail --location --retry 3 --proto '=https' -o flex.tar.gz https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz
 python3 - <<'PY'
 import hashlib
@@ -131,8 +140,8 @@ export VERILATOR_ROOT="$root"
 # Keep the original per-process CPU limits while compiling generated files separately.
 export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
-# Preserve all 236 PR21 selections and add nine upstream controls.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 || regress_status=$?
+# Preserve all 245 PR22 selections and add the clocking event control.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1
