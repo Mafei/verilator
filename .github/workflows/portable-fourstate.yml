@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Install build tools on the cloud runner
-        run: brew install autoconf automake help2man lz4
+        run: brew install autoconf automake help2man lz4 make
       - name: Build, check dependencies, relocate, and run regressions
         run: bash ci/portable/build.bash macos-arm64
       - name: Independently verify recorded results

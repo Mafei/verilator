@@ -22,6 +22,12 @@ if [[ $platform == rocky8-x86_64 ]]; then
 else
     [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]]
     export CC=clang CXX=clang++
+    # The constructor-split regression requires GNU Make >=4.1; Apple's
+    # /usr/bin/make is 3.81. Use the installed GNU tool for shell and harness.
+    portable_make_prefix=$(brew --prefix make)
+    export MAKE="$portable_make_prefix/bin/gmake"
+    export PATH="$portable_make_prefix/libexec/gnubin:$PATH"
+    "$MAKE" --version
     lz4_prefix=$(brew --prefix lz4)
     export LIBRARY_PATH="$lz4_prefix/lib"
 fi
@@ -93,6 +99,7 @@ python3 ci/portable/test_finish_wave_evidence.py
     "$CXX" --version
     flex --version
     bison --version
+    make --version
     if [[ $platform == rocky8-x86_64 ]]; then cat /etc/os-release; ldd --version; fi
 } > out/provenance.txt
 # Avoid optional allocator shared libraries in distributable builds.
