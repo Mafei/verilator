@@ -49,6 +49,7 @@ for fourstate in (False, True):
             test.file_grep_count(
                 info, r'^DA:' + str(line) + ',' + ('1' if marker in active else '0') + '$', 1)
         test.file_grep_count(coverage, r'^C .*v_user/.* 0$', 1)
+        test.file_grep_not(coverage, r'^C .*v_user/.* [1-9][0-9]*$')
 
 test.obj_dir = base_dir
 test.passes()
