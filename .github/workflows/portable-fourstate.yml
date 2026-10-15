@@ -145,6 +145,10 @@ jobs:
             test_regress/obj_vlt/t_sys_sscanf/*.status
             test_regress/obj_vlt/t_x_assign_unique_0/*.status
             test_regress/obj_vlt/t_x_assign_unique_1/*.status
+            test_regress/obj_vlt/t_finish_coverage/*.status
+            test_regress/obj_vlt/t_finish_coverage/**/*.log
+            test_regress/obj_vlt/t_finish_coverage/**/*.dat
+            test_regress/obj_vlt/t_finish_coverage/**/*.info
           if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
@@ -336,4 +340,8 @@ jobs:
             test_regress/obj_vlt/t_sys_sscanf/*.status
             test_regress/obj_vlt/t_x_assign_unique_0/*.status
             test_regress/obj_vlt/t_x_assign_unique_1/*.status
+            test_regress/obj_vlt/t_finish_coverage/*.status
+            test_regress/obj_vlt/t_finish_coverage/**/*.log
+            test_regress/obj_vlt/t_finish_coverage/**/*.dat
+            test_regress/obj_vlt/t_finish_coverage/**/*.info
           if-no-files-found: error

@@ -139,7 +139,8 @@ GROUPS = {
         "json_only_flat", "opt_cond_double", "randomize_param_target_bad",
         "sequence_arg_delay_bad", "sequence_ref", "sys_sscanf", "x_assign_unique_0",
         "x_assign_unique_1"
-    ]
+    ],
+    "finish_coverage_20261015": ["finish_coverage"]
 }
 
 
