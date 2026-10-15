@@ -1548,7 +1548,7 @@ package Vt_debug_emitv_p;
     logic pkgvar;
 endpackage
 package Vt_debug_emitv_Pkg;
-    logic signed [31:0]  PKG_PARAM;
+    bit signed [31:0]  PKG_PARAM;
     typedef enum int signed{
         FOO = 32'h0,
         BAR = 32'h1,

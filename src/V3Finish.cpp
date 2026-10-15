@@ -193,6 +193,19 @@ class FinishVisitor final : public VNVisitor {
     VDouble0 m_statExits;  // Source-body exits added
     VDouble0 m_statCallExits;  // Post-call termination checks added
 
+    static AstNode* afterLineCoverage(AstNode* nodep) {
+        // A block's compiler counters follow its last source statement. Keep them
+        // before the exit, but never cross functional coverage or source code.
+        while (AstCoverInc* const incp = VN_CAST(nodep->nextp(), CoverInc)) {
+            const std::string& page = incp->declp()->page();
+            if (!VString::startsWith(page, "v_line/") && !VString::startsWith(page, "v_branch/")) {
+                break;
+            }
+            nodep = incp;
+        }
+        return nodep;
+    }
+
     AstJumpBlock* getExitBlock() {
         if (m_procp->user1p()) return VN_AS(m_procp->user1p(), JumpBlock);
         const AstCFunc* const funcp = VN_CAST(m_procp, CFunc);
@@ -238,13 +251,14 @@ class FinishVisitor final : public VNVisitor {
                                                 "VL_UNLIKELY(vlSymsp->_vm_contextp__->gotFinish()"
                                                 " || vlSymsp->_vm_contextp__->finishPending())",
                                                 1};
-        nodep->addNextHere(new AstIf{flp, condp, new AstJumpGo{flp, getExitBlock()}});
+        afterLineCoverage(nodep)->addNextHere(
+            new AstIf{flp, condp, new AstJumpGo{flp, getExitBlock()}});
         ++m_statCallExits;
     }
     void visit(AstFinish* nodep) override {
         if (!m_procp || nodep->user2SetOnce()) return;
         AstJumpBlock* const blockp = getExitBlock();
-        nodep->addNextHere(new AstJumpGo{nodep->fileline(), blockp});
+        afterLineCoverage(nodep)->addNextHere(new AstJumpGo{nodep->fileline(), blockp});
         ++m_statExits;
     }
     void visit(AstNode* nodep) override { iterateChildren(nodep); }

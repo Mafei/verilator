@@ -76,6 +76,11 @@ the system glibc dynamic; CI checks that its GLIBC symbol requirements do not
 exceed 2.28 and that every shared library resolves. Generated timing models
 require a C++20-capable compiler (GCC 13 or a suitable Clang).
 
+The macOS runner installs [Homebrew GNU Make](https://formulae.brew.sh/formula/make)
+and selects its `gmake` for the harness and its `gnubin` directory for build
+commands. The constructor-split regression requires GNU Make 4.1 or newer;
+Apple's system Make 3.81 skips that control and does not meet the selected gate.
+
 GNU Flex 2.6.4 and Bison 3.8.2 are built from HTTPS archives with pinned SHA256
 hashes. The matching GNU `FlexLexer.h` is selected explicitly. Optional allocator
 libraries and CPU-specific `-march=native` optimizations are not used.

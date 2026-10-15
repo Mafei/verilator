@@ -131,7 +131,16 @@ GROUPS = {
         "property_recursive_unsup"
     ],
     # Official changes through 75b107a6e94265102850fca288ff493948051f20.
-    "upstream_daily_20261014_followup": ["clocking_event_or"]
+    "upstream_daily_20261014_followup": ["clocking_event_or"],
+    # Official changes through af1b121e3f0af489e7129265bfbb3f48800cf2cd.
+    "upstream_daily_20261015": [
+        "case_extend", "clocking_zero_delay", "cond_logic_and_complex_types", "coverage_prop_seq",
+        "enum_value_assign", "event_control_expr", "expr_types", "flag_csplit", "inc_relink",
+        "json_only_flat", "opt_cond_double", "randomize_param_target_bad",
+        "sequence_arg_delay_bad", "sequence_ref", "sys_sscanf", "x_assign_unique_0",
+        "x_assign_unique_1"
+    ],
+    "finish_coverage_20261015": ["finish_coverage"]
 }
 
 

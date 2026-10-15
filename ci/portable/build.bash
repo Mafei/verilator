@@ -22,6 +22,12 @@ if [[ $platform == rocky8-x86_64 ]]; then
 else
     [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]]
     export CC=clang CXX=clang++
+    # The constructor-split regression requires GNU Make >=4.1; Apple's
+    # /usr/bin/make is 3.81. Use the installed GNU tool for shell and harness.
+    portable_make_prefix=$(brew --prefix make)
+    export MAKE="$portable_make_prefix/bin/gmake"
+    export PATH="$portable_make_prefix/libexec/gnubin:$PATH"
+    "$MAKE" --version
     lz4_prefix=$(brew --prefix lz4)
     export LIBRARY_PATH="$lz4_prefix/lib"
 fi
@@ -93,6 +99,7 @@ python3 ci/portable/test_finish_wave_evidence.py
     "$CXX" --version
     flex --version
     bison --version
+    make --version
     if [[ $platform == rocky8-x86_64 ]]; then cat /etc/os-release; ldd --version; fi
 } > out/provenance.txt
 # Avoid optional allocator shared libraries in distributable builds.
@@ -140,8 +147,8 @@ export VERILATOR_ROOT="$root"
 # Keep the original per-process CPU limits while compiling generated files separately.
 export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
-# Preserve all 245 PR22 selections and add the clocking event control.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup || regress_status=$?
+# Preserve all 246 PR23 selections and add 17 upstream controls and the finish coverage regression.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1

@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014, fourstate-sync-20261014-followup]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014, fourstate-sync-20261014-followup, fourstate-sync-20261015]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Install build tools on the cloud runner
-        run: brew install autoconf automake help2man lz4
+        run: brew install autoconf automake help2man lz4 make
       - name: Build, check dependencies, relocate, and run regressions
         run: bash ci/portable/build.bash macos-arm64
       - name: Independently verify recorded results
@@ -128,6 +128,27 @@ jobs:
             test_regress/obj_vlt/t_queue_bounded/*.status
             test_regress/obj_vlt/t_timing_debug1/*.status
             test_regress/obj_vlt/t_timing_osc/*.status
+            test_regress/obj_vlt/t_case_extend/*.status
+            test_regress/obj_vlt/t_clocking_zero_delay/*.status
+            test_regress/obj_vlt/t_cond_logic_and_complex_types/*.status
+            test_regress/obj_vlt/t_coverage_prop_seq/*.status
+            test_regress/obj_vlt/t_enum_value_assign/*.status
+            test_regress/obj_vlt/t_event_control_expr/*.status
+            test_regress/obj_vlt/t_expr_types/*.status
+            test_regress/obj_vlt/t_flag_csplit/*.status
+            test_regress/obj_vlt/t_inc_relink/*.status
+            test_regress/obj_vlt/t_json_only_flat/*.status
+            test_regress/obj_vlt/t_opt_cond_double/*.status
+            test_regress/obj_vlt/t_randomize_param_target_bad/*.status
+            test_regress/obj_vlt/t_sequence_arg_delay_bad/*.status
+            test_regress/obj_vlt/t_sequence_ref/*.status
+            test_regress/obj_vlt/t_sys_sscanf/*.status
+            test_regress/obj_vlt/t_x_assign_unique_0/*.status
+            test_regress/obj_vlt/t_x_assign_unique_1/*.status
+            test_regress/obj_vlt/t_finish_coverage/*.status
+            test_regress/obj_vlt/t_finish_coverage/**/*.log
+            test_regress/obj_vlt/t_finish_coverage/**/*.dat
+            test_regress/obj_vlt/t_finish_coverage/**/*.info
           if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
@@ -302,4 +323,25 @@ jobs:
             test_regress/obj_vlt/t_queue_bounded/*.status
             test_regress/obj_vlt/t_timing_debug1/*.status
             test_regress/obj_vlt/t_timing_osc/*.status
+            test_regress/obj_vlt/t_case_extend/*.status
+            test_regress/obj_vlt/t_clocking_zero_delay/*.status
+            test_regress/obj_vlt/t_cond_logic_and_complex_types/*.status
+            test_regress/obj_vlt/t_coverage_prop_seq/*.status
+            test_regress/obj_vlt/t_enum_value_assign/*.status
+            test_regress/obj_vlt/t_event_control_expr/*.status
+            test_regress/obj_vlt/t_expr_types/*.status
+            test_regress/obj_vlt/t_flag_csplit/*.status
+            test_regress/obj_vlt/t_inc_relink/*.status
+            test_regress/obj_vlt/t_json_only_flat/*.status
+            test_regress/obj_vlt/t_opt_cond_double/*.status
+            test_regress/obj_vlt/t_randomize_param_target_bad/*.status
+            test_regress/obj_vlt/t_sequence_arg_delay_bad/*.status
+            test_regress/obj_vlt/t_sequence_ref/*.status
+            test_regress/obj_vlt/t_sys_sscanf/*.status
+            test_regress/obj_vlt/t_x_assign_unique_0/*.status
+            test_regress/obj_vlt/t_x_assign_unique_1/*.status
+            test_regress/obj_vlt/t_finish_coverage/*.status
+            test_regress/obj_vlt/t_finish_coverage/**/*.log
+            test_regress/obj_vlt/t_finish_coverage/**/*.dat
+            test_regress/obj_vlt/t_finish_coverage/**/*.info
           if-no-files-found: error
