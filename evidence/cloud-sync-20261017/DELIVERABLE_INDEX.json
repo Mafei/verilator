@@ -1,0 +1,24 @@
+{
+  "utc": "2026-10-17T01:38:42.298631+00:00",
+  "code_head": "f663cb23b6d62480ad15fb15448cc85e1d28985a",
+  "PR": "https://github.com/Mafei/verilator/pull/25",
+  "CI": "https://github.com/Mafei/verilator/actions/runs/38985119681",
+  "ordered_deliverables": [
+    {
+      "name": "verilator-sync-20261017-report.rst",
+      "bytes": 17739,
+      "sha256": "848df6aea5b6a88d9bee280eb9992200b15a368a1b3ea4f313d9c5164b6e092e"
+    },
+    {
+      "name": "verilator-sync-20261017-evidence.tar.gz",
+      "bytes": 18490951,
+      "sha256": "04809da6fa06d0711a48153611146955105a8a0067699f0671111c9e8129b601"
+    }
+  ],
+  "archive_contents_frozen": true,
+  "Library_attempt_started": true,
+  "Library_confirmed_saved_files": 0,
+  "Library_error_stage": "hosted apps tools/list: network",
+  "Library_retry_count": 0,
+  "GitHub_evidence_branch": "fourstate-sync-20261017-evidence-f663cb23"
+}

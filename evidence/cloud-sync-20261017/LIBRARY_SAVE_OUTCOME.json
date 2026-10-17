@@ -1,0 +1,15 @@
+{
+  "status": "FAILED_BEFORE_SUCCESS_RECEIPTS",
+  "confirmed_saved_files": 0,
+  "ordered_files": [
+    "verilator-sync-20261017-report.rst",
+    "verilator-sync-20261017-evidence.tar.gz"
+  ],
+  "helper_actual_exit": 1,
+  "error_stage": "hosted apps tools/list",
+  "error_category": "network",
+  "prepared_batch_attempts": 1,
+  "direct_Library_writes_or_retries": 0,
+  "file_bytes_unchanged_after_attempt": true,
+  "fallback": "Same frozen public report and evidence to separate authorized GitHub evidence branch, not a Library retry"
+}

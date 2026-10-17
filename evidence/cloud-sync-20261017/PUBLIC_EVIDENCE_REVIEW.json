@@ -1,0 +1,10 @@
+{
+  "utc": "2026-10-17T01:39:56.688291+00:00",
+  "reviewed_archive_sha256": "04809da6fa06d0711a48153611146955105a8a0067699f0671111c9e8129b601",
+  "members_read": 2556,
+  "strong_secret_pattern_findings": [],
+  "archive_contains_only_public_repository_inputs_and_generated_validation_evidence": true,
+  "Library_private_helper_and_raw_response_files_not_in_archive": true,
+  "public_evidence_destination": "Mafei/verilator independent evidence branch",
+  "source_candidate_unchanged": true
+}
