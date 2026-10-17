@@ -307,6 +307,7 @@ static void process() {
             // Begin processing must be after Param, before module inlining
             // No more AstGenBlocks after this
             V3Begin::debeginAll(v3Global.rootp());  // Flatten cell names, before inliner
+            v3Global.staticsLifted(true);  // All static variables now live under a NodeModule
 
             if (v3Global.opt.fourstate()) V3Fourstate::fourstateAll(v3Global.rootp());
             V3WidthCommit::widthCommitClean(v3Global.rootp());

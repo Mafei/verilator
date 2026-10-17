@@ -1180,16 +1180,18 @@ public:
     }  // LCOV_EXCL_STOP
 };
 class AstCoverCrossWith final : public AstNode {
-    // The bin tuples of a cross-bin selection with a value tuple for which a 'with' filter is
-    // true (IEEE 1800-2023 19.6.1.2)
+    // The bin tuples of a cross-bin selection with enough value tuples for which a 'with' filter
+    // is true: one, or as many as a 'matches' clause gives (IEEE 1800-2023 19.6.1.2)
     // @astgen op1 := selectp : Optional[AstNode]  // Selection filtered; null if unsupported
     // @astgen op2 := filterp : AstNodeExpr
     // @astgen op3 := varsp : List[AstVar]  // Candidate value of each cross item, from V3LinkParse
+    // @astgen op4 := countp : Optional[AstNodeExpr]  // Of 'matches', AstUnbounded for '$'
 public:
-    AstCoverCrossWith(FileLine* fl, AstNode* selectp, AstNodeExpr* filterp)
+    AstCoverCrossWith(FileLine* fl, AstNode* selectp, AstNodeExpr* filterp, AstNodeExpr* countp)
         : ASTGEN_SUPER_CoverCrossWith(fl) {
         this->selectp(selectp);
         this->filterp(filterp);
+        this->countp(countp);
     }
     ASTGEN_MEMBERS_AstCoverCrossWith;
 };
@@ -1461,18 +1463,22 @@ public:
 class AstIntfRef final : public AstNode {
     // An interface reference
     string m_name;  // Hierarchical path of the reference
+    string m_parentName;  // Hierarchical path of the declaring module, before inlining
     string m_baseName;  // Final component of m_name, i.e. the reference port name
     string m_modportName;  // "" = no modport, else name of the modport referenced
 public:
-    AstIntfRef(FileLine* fl, const string& name, const string& baseName, const string& modportName)
+    AstIntfRef(FileLine* fl, const string& name, const string& parentName, const string& baseName,
+               const string& modportName)
         : ASTGEN_SUPER_IntfRef(fl)
         , m_name{name}
+        , m_parentName{parentName}
         , m_baseName{baseName}
         , m_modportName{modportName} {}
     ASTGEN_MEMBERS_AstIntfRef;
     void dump(std::ostream& str = std::cout) const override;
     void dumpJson(std::ostream& str = std::cout) const override;
     string name() const override VL_MT_STABLE { return m_name; }
+    string parentName() const { return m_parentName; }
     string baseName() const { return m_baseName; }
     string modportName() const { return m_modportName; }
 };
@@ -1880,7 +1886,7 @@ class AstScope final : public AstNode {
     // Parents: MODULE
     // Children: NODEBLOCK
     // @astgen op1 := varsp : List[AstVarScope]
-    // @astgen op2 := blocksp : List[AstNode] // Logic blocks/AstActive/AstCFunc
+    // @astgen op2 := blocksp : List[AstNode] // Logic blocks/AstActive/AstCFunc/AstScopeName
     // @astgen op3 := inlinesp : List[AstCellInlineScope] // VPI records of flattened scopes
     //
     // Below scope and cell are nullptr if top scope
@@ -2300,6 +2306,8 @@ class AstVar final : public AstNode {
     VBasicDTypeKwd
         m_fourstateOriginalDTypeKwd;  // Original dtype of a four-state var - before splitting
     int m_pinNum = 0;  // For JSON, if non-zero the connection pin number
+    int m_libInoutId = 0;  // Identifies the three ports of a lowered library inout
+    bool m_libInoutEnable : 1;  // Port is the lowered library inout's enable
     bool m_ansi : 1;  // Params or pins declared in the module header, rather than the body
     bool m_declTyped : 1;  // Declared as type (for dedup check)
     bool m_tristate : 1;  // Inout or triwire or trireg
@@ -2371,6 +2379,7 @@ class AstVar final : public AstNode {
     bool m_isTopLevelPort : 1;  // Whether this variable used to be a top level input
     void init() {
         m_fourstateOriginalDTypeKwd = VBasicDTypeKwd::UNKNOWN;
+        m_libInoutEnable = false;
         m_ansi = false;
         m_declTyped = false;
         m_tristate = false;
@@ -2509,6 +2518,10 @@ public:
     }
     void declDirection(const VDirection& flag) { m_declDirection = flag; }
     VDirection declDirection() const { return m_declDirection; }
+    int libInoutId() const { return m_libInoutId; }
+    void libInoutId(int id) { m_libInoutId = id; }
+    bool libInoutEnable() const { return m_libInoutEnable; }
+    void libInoutEnable(bool flag) { m_libInoutEnable = flag; }
     void varType(VVarType type) { m_varType = type; }
     void varType2Out() {
         m_tristate = false;

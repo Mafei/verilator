@@ -140,7 +140,20 @@ GROUPS = {
         "sequence_arg_delay_bad", "sequence_ref", "sys_sscanf", "x_assign_unique_0",
         "x_assign_unique_1"
     ],
-    "finish_coverage_20261015": ["finish_coverage"]
+    "finish_coverage_20261015": ["finish_coverage"],
+    # Official changes through 1d0bf5d1d1766ed98693cfa95dce2c0ae4659ef4.
+    "upstream_sync_20261017": [
+        "math_pow3", "lint_widthdigits", "lint_widthdigits_bad", "param_array_2d",
+        "param_array_order", "param_array8", "param_struct_unpacked", "param_struct_unpacked_bad",
+        "func_const_struct", "func_const_struct_bad", "assignment_array_size_bad",
+        "assignment_compatibility_bad", "fourstate_assign_bad", "clocking_drive_same",
+        "clocking_skew_round", "clocking_skew_sampled", "vpi_interface_ref",
+        "vpi_interface_ref_array", "vpi_interface_ref_lifecycle", "vpi_scope_topology",
+        "interface_virtual_modport_bad", "assert_disable_iff_async", "prop_always", "uniqueif",
+        "opt_const_static_dead", "display_m_combine", "scope_shared",
+        "flag_output_groups_max_size", "flag_output_groups_max_size_bad", "class_extends_this",
+        "randcase", "covergroup_with_sample_warn", "covergroup_sized_bad"
+    ]
 }
 
 

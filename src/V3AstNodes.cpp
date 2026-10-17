@@ -504,6 +504,15 @@ bool AstNode::isDisableQueuePushSelfStmt() {
     return false;
 }
 
+// Whether an array of fromp has a level of the other direction than in an array of top
+static bool initArrayReorders(const AstNodeDType* fromp, const AstNodeDType* top) {
+    const AstUnpackArrayDType* const fromArrayp = VN_CAST(fromp->skipRefp(), UnpackArrayDType);
+    const AstUnpackArrayDType* const toArrayp = VN_CAST(top->skipRefp(), UnpackArrayDType);
+    if (!fromArrayp || !toArrayp) return false;
+    return fromArrayp->declRange().ascending() != toArrayp->declRange().ascending()
+           || initArrayReorders(fromArrayp->subDTypep(), toArrayp->subDTypep());
+}
+
 //======================================================================
 // Ast* methods (except AstNode:: tree methods which generally go in V3Ast.cpp)
 // dist-ast-style-sort
@@ -1889,6 +1898,27 @@ AstNodeExpr* AstInitArray::getIndexValuep(uint64_t index) const {
     if (it == m_map.end()) { return nullptr; }
     return it->second->valuep();
 }
+void AstInitArray::retypeOrdered(AstNodeDType* dtypep) {
+    const AstNodeDType* const fromp = this->dtypep();
+    this->dtypep(dtypep);
+    if (!initArrayReorders(fromp, dtypep)) return;
+    const AstUnpackArrayDType* const fromArrayp = VN_AS(fromp->skipRefp(), UnpackArrayDType);
+    const AstUnpackArrayDType* const toArrayp = VN_AS(dtypep->skipRefp(), UnpackArrayDType);
+    if (fromArrayp->declRange().ascending() != toArrayp->declRange().ascending()) {
+        const uint64_t lastIndex = fromArrayp->elementsConst() - 1;
+        KeyItemMap map;
+        for (const auto& itr : m_map) map.emplace(lastIndex - itr.first, itr.second);
+        m_map.swap(map);
+    }
+    for (const auto& itr : m_map) {
+        if (AstInitArray* const subp = VN_CAST(itr.second->valuep(), InitArray)) {
+            subp->retypeOrdered(toArrayp->subDTypep());
+        }
+    }
+    if (AstInitArray* const subp = VN_CAST(defaultp(), InitArray)) {
+        subp->retypeOrdered(toArrayp->subDTypep());
+    }
+}
 AstNodeExpr* AstInsideRange::newAndFromInside(AstNodeExpr* exprp, AstNodeExpr* lhsp,
                                               AstNodeExpr* rhsp) {
     const bool lhsUnbounded = VN_IS(lhsp, Unbounded);
@@ -1933,10 +1963,12 @@ AstNodeExpr* AstInsideRange::newAndFromInside(AstNodeExpr* exprp, AstNodeExpr* l
 }
 void AstIntfRef::dump(std::ostream& str) const {  // LCOV_EXCL_START
     Super::dump(str);
+    if (parentName() != "") str << " parent=" << parentName();
     if (baseName() != "") str << " base=" << baseName();
     if (modportName() != "") str << " mp=" << modportName();
 }  // LCOV_EXCL_STOP
 void AstIntfRef::dumpJson(std::ostream& str) const {
+    dumpJsonStrFunc(str, parentName);
     dumpJsonStrFunc(str, baseName);
     dumpJsonStrFunc(str, modportName);
     dumpJsonGen(str);
@@ -2461,6 +2493,7 @@ string AstNodeDType::cType(const string& name, bool /*forFunc*/, bool isRef, boo
 }
 AstNodeDType::CTypeRecursed AstNodeDType::cTypeRecurse(bool compound, bool packed) const {
     // Legacy compound argument currently just passed through and unused
+    // Global qualification avoids member-name lookup in large generated classes.
     CTypeRecursed info;
 
     const AstNodeDType* const dtypep = this->skipRefp();
@@ -2468,40 +2501,41 @@ AstNodeDType::CTypeRecursed AstNodeDType::cTypeRecurse(bool compound, bool packe
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         const CTypeRecursed key = adtypep->keyDTypep()->cTypeRecurse(true, false);
         const CTypeRecursed val = adtypep->subDTypep()->cTypeRecurse(true, false);
-        info.m_type = "VlAssocArray<" + key.m_type + ", " + val.m_type + ">";
+        info.m_type = "::VlAssocArray<" + key.m_type + ", " + val.m_type + ">";
     } else if (const auto* const adtypep = VN_CAST(dtypep, CDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         info.m_type = adtypep->name();
     } else if (const auto* const adtypep = VN_CAST(dtypep, WildcardArrayDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         const CTypeRecursed sub = adtypep->subDTypep()->cTypeRecurse(true, false);
-        info.m_type = "VlAssocArray<std::string, " + sub.m_type + ">";
+        info.m_type = "::VlAssocArray<::std::string, " + sub.m_type + ">";
     } else if (const auto* const adtypep = VN_CAST(dtypep, DynArrayDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         const CTypeRecursed sub = adtypep->subDTypep()->cTypeRecurse(true, false);
-        info.m_type = "VlQueue<" + sub.m_type + ">";
+        info.m_type = "::VlQueue<" + sub.m_type + ">";
     } else if (const auto* const adtypep = VN_CAST(dtypep, QueueDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         const CTypeRecursed sub = adtypep->subDTypep()->cTypeRecurse(true, false);
-        info.m_type = "VlQueue<" + sub.m_type;
+        info.m_type = "::VlQueue<" + sub.m_type;
         // + 1 below as VlQueue uses 0 to mean unlimited, 1 to mean size() max is 1
         if (adtypep->boundp()) info.m_type += ", " + cvtToStr(adtypep->boundConst() + 1);
         info.m_type += ">";
     } else if (const auto* const adtypep = VN_CAST(dtypep, CoverCrossDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
-        info.m_type = adtypep->isDynamic() ? "VlCoverCrossDyn*"
-                                           : "VlCoverCrossT<" + adtypep->cppTemplateArgs() + ">*";
+        info.m_type = adtypep->isDynamic()
+                          ? "::VlCoverCrossDyn*"
+                          : "::VlCoverCrossT<" + adtypep->cppTemplateArgs() + ">*";
     } else if (const auto* const adtypep = VN_CAST(dtypep, CoverpointDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
-        info.m_type = "VlCoverpointT<" + cvtToStr(adtypep->hitBound()) + ">*";
+        info.m_type = "::VlCoverpointT<" + cvtToStr(adtypep->hitBound()) + ">*";
     } else if (const auto* const adtypep = VN_CAST(dtypep, SampleQueueDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         const CTypeRecursed sub = adtypep->subDTypep()->cTypeRecurse(true, false);
-        info.m_type = "VlSampleQueue<" + sub.m_type + ">";
+        info.m_type = "::VlSampleQueue<" + sub.m_type + ">";
     } else if (const auto* const adtypep = VN_CAST(dtypep, ClassRefDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         const string className = EmitCUtil::prefixNameProtect(adtypep);
-        info.m_type = adtypep->rawPointer() ? className + "*" : "VlClassRef<" + className + ">";
+        info.m_type = adtypep->rawPointer() ? className + "*" : "::VlClassRef<" + className + ">";
     } else if (const auto* const adtypep = VN_CAST(dtypep, IfaceRefDType)) {
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         info.m_type = EmitCUtil::prefixNameProtect(adtypep->ifaceViaCellp()) + "*";
@@ -2509,7 +2543,7 @@ AstNodeDType::CTypeRecursed AstNodeDType::cTypeRecurse(bool compound, bool packe
         UASSERT_OBJ(!packed, this, "Unsupported type for packed struct or union");
         if (adtypep->isCompound()) compound = true;
         const CTypeRecursed sub = adtypep->subDTypep()->cTypeRecurse(compound, false);
-        info.m_type = "VlUnpacked<" + sub.m_type;
+        info.m_type = "::VlUnpacked<" + sub.m_type;
         info.m_type += ", " + cvtToStr(adtypep->declRange().elements());
         info.m_type += ">";
     } else if (const auto* const adtypep = VN_CAST(dtypep, NBACommitQueueDType)) {
@@ -2522,7 +2556,7 @@ AstNodeDType::CTypeRecursed AstNodeDType::cTypeRecurse(bool compound, bool packe
             eDTypep = uaDTypep->subDTypep()->skipRefp();
             ++rank;
         }
-        info.m_type = "VlNBACommitQueue<";
+        info.m_type = "::VlNBACommitQueue<";
         info.m_type += sub.m_type;
         info.m_type += adtypep->partial() ? ", true" : ", false";
         info.m_type += ", " + eDTypep->cTypeRecurse(compound, false).m_type;
@@ -2548,48 +2582,48 @@ AstNodeDType::CTypeRecursed AstNodeDType::cTypeRecurse(bool compound, bool packe
         if (bdtypep->keyword() == VBasicDTypeKwd::CHARPTR) {
             info.m_type = "const char*";
         } else if (bdtypep->keyword() == VBasicDTypeKwd::SCOPEPTR) {
-            info.m_type = "const VerilatedScope*";
+            info.m_type = "const ::VerilatedScope*";
         } else if (bdtypep->keyword().isDouble()) {
             info.m_type = "double";
         } else if (bdtypep->keyword().isString()) {
-            info.m_type = "std::string";
+            info.m_type = "::std::string";
         } else if (bdtypep->keyword().isMTaskState()) {
-            info.m_type = "VlMTaskVertex";
+            info.m_type = "::VlMTaskVertex";
         } else if (bdtypep->isDelayScheduler()) {
-            info.m_type = "VlDelayScheduler";
+            info.m_type = "::VlDelayScheduler";
         } else if (bdtypep->isTriggerScheduler()) {
-            info.m_type = "VlTriggerScheduler";
+            info.m_type = "::VlTriggerScheduler";
         } else if (bdtypep->isDynamicTriggerScheduler()) {
-            info.m_type = "VlDynamicTriggerScheduler";
+            info.m_type = "::VlDynamicTriggerScheduler";
         } else if (bdtypep->isForkSync()) {
-            info.m_type = "VlForkSync";
+            info.m_type = "::VlForkSync";
         } else if (bdtypep->isProcessRef()) {
-            info.m_type = "VlProcessRef";
+            info.m_type = "::VlProcessRef";
         } else if (bdtypep->isRandomGenerator()) {
-            info.m_type = "VlRandomizer";
+            info.m_type = "::VlRandomizer";
         } else if (bdtypep->isStdRandomGenerator()) {
-            info.m_type = "VlStdRandomizer";
+            info.m_type = "::VlStdRandomizer";
         } else if (bdtypep->isCovergroupInstHandle()) {
-            info.m_type = "VlCovInstHandle";
+            info.m_type = "::VlCovInstHandle";
         } else if (bdtypep->isEvent()) {
-            info.m_type = v3Global.assignsEvents() ? "VlAssignableEvent" : "VlEvent";
+            info.m_type = v3Global.assignsEvents() ? "::VlAssignableEvent" : "::VlEvent";
         } else if (dtypep->widthMin() <= 8) {  // Handle unpacked arrays; not bdtypep->width
-            info.m_type = "CData" + bitvec;
+            info.m_type = "::CData" + bitvec;
         } else if (dtypep->widthMin() <= 16) {
-            info.m_type = "SData" + bitvec;
+            info.m_type = "::SData" + bitvec;
         } else if (dtypep->widthMin() <= VL_IDATASIZE) {
-            info.m_type = "IData" + bitvec;
+            info.m_type = "::IData" + bitvec;
         } else if (dtypep->isQuad()) {
-            info.m_type = "QData" + bitvec;
+            info.m_type = "::QData" + bitvec;
         } else if (dtypep->isWide()) {
-            info.m_type = "VlWide<" + cvtToStr(dtypep->widthWords()) + ">" + bitvec;
+            info.m_type = "::VlWide<" + cvtToStr(dtypep->widthWords()) + ">" + bitvec;
         }
         // CData, SData, IData, QData or VlWide are packed type.
-        const bool packedType = VString::startsWith(info.m_type, "CData")
-                                || VString::startsWith(info.m_type, "SData")
-                                || VString::startsWith(info.m_type, "IData")
-                                || VString::startsWith(info.m_type, "QData")
-                                || VString::startsWith(info.m_type, "VlWide");
+        const bool packedType = VString::startsWith(info.m_type, "::CData")
+                                || VString::startsWith(info.m_type, "::SData")
+                                || VString::startsWith(info.m_type, "::IData")
+                                || VString::startsWith(info.m_type, "::QData")
+                                || VString::startsWith(info.m_type, "::VlWide");
         UASSERT_OBJ(!packed || packedType, this, "Unsupported type for packed struct or union");
     } else {
         v3fatalSrc("Unknown data type in var type emitter: " << dtypep->prettyName());
@@ -3672,12 +3706,14 @@ void AstScopeName::dump(std::ostream& str) const {
     Super::dump(str);
     if (dpiExport()) str << " [DPIEX]";
     if (forFormat()) str << " [FMT]";
+    if (selfRelative()) str << " [SELFREL]";
     str << " scopeAttr=\"" << m_scopeAttr << "\"";
     str << " scopeEntr=\"" << m_scopeEntr << "\"";
 }
 void AstScopeName::dumpJson(std::ostream& str) const {
     dumpJsonBoolFuncIf(str, dpiExport);
     dumpJsonBoolFuncIf(str, forFormat);
+    dumpJsonBoolFuncIf(str, selfRelative);
     dumpJsonStr(str, "scopeAttr", m_scopeAttr);
     dumpJsonStr(str, "scopeEntr", m_scopeEntr);
     dumpJsonGen(str);
@@ -4333,6 +4369,8 @@ string AstVar::dpiTmpVarType(const string& varName) const {
 }
 void AstVar::dump(std::ostream& str) const {
     Super::dump(str);
+    if (libInoutId()) str << " libInoutId=" << libInoutId();
+    if (libInoutEnable()) str << " [LIBINOUTEN]";
     if (isIO()) str << " " << direction().ascii();
     if (declDirection() != direction()) str << " dd=" << direction().ascii();
     if (constPoolEntry()) str << " [CONSTPOOL]";
@@ -4385,6 +4423,8 @@ void AstVar::dump(std::ostream& str) const {
     str << " " << varType();
 }
 void AstVar::dumpJson(std::ostream& str) const {
+    if (libInoutId()) dumpJsonNumFunc(str, libInoutId);
+    dumpJsonBoolFuncIf(str, libInoutEnable);
     dumpJsonStrFunc(str, origName);
     dumpJsonStrFunc(str, verilogName);
     dumpJsonBoolFuncIf(str, constPoolEntry);

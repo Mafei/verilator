@@ -4,17 +4,17 @@
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of either the GNU Lesser General Public License Version 3
 # or the Perl Artistic License Version 2.0.
-# SPDX-FileCopyrightText: 2024 Wilson Snyder
+# SPDX-FileCopyrightText: 2026 Wilson Snyder
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
 import vltest_bootstrap
 
-test.scenarios('vlt')
+test.scenarios('simulator')
 
-test.compile(verilator_flags2=["--protect-lib", "secret", "--protect-key", "secret-key"],
-             verilator_make_gcc=False,
-             make_main=False,
-             fails=True,
-             expect_filename=test.golden_filename)
+test.compile(verilator_flags2=['--stats', '--hierarchical'])
+
+test.execute()
+
+test.file_grep(test.stats, r'HierBlock,\s+Hierarchical blocks\s+(\d+)', 1)
 
 test.passes()
