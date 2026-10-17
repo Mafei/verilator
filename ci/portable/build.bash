@@ -106,6 +106,10 @@ python3 ci/portable/test_finish_wave_evidence.py
 autoconf
 ./configure --prefix=/opt/verilator-fourstate --disable-ccwarn --disable-tcmalloc --disable-jemalloc
 make -C src -j2 opt
+if [[ -z ${PORTABLE_BASELINE:-} ]]; then
+    # The interface-array control exercises checked STL iterators in the debug compiler.
+    make -C src -j2 dbg
+fi
 python3 ci/portable/log_evidence.py compiler
 if [[ -n ${PORTABLE_BASELINE:-} ]]; then
     export VERILATOR_ROOT="$root"
