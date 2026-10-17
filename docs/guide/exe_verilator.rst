@@ -1529,6 +1529,17 @@ Summary:
    to the value from :vlopt:`--build-jobs`, or from :vlopt:`-j`, or zero in
    that priority.
 
+.. option:: --output-groups-size <bytes>
+
+   With :vlopt:`--output-groups`, limits the size of each concatenated .cpp
+   file, including the generated headers it includes, to the given number
+   of bytes. Groups that would exceed the limit are split into more groups,
+   so more files than requested by :vlopt:`--output-groups` may be
+   created. A single .cpp file larger than the limit is compiled on its
+   own. This bounds the compiler memory usage when grouping large designs.
+
+   Defaults to 536870912 (512 MiB). Zero disables the limit.
+
 .. option:: --output-split <statements>
 
    Enables splitting the output .cpp files into multiple outputs. When a
@@ -1587,6 +1598,11 @@ Summary:
    inouts in the top-level module. The __en variable has a one in a bit
    position to indicate the corresponding bit of the __out variable has
    a value being driven from within the Verilated model.
+
+   With :vlopt:`--lib-create` or :vlopt:`--protect-lib`, this option exposes
+   the input, ``__out``, and ``__en`` ports in the generated SystemVerilog
+   wrapper. Without this option, the wrapper retains the ``inout`` port
+   and drives it using the library's output value and enable for each bit.
 
 .. option:: --pins-sc-biguint
 

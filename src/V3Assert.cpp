@@ -507,11 +507,7 @@ class AssertVisitor final : public VNVisitor {
         nodep->displayType(VDisplayType::DT_WRITE);
         // cppcheck-suppress nullPointer
         AstNodeExpr* const timenewp = new AstTime{nodep->fileline(), m_modp->timeunit()};
-        if (AstNodeExpr* const timesp = nodep->fmtp()->exprsp()) {
-            timesp->unlinkFrBackWithNext();
-            timenewp->addNext(timesp);
-        }
-        nodep->fmtp()->addExprsp(timenewp);
+        nodep->fmtp()->prependExprsp(timenewp);
         if (!nodep->fmtp()->scopeNamep() && nodep->fmtp()->formatScopeTracking()) {
             nodep->fmtp()->scopeNamep(new AstScopeName{nodep->fileline(), true});
         }
@@ -658,11 +654,7 @@ class AssertVisitor final : public VNVisitor {
         // Actually set the delayed value
         AstNodeExpr* const lhsp = new AstVarRef{flp, varp, VAccess::WRITE};
         AstAssignDly* const assignp = new AstAssignDly{flp, lhsp, exprp};
-        if (!alwaysp->stmtsp()) {
-            alwaysp->addStmtsp(assignp);
-        } else {
-            alwaysp->stmtsp()->addHereThisAsNext(assignp);
-        }
+        alwaysp->prependStmtsp(assignp);
         return varp;
     }
 
@@ -940,7 +932,6 @@ class AssertVisitor final : public VNVisitor {
                     ifp = nextifp;
                 } while (ifp);
 
-                AstIf* const newifp = nodep->cloneTree(false);
                 const bool allow_none = nodep->unique0Pragma();
 
                 // Empty case means no property
@@ -954,15 +945,17 @@ class AssertVisitor final : public VNVisitor {
                            : static_cast<AstNodeExpr*>(new AstOneHot{nodep->fileline(), propp}));
                 const VAssertType assertType
                     = nodep->uniquePragma() ? VAssertType::UNIQUE : VAssertType::UNIQUE0;
+                // Move, not clone, as the branches might declare referenced variables
+                VNRelinker relinker;
+                nodep->unlinkFrBack(&relinker);
                 AstIf* const checkifp
                     = new AstIf{nodep->fileline(), new AstLogNot{nodep->fileline(), ohot},
                                 newFireAssert(nodep, VAssertDirectiveType::VIOLATION_IF,
                                               assertType, "'unique if' statement violated"),
-                                newifp};
+                                nodep};
                 checkifp->isBoundsCheck(true);  // To avoid LATCH warning
                 checkifp->branchPred(VBranchPred::BP_UNLIKELY);
-                nodep->replaceWith(checkifp);
-                VL_DO_DANGLING(pushDeletep(nodep), nodep);
+                relinker.relink(checkifp);
                 return;
             }
         }
@@ -1042,9 +1035,9 @@ class AssertVisitor final : public VNVisitor {
             if (m_ftaskp) {
                 varp->funcLocal(true);
                 varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
-                m_ftaskp->stmtsp()->addHereThisAsNext(varp);
+                m_ftaskp->prependStmtsp(varp);
             } else {
-                m_modp->stmtsp()->addHereThisAsNext(varp);
+                m_modp->prependStmtsp(varp);
             }
             VIsCached::clearCacheTree();
         }

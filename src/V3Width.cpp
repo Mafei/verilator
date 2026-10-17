@@ -272,6 +272,8 @@ class WidthVisitor final : public VNVisitor {
     V3UniqueNames m_insideTempNames;  // For generating unique temporary variable names for
                                       // `inside` expressions
     VMemberMap m_memberMap;  // Member names cached for fast lookup
+    std::unordered_map<const AstModport*, std::unordered_set<string>>
+        m_modportNames;  // Names listed by each modport
     V3TaskConnectState m_taskConnectState;  // State to cache V3Task::taskConnects
     WidthVP* m_vup = nullptr;  // Current node state
     bool m_underFork = false;  // Visiting under a fork
@@ -2404,6 +2406,15 @@ class WidthVisitor final : public VNVisitor {
         // Each cross item has the type of its coverpoint (IEEE 1800-2023 19.6.1.3)
         userIterateAndNext(nodep->varsp(), nullptr);
         widthCoverFilter(nodep->filterp(), "Cross bin");
+        if (AstNodeExpr* const countp = nodep->countp()) {
+            if (VN_IS(countp, Unbounded)) {
+                countp->dtypeSetInt();  // 'matches $'
+            } else {
+                // The count of 'matches' is self-determined, which V3Covergroup checks once folded
+                userIterateAndNext(countp, WidthVP{SELF, BOTH}.p());
+                V3Const::constifyEdit(nodep->countp());  // countp may change
+            }
+        }
     }
     // A 'with' filter is true for a nonzero value (IEEE 1800-2023 12.4), of a type assignment
     // compatible with an integral type (19.5.1.1); 'whatp' names its bins
@@ -2460,10 +2471,13 @@ class WidthVisitor final : public VNVisitor {
         }
 
         if (m_vup->final()) {
-            AstNodeDType* const expDTypep = m_vup->dtypeOverridep(nodep->dtypep());
+            AstNodeDType* expDTypep = m_vup->dtypeOverridep(nodep->dtypep());
+            AstNodeDType* const lhsDTypep = nodep->lhsp()->dtypep()->skipRefp();
+            expDTypep
+                = expDTypep->findBitOrLogicDType(expDTypep->width(), expDTypep->widthMin(),
+                                                 lhsDTypep->numeric(), expDTypep->isFourstate());
             nodep->dtypep(expDTypep);
-            // rhs already finalized in iterate_shift_prelim
-            iterateCheck(nodep, "LHS", nodep->lhsp(), SELF, FINAL, nodep->dtypep(), EXTEND_EXP);
+            iterateCheck(nodep, "LHS", nodep->lhsp(), CONTEXT_DET, FINAL, expDTypep, EXTEND_EXP);
             AstNode* newp = nullptr;  // No change
             if (nodep->lhsp()->isSigned() && nodep->rhsp()->isSigned()) {
                 newp = new AstPowSS{nodep->fileline(), nodep->lhsp()->unlinkFrBack(),
@@ -3948,11 +3962,12 @@ class WidthVisitor final : public VNVisitor {
         assertAtExpr(nodep);
         if (m_vup->prelim()) {  // First stage evaluation
             AstNodeDType* const vdtypep = m_vup->dtypeNullp();
-            // A whole array of interfaces keeps its type, for its connections to be checked
-            if (!nodep->dtypep() || (vdtypep && !isIfaceArrayDType(nodep->dtypep()))) {
-                UASSERT_OBJ(vdtypep, nodep,
-                            "InitArray type not assigned by AstPattern/Var visitor");
-                nodep->dtypep(vdtypep);
+            // A whole array of interfaces keeps its type, for its connections to be checked.
+            // Another value, e.g. from a parameter, takes the type, unless its sizes differ,
+            // which iterateCheck reports
+            if (vdtypep && !isIfaceArrayDType(nodep->dtypep())
+                && unpackedArraySizesMatch(vdtypep->skipRefp(), nodep->dtypep()->skipRefp())) {
+                nodep->retypeOrdered(vdtypep);
             }
             const AstNodeDType* const arrayp = nodep->dtypep()->skipRefp();
             if (VN_IS(arrayp, NodeArrayDType) || VN_IS(arrayp, AssocArrayDType)) {
@@ -4120,9 +4135,9 @@ class WidthVisitor final : public VNVisitor {
             if (m_ftaskp) {
                 varp->funcLocal(true);
                 varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
-                m_ftaskp->stmtsp()->addHereThisAsNext(varp);
+                m_ftaskp->prependStmtsp(varp);
             } else {
-                m_modep->stmtsp()->addHereThisAsNext(varp);
+                m_modep->prependStmtsp(varp);
             }
             iterate(varp);
             iterate(exprStmtp);
@@ -4601,6 +4616,29 @@ class WidthVisitor final : public VNVisitor {
                       << (suggest.empty() ? "" : nodep->fileline()->warnMore() + suggest));
         return false;  // Caller handles error
     }
+    bool modportAllowsItem(AstNode* nodep, const AstIfaceRefDType* adtypep, const AstNode* itemp) {
+        // Variables, tasks/functions and clocking blocks of an interface are only visible
+        // through a modport when the modport lists them
+        const AstModport* const modportp = adtypep->modportp();
+        if (!modportp) return true;
+        if (const AstVar* const varp = VN_CAST(itemp, Var)) {
+            if (varp->isParam()) return true;
+        } else if (!VN_IS(itemp, NodeFTask) && !VN_IS(itemp, Clocking)) {
+            return true;
+        }
+        auto pair = m_modportNames.emplace(modportp, std::unordered_set<string>{});
+        if (pair.second) {
+            for (const AstNode* mpItemp = modportp->varsp(); mpItemp; mpItemp = mpItemp->nextp()) {
+                pair.first->second.insert(mpItemp->name());
+            }
+        }
+        if (pair.first->second.count(itemp->name())) return true;
+        nodep->v3error("Member " << itemp->prettyNameQ() << " found in interface "
+                                 << adtypep->ifaceViaCellp()->prettyNameQ()
+                                 << " but not in modport " << modportp->prettyNameQ()
+                                 << " (IEEE 1800-2023 25.5)");
+        return false;
+    }
     AstNode* memberSelIface(AstMemberSel* nodep, AstIfaceRefDType* adtypep) {
         // Returns node if ok
         // No need to width-resolve the interface, as it was done when we did the child
@@ -4610,7 +4648,12 @@ class WidthVisitor final : public VNVisitor {
         UASSERT_OBJ(ifacep, nodep, "Unlinked");
         VSpellCheck speller;
         for (AstNode* itemp = ifacep->stmtsp(); itemp; itemp = itemp->nextp()) {
-            if (itemp->name() == nodep->name()) return itemp;
+            if (itemp->name() == nodep->name()) {
+                if (!modportAllowsItem(nodep, adtypep, itemp)) {
+                    return nullptr;  // Caller handles error
+                }
+                return itemp;
+            }
             if (VN_IS(itemp, Var) || VN_IS(itemp, Modport) || VN_IS(itemp, Cell)) {
                 speller.pushCandidate(itemp->prettyName());
             }
@@ -5420,6 +5463,10 @@ class WidthVisitor final : public VNVisitor {
         if (AstNodeFTask* const ftaskp
             = VN_CAST(m_memberMap.findMember(ifacep, nodep->name()), NodeFTask)) {
             UINFO(5, __FUNCTION__ << "AstNodeFTask" << nodep);
+            if (!modportAllowsItem(nodep, adtypep, ftaskp)) {
+                nodep->dtypeSetVoid();
+                return;
+            }
             if (adtypep->isVirtual()) {
                 for (AstNode* itemp = ifacep->stmtsp(); itemp; itemp = itemp->nextp()) {
                     if (AstVar* const mvarp = VN_CAST(itemp, Var)) { mvarp->sensIfacep(ifacep); }
@@ -6987,12 +7034,8 @@ class WidthVisitor final : public VNVisitor {
                 if (lhsIsUnpackArray && rhsIsUnpackArray) {
                     if (lhsDtp->isFourstate() != rhsDtp->isFourstate()) {
                         nodep->v3error("Assignment between 2-state and 4-state types requires "
-                                       "equivalent element types (IEEE 1800-2023 6.22.2, 7.6)\n"
-                                       << nodep->warnMore()
-                                       << "... Left-hand type: " << lhsDtp->prettyDTypeNameQ()
-                                       << lhsDtp->stateDTypeName() << "\n"
-                                       << nodep->warnMore() << "... Right-hand type: "
-                                       << rhsDtp->prettyDTypeNameQ() << rhsDtp->stateDTypeName());
+                                       "equivalent element types (IEEE 1800-2023 6.22.2, 7.6)"
+                                       << warnDTypes(nodep, lhsDtp, rhsDtp));
                     }
                 }
                 checkUnpackedArrayAssignmentCompatible<AstNodeVarRef, AstNodeVarRef>(
@@ -7571,6 +7614,17 @@ class WidthVisitor final : public VNVisitor {
         // UINFOTREE(1, nodep, "", "PinPre");
         // TOP LEVEL NODE
         if (nodep->modVarp() && nodep->modVarp()->isGParam()) {
+            // An unpacked array concatenation is a pattern of its items (IEEE 1800-2023 10.10)
+            AstReplicate* const concatp = VN_CAST(nodep->exprp(), Replicate);
+            const AstConst* const countp = concatp ? VN_CAST(concatp->countp(), Const) : nullptr;
+            const AstNodeDType* const dtypep = nodep->modVarp()->subDTypep()->skipRefOrNullp();
+            if (countp && countp->toUInt() == 1
+                && (VN_IS(dtypep, UnpackArrayDType) || VN_IS(dtypep, BracketArrayDType))) {
+                AstPattern* const patternp = new AstPattern{concatp->fileline(), nullptr};
+                patConcatConvertRecurse(patternp, concatp->srcp());
+                concatp->replaceWith(patternp);
+                VL_DO_DANGLING(pushDeletep(concatp), concatp);
+            }
             // An override pattern is left for the specialized module to type
             VL_RESTORER(m_inParamOverride);
             m_inParamOverride = isOverridePattern(nodep->exprp());
@@ -8865,11 +8919,8 @@ class WidthVisitor final : public VNVisitor {
                 const AstNodeDType* const rhsDType = nodep->rhsp()->dtypep();
 
                 if (lhsDType && rhsDType && !isEquivalentDType(lhsDType, rhsDType)) {
-                    nodep->v3error("Comparison requires matching data types\n"
-                                   << nodep->warnMore() << "... Left-hand data type: "
-                                   << lhsDType->prettyDTypeNameQ() << "\n"
-                                   << nodep->warnMore() << "... Right-hand data type: "
-                                   << rhsDType->prettyDTypeNameQ());
+                    nodep->v3error("Comparison requires matching data types"
+                                   << warnDTypes(nodep, lhsDType, rhsDType));
                     AstNode* const newp
                         = new AstConst{nodep->fileline(), AstConst::BitFalseErroring{}};
                     nodep->replaceWith(newp);
@@ -9388,7 +9439,7 @@ class WidthVisitor final : public VNVisitor {
             varp->funcLocal(true);
             varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
             // Declare before use, including in non-inlined class methods.
-            m_ftaskp->stmtsp()->addHereThisAsNext(varp);
+            m_ftaskp->prependStmtsp(varp);
         } else {
             UASSERT_OBJ(m_modep, valuep, "Enum expression without a containing module");
             m_modep->addStmtsp(varp);
@@ -9598,6 +9649,33 @@ class WidthVisitor final : public VNVisitor {
         }
         return false;
     }
+    // Lines to end a message on nodep with the data types of its operands
+    static string warnDTypes(const AstNode* nodep, const AstNodeDType* lhsDtp,
+                             const AstNodeDType* rhsDtp, const string& lhsName = "Left-hand",
+                             const string& rhsName = "Right-hand")
+        VL_REQUIRES(V3Error::s().m_mutex) {
+        string lhsState = " " + lhsDtp->stateDTypeName();
+        string rhsState = " " + rhsDtp->stateDTypeName();
+        if (lhsState == rhsState) lhsState = rhsState = "";
+        return "\n" + nodep->warnMore() + "... " + lhsName
+               + " data type: " + lhsDtp->prettyDTypeNameQ() + lhsState + "\n" + nodep->warnMore()
+               + "... " + rhsName + " data type: " + rhsDtp->prettyDTypeNameQ() + rhsState;
+    }
+    // Fixed-size unpacked arrays are assignment compatible only with the same number of
+    // elements in each dimension (IEEE 1800-2023 7.6); dynamically sized ones always are
+    static bool unpackedArraySizesMatch(const AstNodeDType* lhsDtp, const AstNodeDType* rhsDtp) {
+        while (lhsDtp->isNonPackedArray() && rhsDtp->isNonPackedArray()) {
+            const AstUnpackArrayDType* const lhsArrayp = VN_CAST(lhsDtp, UnpackArrayDType);
+            const AstUnpackArrayDType* const rhsArrayp = VN_CAST(rhsDtp, UnpackArrayDType);
+            if (lhsArrayp && rhsArrayp
+                && lhsArrayp->elementsConst() != rhsArrayp->elementsConst()) {
+                return false;
+            }
+            lhsDtp = lhsDtp->subDTypep()->skipRefp();
+            rhsDtp = rhsDtp->subDTypep()->skipRefp();
+        }
+        return true;
+    }
     // Checks whether two types are assignment-compatible according to IEEE 1800-2023 7.6
     // Currently, this function only supports variables, which are of following types:
     // - Fixed-size unpacked array
@@ -9628,11 +9706,8 @@ class WidthVisitor final : public VNVisitor {
         if (!isLhsAggregate && !isRhsAggregate) return;
         if (isLhsAggregate ^ isRhsAggregate) {
             nodep->v3error(
-                "Illegal assignment: types are not assignment compatible (IEEE 1800-2023 7.6)\n"
-                << nodep->warnMore() << "... " << lhsName << " data type: "
-                << lhsDtp->prettyDTypeNameQ() << " " << lhsDtp->stateDTypeName() << "\n"
-                << nodep->warnMore() << "... " << rhsName << " data type: "
-                << rhsDtp->prettyDTypeNameQ() << " " << rhsDtp->stateDTypeName() << "\n");
+                "Illegal assignment: types are not assignment compatible (IEEE 1800-2023 7.6)"
+                << warnDTypes(nodep, lhsDtp, rhsDtp, lhsName, rhsName));
             return;
         } else if (VN_IS(lhsDtp, QueueDType) && VN_IS(rhsDtp, EmptyQueueDType)) {
             return;
@@ -9641,45 +9716,30 @@ class WidthVisitor final : public VNVisitor {
                                       rhsDim = rhsDtp->dimensions(false);
         // Check if unpacked array dimensions are matching
         if (lhsDim.second != rhsDim.second) {
-            nodep->v3error("Illegal assignment: Unmatched number of unpacked dimensions "
-                           << "(" << lhsDim.second << " vs " << rhsDim.second << ")");
+            nodep->v3error("Illegal assignment: Unmatched number of unpacked dimensions (IEEE "
+                           "1800-2023 7.6)"
+                           << warnDTypes(nodep, lhsDtp, rhsDtp, lhsName, rhsName));
             return;
         }
 
         const AstNodeDType* lhsDtpIterp = lhsDtp;
         const AstNodeDType* rhsDtpIterp = rhsDtp;
-        // Sizes of fixed-size arrays should be the same
-        // Dynamic-sized arrays are always assignable
         for (uint32_t dim = 0; dim < rhsDim.second; dim++) {
-            if (const AstNodeArrayDType* rhsArrayp = VN_CAST(rhsDtpIterp, NodeArrayDType)) {
-                if (const AstNodeArrayDType* lhsArrayp = VN_CAST(lhsDtpIterp, NodeArrayDType)) {
-                    if (lhsArrayp->elementsConst() != rhsArrayp->elementsConst()) {
-                        nodep->v3error("Illegal assignment: Unmatched array sizes in dimension "
-                                       << dim << " " << "(" << lhsArrayp->elementsConst() << " vs "
-                                       << rhsArrayp->elementsConst() << ")");
-                        return;
-                    }
-                }
-            }
             // Associative arrays are compatible only with each other
             if (VN_IS(lhsDtpIterp, AssocArrayDType) ^ VN_IS(rhsDtpIterp, AssocArrayDType)) {
                 nodep->v3error("Illegal assignment: Associative arrays are assignment compatible "
-                               "only with associative arrays (IEEE 1800-2023 7.6)");
-
+                               "only with associative arrays (IEEE 1800-2023 7.6)"
+                               << warnDTypes(nodep, lhsDtp, rhsDtp, lhsName, rhsName));
                 return;
             }
-            lhsDtpIterp = lhsDtpIterp->subDTypep();
-            rhsDtpIterp = rhsDtpIterp->subDTypep();
+            lhsDtpIterp = lhsDtpIterp->subDTypep()->skipRefp();
+            rhsDtpIterp = rhsDtpIterp->subDTypep()->skipRefp();
         }
         // Element types of source and target shall be equivalent
         if (!isEquivalentDType(lhsDtpIterp, rhsDtpIterp)) {
             nodep->v3error("Illegal assignment: Array element types are not equivalent (IEEE "
-                           "1800-2023 6.22.2)\n"
-                           << nodep->warnMore() << "... " << lhsName << " data type: "
-                           << lhsDtp->prettyDTypeNameQ() << " " << lhsDtp->stateDTypeName() << "\n"
-                           << nodep->warnMore() << "... " << rhsName
-                           << " data type: " << rhsDtp->prettyDTypeNameQ() << " "
-                           << rhsDtp->stateDTypeName() << "\n");
+                           "1800-2023 6.22.2)"
+                           << warnDTypes(nodep, lhsDtp, rhsDtp, lhsName, rhsName));
         }
     }
     void checkClassAssign(const AstNode* nodep, const char* side, AstNode* rhsp,
@@ -10017,6 +10077,19 @@ class WidthVisitor final : public VNVisitor {
                 underp->replaceWith(newp);
                 VL_DO_DANGLING(pushDeletep(underp), underp);
                 underp = newp;
+            }
+            const AstNodeDType* const expDtp = expDTypep->skipRefp();
+            if (determ == ASSIGN && VN_IS(expDtp, NodeUOrStructDType) && expDtp->isAggregateType()
+                && !underDtp->isAggregateType()) {
+                parentp->v3error("Illegal assignment: types are not assignment compatible (IEEE "
+                                 "1800-2023 7.6)"
+                                 << warnDTypes(parentp, expDtp, underDtp));
+            }
+            // Connections of interface arrays have their own check, with a better message
+            if (determ == ASSIGN && !isIfaceArrayDType(expDtp)
+                && !unpackedArraySizesMatch(expDtp, underDtp)) {
+                parentp->v3error("Illegal assignment: Unmatched array sizes (IEEE 1800-2023 7.6)"
+                                 << warnDTypes(parentp, expDtp, underDtp));
             }
             const AstBasicDType* const expBasicp = expDTypep->basicp();
             const AstBasicDType* const underBasicp = underp->dtypep()->basicp();
@@ -10842,20 +10915,14 @@ class WidthVisitor final : public VNVisitor {
         return patmap;
     }
 
-    void patConcatConvertRecurse(AstPattern* patternp, AstConcat* nodep) {
-        if (AstConcat* lhsp = VN_CAST(nodep->lhsp(), Concat)) {
-            patConcatConvertRecurse(patternp, lhsp);
+    // Add to patternp the items of nodep, a concatenation or a single item
+    void patConcatConvertRecurse(AstPattern* patternp, AstNodeExpr* nodep) {
+        if (AstConcat* const concatp = VN_CAST(nodep, Concat)) {
+            patConcatConvertRecurse(patternp, concatp->lhsp());
+            patConcatConvertRecurse(patternp, concatp->rhsp());
         } else {
-            AstPatMember* const newp = new AstPatMember{
-                nodep->lhsp()->fileline(), nodep->lhsp()->unlinkFrBack(), nullptr, nullptr};
-            newp->isConcat(true);
-            patternp->addItemsp(newp);
-        }
-        if (AstConcat* rhsp = VN_CAST(nodep->rhsp(), Concat)) {
-            patConcatConvertRecurse(patternp, rhsp);
-        } else {
-            AstPatMember* const newp = new AstPatMember{
-                nodep->rhsp()->fileline(), nodep->rhsp()->unlinkFrBack(), nullptr, nullptr};
+            AstPatMember* const newp
+                = new AstPatMember{nodep->fileline(), nodep->unlinkFrBack(), nullptr, nullptr};
             newp->isConcat(true);
             patternp->addItemsp(newp);
         }

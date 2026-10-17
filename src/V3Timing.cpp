@@ -623,13 +623,6 @@ class TimingControlVisitor final : public VNVisitor {
         }
         return stmtp == nodep ? nullptr : stmtp;
     }
-    // Calculate the factor to scale delays by
-    double calculateTimescaleFactor(AstNode* nodep, VTimescale timeunit) const {
-        UASSERT_OBJ(!timeunit.isNone(), nodep, "timenunit must be set");
-        const int scalePowerOfTen
-            = timeunit.powerOfTen() - m_netlistp->timeprecision().powerOfTen();
-        return std::pow(10.0, scalePowerOfTen);
-    }
     static bool staticallyNonZeroDelay(const AstNodeExpr* valuep) {
         if (const AstConst* const constp = VN_CAST(valuep, Const)) return !constp->isZero();
         if (const AstCond* const condp = VN_CAST(valuep, Cond)) {
@@ -861,11 +854,7 @@ class TimingControlVisitor final : public VNVisitor {
             ->dtypeSetVoid();  // Opaque process reference; type is irrelevant for hardcoded emit
         onKillp->addPinsp(processp);
         AstNodeStmt* const stmtp = onKillp->makeStmt();
-        if (beginp->stmtsp()) {
-            beginp->stmtsp()->addHereThisAsNext(stmtp);
-        } else {
-            beginp->addStmtsp(stmtp);
-        }
+        beginp->prependStmtsp(stmtp);
     }
     // Handle the 'join' part of a fork..join
     void makeForkJoin(AstFork* const forkp) {
@@ -905,57 +894,30 @@ class TimingControlVisitor final : public VNVisitor {
     // `varsp` vector of vars which shall be localized.
     static void localizeVars(AstNode* const procp, const std::vector<AstVar*>& varsp) {
         UASSERT(procp, "procp is nullptr");
-        AstNode* firstStmtp;
+        AstVar* newVarsp = nullptr;
+        for (AstVar* const varp : varsp) {
+            varp->funcLocal(true);
+            newVarsp = AstNode::addNextNull(newVarsp, varp->unlinkFrBack());
+        }
         if (AstNodeProcedure* const nodeProcp = VN_CAST(procp, NodeProcedure)) {
-            firstStmtp = nodeProcp->stmtsp();
+            nodeProcp->prependStmtsp(newVarsp);
         } else if (AstCFunc* const cfuncp = VN_CAST(procp, CFunc)) {
-            if (!cfuncp->varsp()) {
-                for (AstVar* const varp : varsp) {
-                    varp->funcLocal(true);
-                    cfuncp->addVarsp(varp->unlinkFrBack());
-                }
-                return;
-            }
-            firstStmtp = cfuncp->varsp();
+            cfuncp->prependVarsp(newVarsp);
         } else if (AstBegin* const beginp = VN_CAST(procp, Begin)) {
-            firstStmtp = beginp->stmtsp();
+            beginp->prependStmtsp(newVarsp);
         } else {
             procp->v3fatalSrc(
                 procp->prettyNameQ()
                 << " is not of an expected type NodeProcedure/CFunc/Begin instead it is: "
                 << procp->prettyTypeName());
         }
-        UASSERT_OBJ(firstStmtp, procp,
-                    procp->prettyNameQ() << " has no non-var statement. 'localizeVars()' is ment "
-                                            "to be called on non-empty NodeProcedure/CFunc/Begin");
-        for (AstVar* const varp : varsp) {
-            varp->funcLocal(true);
-            firstStmtp->addHereThisAsNext(varp->unlinkFrBack());
-        }
     }
 
     AstNodeExpr* delayToIntegral(AstDelay* nodep, AstNodeExpr* valuep) {
-        FileLine* const flp = nodep->fileline();
-        AstConst* const constp = VN_CAST(valuep, Const);
-        const bool isForkSentinel
-            = constp && (constp->toUQuad() == std::numeric_limits<uint64_t>::max());
-        if (!isForkSentinel && (!constp || !constp->isZero())) {
-            // Scale the delay
-            const double timescaleFactorD = calculateTimescaleFactor(nodep, nodep->timeunit());
-            if (valuep->dtypep()->skipRefp()->isDouble()) {
-                AstConst* const tsfp = new AstConst{flp, AstConst::RealDouble{}, timescaleFactorD};
-                valuep = new AstMulD{flp, valuep, tsfp};
-                valuep = new AstRToIRoundS{flp, valuep};
-                valuep->dtypeSetBitSized(64, VSigning::UNSIGNED);
-            } else {
-                valuep->dtypeSetBitSized(64, VSigning::UNSIGNED);
-                const uint64_t timescaleFactorU = static_cast<uint64_t>(timescaleFactorD);
-                AstConst* const tsfp = new AstConst{flp, AstConst::Unsized64{}, timescaleFactorU};
-                valuep = new AstMul{flp, valuep, tsfp};
-            }
-            valuep = V3Const::constifyEdit(valuep);  // Simplify
-        }
-        return valuep;
+        const AstConst* const constp = VN_CAST(valuep, Const);
+        // The fork start sentinel is already in ticks
+        if (constp && constp->toUQuad() == std::numeric_limits<uint64_t>::max()) return valuep;
+        return V3Timing::delayToTicks(valuep, nodep->timeunit());
     }
 
     // VISITORS
@@ -1055,11 +1017,7 @@ class TimingControlVisitor final : public VNVisitor {
         // If in a class, create a shared pointer to 'this'
         if (m_classp) {
             AstCStmt* const cstmtp = new AstCStmt{nodep->fileline(), "VL_KEEP_THIS;"};
-            if (AstNode* const stmtsp = nodep->stmtsp()) {
-                stmtsp->addHereThisAsNext(cstmtp);
-            } else {
-                nodep->addStmtsp(cstmtp);
-            }
+            nodep->prependStmtsp(cstmtp);
         }
         if (nodep->dpiExportImpl()) {
             nodep->exists([](AstCAwait* const awaitp) -> bool {
@@ -1094,15 +1052,7 @@ class TimingControlVisitor final : public VNVisitor {
                     "Cycle delays should have been handled in V3AssertPre");
         FileLine* const flp = nodep->fileline();
 
-        AstNodeExpr* valuep = nodep->lhsp()->unlinkFrBack();
-        if (VN_IS(valuep, Const) && VN_AS(valuep, Const)->num().is1Step()) {
-            // #1step special case
-            VL_DO_DANGLING(valuep->deleteTree(), valuep);
-            valuep = new AstConst{flp, AstConst::Unsized64{}, 1};
-            valuep->dtypeSetBitSized(64, VSigning::UNSIGNED);
-        } else {
-            valuep = delayToIntegral(nodep, valuep);
-        }
+        AstNodeExpr* valuep = delayToIntegral(nodep, nodep->lhsp()->unlinkFrBack());
 
         // Statistics
         if (valuep->isZero()) {
@@ -1661,6 +1611,35 @@ void V3Timing::prepareImplicit(AstNetlist* nodep) {
     UINFO(2, __FUNCTION__ << ":");
     { TimingImplicitVisitor{nodep}; }
     V3Global::dumpCheckGlobalTree("timingimplicit", 0, dumpTreeEitherLevel() >= 3);
+}
+
+AstNodeExpr* V3Timing::delayToTicks(AstNodeExpr* valuep, VTimescale timeunit) {
+    FileLine* const flp = valuep->fileline();
+    if (const AstConst* const constp = VN_CAST(valuep, Const)) {
+        if (constp->num().is1Step()) {
+            // A step is one tick of the global time precision (IEEE 1800-2023 3.14.3)
+            VL_DO_DANGLING(valuep->deleteTree(), valuep);
+            AstConst* const tickp = new AstConst{flp, AstConst::Unsized64{}, 1};
+            tickp->dtypeSetBitSized(64, VSigning::UNSIGNED);
+            return tickp;
+        }
+        if (constp->isZero()) return valuep;
+    }
+    UASSERT_OBJ(!timeunit.isNone(), valuep, "timeunit must be set");
+    const double timescaleFactorD
+        = std::pow(10.0, timeunit.powerOfTen() - v3Global.rootp()->timeprecision().powerOfTen());
+    if (valuep->dtypep()->skipRefp()->isDouble()) {
+        AstConst* const tsfp = new AstConst{flp, AstConst::RealDouble{}, timescaleFactorD};
+        valuep = new AstMulD{flp, valuep, tsfp};
+        valuep = new AstRToIRoundS{flp, valuep};
+        valuep->dtypeSetBitSized(64, VSigning::UNSIGNED);
+    } else {
+        valuep->dtypeSetBitSized(64, VSigning::UNSIGNED);
+        const uint64_t timescaleFactorU = static_cast<uint64_t>(timescaleFactorD);
+        AstConst* const tsfp = new AstConst{flp, AstConst::Unsized64{}, timescaleFactorU};
+        valuep = new AstMul{flp, valuep, tsfp};
+    }
+    return V3Const::constifyEdit(valuep);  // Simplify
 }
 
 void V3Timing::timingAll(AstNetlist* nodep) {

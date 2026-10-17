@@ -26,6 +26,7 @@
 #include "V3Assert.h"
 #include "V3Const.h"
 #include "V3Task.h"
+#include "V3Timing.h"
 #include "V3UniqueNames.h"
 
 #include <unordered_map>
@@ -543,28 +544,34 @@ private:
                             new AstAssign{flp, new AstVarRef{flp, drivenVarp, VAccess::WRITE},
                                           new AstConst{flp, AstConst::BitFalse{}}}};
             ifp->addThensp(assignp);
-            if (skewp->isZero() || !skewp->fileline()->timingOn()) {
+            // Only in the time step of the clocking event
+            AstCMethodHard* const trigp = new AstCMethodHard{
+                nodep->fileline(), new AstVarRef{flp, m_clockingp->ensureEventp(), VAccess::READ},
+                VCMethod::EVENT_IS_TRIGGERED};
+            trigp->dtypeSetBit();
+            ifp->condp(new AstLogAnd{flp, ifp->condp()->unlinkFrBack(), trigp});
+            // A skew rounding to no time precision ticks is a zero skew
+            AstNodeExpr* const ticksp
+                = V3Timing::delayToTicks(skewp->cloneTree(false), m_modp->timeunit());
+            const bool zeroSkew = ticksp->isZero();
+            VL_DO_DANGLING(ticksp->deleteTree(), ticksp);
+            if (zeroSkew || !skewp->fileline()->timingOn()) {
                 // Drive the var in Re-NBA (IEEE 1800-2023 14.16), ignoring skews where timing is
                 // turned off
                 AstSenTree* senTreep = m_clockingp->sentreep()->cloneTree(false);
                 senTreep->addSensesp(new AstSenItem{
                     flp, VEdgeType::ET_CHANGED, new AstVarRef{flp, drivenVarp, VAccess::READ}});
-                AstCMethodHard* const trigp = new AstCMethodHard{
-                    nodep->fileline(),
-                    new AstVarRef{flp, m_clockingp->ensureEventp(), VAccess::READ},
-                    VCMethod::EVENT_IS_TRIGGERED};
-                trigp->dtypeSetBit();
-                ifp->condp(new AstLogAnd{flp, ifp->condp()->unlinkFrBack(), trigp});
                 m_clockingp->addNextHere(new AstAlwaysReactive{flp, senTreep, ifp});
             } else {
-                // Create a fork so that this AlwaysObserved can be retriggered before the
-                // assignment happens. Also then it can be combo, avoiding the need for creating
-                // new triggers.
+                // Fork only the assignment, so this AlwaysPostponed can be retriggered
+                // before the assignment happens
                 AstFork* const forkp = new AstFork{flp, VJoinType::JOIN_NONE};
-                forkp->addForksp(new AstBegin{flp, "", ifp, true});
-                // Use Observed for this to make sure we do not miss the event
-                m_clockingp->addNextHere(
-                    new AstAlwaysObserved{flp, m_clockingp->sentreep()->cloneTree(false), forkp});
+                forkp->immediateStart(true);
+                forkp->addForksp(new AstBegin{flp, "", assignp->unlinkFrBack(), true});
+                ifp->addThensp(forkp);
+                // Read the clockvar in Postponed, so a drive late in the time step is applied
+                // at this event plus the skew (IEEE 1800-2023 14.16)
+                m_clockingp->addNextHere(new AstAlwaysPostponed{flp, ifp});
                 if (v3Global.opt.timing().isSetTrue()) {
                     AstDelay* const delayp = new AstDelay{flp, skewp->unlinkFrBack(), false};
                     delayp->timeunit(m_modp->timeunit());
@@ -1838,10 +1845,8 @@ private:
                                 readCntRefp->cloneTree(false)};
             // Prepend to the sequence body to keep statement list structure valid.
             UASSERT_OBJ(!bodyp->name().empty(), bodyp, "Sequence body should be named");
-            AstNode* const origStmtsp = bodyp->stmtsp()->unlinkFrBackWithNext();
-            bodyp->addStmtsp(initialCntp);
-            initialCntp->addNextHere(assignp);
-            assignp->addNextHere(origStmtsp);
+            AstNode* const newStmtsp = AstNode::addNext<AstNode, AstNode>(initialCntp, assignp);
+            bodyp->prependStmtsp(newStmtsp);
 
             m_disableSeqIfp
                 = new AstIf{flp, new AstEq{flp, new AstVarRef{flp, initialCntp, VAccess::READ},
