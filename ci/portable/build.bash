@@ -148,7 +148,7 @@ export VERILATOR_ROOT="$root"
 export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
 # Preserve all 246 PR23 selections and add 17 upstream controls and the finish coverage regression.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 || regress_status=$?
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1
