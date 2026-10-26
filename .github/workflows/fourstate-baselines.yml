@@ -24,12 +24,14 @@ jobs:
           ref: fourstate-portable
           path: harness
           persist-credentials: false
+          set-safe-directory: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: antmicro/verilator
           ref: ${{ matrix.ref }}
           path: baseline
           persist-credentials: false
+          set-safe-directory: false
       - name: Add the public test harness and matching GNU Flex header adjustment
         run: |
           cp -R harness/ci/portable baseline/ci/
