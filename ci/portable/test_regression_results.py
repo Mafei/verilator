@@ -342,27 +342,54 @@ class BashGateTest(unittest.TestCase):
         version = subprocess.check_output([shell, "--version"], text=True).splitlines()[0]
         print("Validation gate shell: " + version)
         fixture = """set -euo pipefail
+platform=macos-arm64
+smoke_calls=0
+record_calls=0
+regress_calls=0
+checker_calls=0
+trap 'printf "SMOKE_CALLS=%s RECORD_CALLS=%s REGRESS_CALLS=%s CHECKER_CALLS=%s CAPTURED=%s\\n" "$smoke_calls" "$record_calls" "$regress_calls" "$checker_calls" "${smoke_status:-unset}"' EXIT
 python3() {
     case "$1" in
-        ci/portable/smoke.py) return "$SMOKE_FIXTURE_STATUS" ;;
-        ci/portable/run_regressions.py) return "$REGRESS_FIXTURE_STATUS" ;;
-        ci/portable/check_results.py) return "$CHECKER_FIXTURE_STATUS" ;;
+        ci/portable/smoke.py)
+            smoke_calls=$((smoke_calls + 1))
+            [[ "$#" == 3 && "$2" == /tmp/verilator-relocated/verilator-fourstate/bin/verilator
+               && "$3" == /tmp/portable-smoke ]] || return 99
+            return "$SMOKE_FIXTURE_STATUS" ;;
+        ci/portable/review_artifacts.py)
+            record_calls=$((record_calls + 1))
+            [[ "$#" == 8 && "$2" == record-migration && "$3" == --returned-status
+               && "$4" == "$smoke_status" && "$5" == --package
+               && "$6" == out/verilator-fourstate-macos-arm64.tar.gz
+               && "$7" == --relocated-compiler
+               && "$8" == /tmp/verilator-relocated/verilator-fourstate/bin/verilator_bin ]] || return 99
+            return "$RECORD_FIXTURE_STATUS" ;;
+        ci/portable/run_regressions.py)
+            regress_calls=$((regress_calls + 1)); return "$REGRESS_FIXTURE_STATUS" ;;
+        ci/portable/check_results.py)
+            checker_calls=$((checker_calls + 1)); return "$CHECKER_FIXTURE_STATUS" ;;
         *) return 99 ;;
     esac
 }
 """ + smoke + "\n" + gate + "\necho VALIDATION_PASSED\n"
-        for statuses in ((0, 0, 0), (9, 0, 0), (0, 7, 0), (0, 0, 5), (9, 7, 0)):
+        for statuses in ((0, 0, 0, 0), (9, 0, 0, 0), (0, 0, 7, 0), (0, 0, 0, 5), (9, 0, 7, 0),
+                         (0, 5, 0, 0), (9, 5, 0, 0), (7, 0, 0, 0), (143, 0, 0, 0)):
             with self.subTest(statuses=statuses):
                 environment = dict(os.environ)
-                for key, status in zip(("SMOKE", "REGRESS", "CHECKER"), statuses):
+                for key, status in zip(("SMOKE", "RECORD", "REGRESS", "CHECKER"), statuses):
                     environment[key + "_FIXTURE_STATUS"] = str(status)
-                result = subprocess.run([shell, "-c", fixture],
-                                        check=False,
-                                        env=environment,
-                                        text=True,
-                                        capture_output=True)
-                self.assertEqual(result.returncode == 0, statuses == (0, 0, 0), result.stderr)
-                self.assertEqual("VALIDATION_PASSED" in result.stdout, statuses == (0, 0, 0))
+                with tempfile.TemporaryDirectory() as temporary:
+                    result = subprocess.run([shell, "-c", fixture],
+                                            cwd=temporary,
+                                            check=False,
+                                            env=environment,
+                                            text=True,
+                                            capture_output=True)
+                self.assertEqual(result.returncode == 0, statuses == (0, 0, 0, 0), result.stderr)
+                self.assertEqual("VALIDATION_PASSED" in result.stdout, statuses == (0, 0, 0, 0))
+                self.assertIn(
+                    'SMOKE_CALLS=1 RECORD_CALLS=1 REGRESS_CALLS=1 CHECKER_CALLS=' +
+                    str(int(statuses[:3] == (0, 0, 0))) + ' CAPTURED=' + str(statuses[0]),
+                    result.stdout)
 
 
 class LogEvidenceTest(unittest.TestCase):

@@ -91,6 +91,7 @@ python3 ci/portable/test_icarus_sweep.py
 python3 ci/portable/test_lint_status.py
 python3 ci/portable/test_finish_acceptance.py
 python3 ci/portable/test_finish_wave_evidence.py
+python3 ci/portable/test_review_artifacts.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
@@ -146,6 +147,10 @@ if [[ $platform == macos-arm64 ]]; then
     tar xzf "out/verilator-fourstate-$platform.tar.gz" -C /tmp/verilator-relocated
     smoke_status=0
     python3 ci/portable/smoke.py /tmp/verilator-relocated/verilator-fourstate/bin/verilator /tmp/portable-smoke || smoke_status=$?
+    smoke_record_status=0
+    python3 ci/portable/review_artifacts.py record-migration --returned-status "$smoke_status" \
+        --package "out/verilator-fourstate-$platform.tar.gz" \
+        --relocated-compiler /tmp/verilator-relocated/verilator-fourstate/bin/verilator_bin || smoke_record_status=$?
 fi
 # The harness uses this checkout's headers and release binary.
 export VERILATOR_ROOT="$root"
@@ -154,8 +159,8 @@ export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
 # Preserve every baseline selection and add the independently checked SV semantic controls.
 python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 || regress_status=$?
-if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
-    echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
+if [[ ${smoke_status:-0} != 0 || ${smoke_record_status:-0} != 0 || $regress_status != 0 ]]; then
+    echo "Cloud validation failed: smoke=${smoke_status:-0}, smoke-record=${smoke_record_status:-0}, regress=$regress_status"
     exit 1
 fi
 python3 ci/portable/check_results.py

@@ -11,9 +11,59 @@ concurrency:
   group: portable-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  artifact-review:
+    needs: [macos, rocky8]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          set-safe-directory: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        id: mac_main
+        continue-on-error: true
+        with:
+          name: macos-arm64-${{ github.run_id }}
+          path: .artifact-review/mac-main
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        id: mac_pair
+        continue-on-error: true
+        with:
+          name: macos-arm64-icarus128-${{ github.run_id }}
+          path: .artifact-review/mac-pair
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        id: rocky_main
+        continue-on-error: true
+        with:
+          name: rocky8-x86_64-${{ github.run_id }}
+          path: .artifact-review/rocky-main
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        id: rocky_pair
+        continue-on-error: true
+        with:
+          name: rocky8-x86_64-icarus128-${{ github.run_id }}
+          path: .artifact-review/rocky-pair
+      - name: Verify selected artifact bytes without executing producer models
+        if: ${{ always() && !cancelled() }}
+        run: |
+          python3 ci/portable/review_artifacts.py review \
+            --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
+            --artifacts .artifact-review --output artifact-core-review.json \
+            --macos-result '${{ needs.macos.result }}' --rocky8-result '${{ needs.rocky8.result }}' \
+            --downloads-ok '${{ steps.mac_main.outcome == 'success' && steps.mac_pair.outcome == 'success' && steps.rocky_main.outcome == 'success' && steps.rocky_pair.outcome == 'success' }}'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: portable-core-review-${{ github.run_id }}
+          path: artifact-core-review.json
+          if-no-files-found: error
   macos:
     runs-on: macos-26
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
