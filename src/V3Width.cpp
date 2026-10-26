@@ -271,6 +271,8 @@ class WidthVisitor final : public VNVisitor {
     V3UniqueNames m_enumTempNames;  // Captured enum expressions
     V3UniqueNames m_insideTempNames;  // For generating unique temporary variable names for
                                       // `inside` expressions
+    V3UniqueNames m_repeatTempNames;  // Capture intra-assignment repeat counts once
+    AstNodeAssign* m_repeatAssignp = nullptr;  // Assignment owning a repeat event control
     VMemberMap m_memberMap;  // Member names cached for fast lookup
     std::unordered_map<const AstModport*, std::unordered_set<string>>
         m_modportNames;  // Names listed by each modport
@@ -2592,6 +2594,68 @@ class WidthVisitor final : public VNVisitor {
         AstConst* const newp = new AstConst{nodep->fileline(), AstConst::RealDouble{}, time};
         nodep->replaceWith(newp);
         VL_DO_DANGLING(nodep->deleteTree(), nodep);
+    }
+    void visit(AstRepeatControl* nodep) override {
+        if (nodep->didWidthAndSet()) return;
+        iterateCheckIntegralSelf(nodep, "Repeat count", nodep->countp(), SELF, BOTH);
+        iterate(nodep->sentreep());
+        FileLine* const flp = nodep->fileline();
+        AstNodeExpr* const valuep = nodep->countp()->unlinkFrBack();
+        AstNodeDType* const dtypep = nodep->findBitOrLogicDType(
+            valuep->width(), valuep->width(), valuep->dtypep()->numeric(), false);
+        // Variables are sized even when the original count was an unsized literal.
+        AstNodeDType* const valueDTypep = nodep->findBitOrLogicDType(
+            valuep->width(), valuep->width(), valuep->dtypep()->numeric(),
+            valuep->isFourstateOrNoDtype());
+        AstVar* const varp
+            = new AstVar{flp, VVarType::XTEMP, m_repeatTempNames.get(nodep), valueDTypep};
+        AstVar* const countp
+            = new AstVar{flp, VVarType::XTEMP, m_repeatTempNames.get(nodep), dtypep};
+        UASSERT_OBJ(m_repeatAssignp, nodep, "Repeat control without an assignment");
+        AstNodeExpr* const rhsp = m_repeatAssignp->rhsp()->unlinkFrBack();
+        AstVar* const rhsVarp = new AstVar{flp, VVarType::XTEMP, m_repeatTempNames.get(nodep),
+                                           m_repeatAssignp->lhsp()->dtypep()};
+        varp->noSubst(true);
+        countp->noSubst(true);
+        rhsVarp->noSubst(true);
+        if (m_ftaskp) {
+            varp->funcLocal(true);
+            varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
+            countp->funcLocal(true);
+            countp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
+            rhsVarp->funcLocal(true);
+            rhsVarp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
+            m_ftaskp->prependStmtsp(varp);
+            m_ftaskp->prependStmtsp(countp);
+            m_ftaskp->prependStmtsp(rhsVarp);
+        } else {
+            m_modep->prependStmtsp(varp);
+            m_modep->prependStmtsp(countp);
+            m_modep->prependStmtsp(rhsVarp);
+        }
+        iterate(varp);
+        iterate(countp);
+        iterate(rhsVarp);
+        // Save the context-sized RHS before starting the intra-assignment control.
+        AstAssign* const rhsCapturep
+            = new AstAssign{flp, new AstVarRef{flp, rhsVarp, VAccess::WRITE}, rhsp};
+        m_repeatAssignp->rhsp(new AstVarRef{flp, rhsVarp, VAccess::READ});
+        m_repeatAssignp->addHereThisAsNext(rhsCapturep);
+        // Capture before testing X/Z and before concat/value-mask assignment splitting.
+        const V3Number zero{nodep, valuep->width(), 0};
+        AstNodeExpr* const knownp
+            = new AstCond{flp, new AstIsUnknown{flp, new AstVarRef{flp, varp, VAccess::READ}},
+                          new AstConst{flp, zero}, new AstVarRef{flp, varp, VAccess::READ}};
+        AstAssign* const capturep
+            = new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE}, valuep};
+        AstAssign* const normalizep = new AstAssign{
+            flp, new AstVarRef{flp, countp, VAccess::WRITE}, new AstCast{flp, knownp, dtypep}};
+        m_repeatAssignp->addHereThisAsNext(capturep);
+        m_repeatAssignp->addHereThisAsNext(normalizep);
+        nodep->countp(new AstVarRef{flp, countp, VAccess::READ});
+        iterate(rhsCapturep);
+        iterate(capturep);
+        iterate(normalizep);
     }
     void visit(AstEventControl* nodep) override {
         if (!m_underFork && VN_IS(m_ftaskp, Func)) {
@@ -7052,6 +7116,8 @@ class WidthVisitor final : public VNVisitor {
     }
 
     void visit(AstNodeAssign* nodep) override {
+        VL_RESTORER(m_repeatAssignp);
+        m_repeatAssignp = nodep;
         // IEEE-2012 10.7, 11.8.2, 11.8.3, 11.5:  (Careful of 11.8.1 which is
         //                  only one step; final dtype depends on assign LHS.)
         //    Determine RHS type width and signing
@@ -8713,6 +8779,7 @@ class WidthVisitor final : public VNVisitor {
         assertAtStatement(nodep);
         VL_RESTORER_COPY(m_enumTempNames);
         VL_RESTORER_COPY(m_insideTempNames);
+        VL_RESTORER_COPY(m_repeatTempNames);
         if (AstClass* const classp = VN_CAST(nodep, Class)) {
             visitClass(classp);
         } else {
@@ -11400,6 +11467,7 @@ public:
         //                           // don't wish to trigger errors
         : m_enumTempNames{"__Venum"}
         , m_insideTempNames{"__VInside"}
+        , m_repeatTempNames{"__VrepeatCount"}
         , m_paramsOnly{paramsOnly}
         , m_doGenerate{doGenerate} {}
     AstNode* mainAcceptEdit(AstNode* nodep) {

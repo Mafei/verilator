@@ -28,6 +28,7 @@
 
 #include "V3ConstPool.h"
 #include "V3EmitCBase.h"
+#include "V3UniqueNames.h"
 
 VL_DEFINE_DEBUG_FUNCTIONS;
 
@@ -49,7 +50,8 @@ class DescopeVisitor final : public VNVisitor {
     // STATE
     AstNodeModule* m_modp = nullptr;  // Current module
     AstScope* m_scopep = nullptr;  // Current scope
-    const AstCFunc* m_funcp = nullptr;  // Current function
+    AstCFunc* m_funcp = nullptr;  // Current function
+    V3UniqueNames m_sensitivityNames{"__VsenExpr"};  // Names for expression-local temporaries
     bool m_modSingleton = false;  // m_modp is only instantiated once
     FuncMmap m_modFuncs;  // Name of public functions added
     std::map<const AstScope*, ScopeSelfPtr> m_scopeToSelf;  // Scope to self pointers
@@ -218,6 +220,17 @@ class DescopeVisitor final : public VNVisitor {
         iterateChildren(nodep);
     }
     void visit(AstVarScope* nodep) override {
+        if (AstExprStmt* const exprp = VN_CAST(nodep->aboveLoopp(), ExprStmt)) {
+            AstVar* const varp = nodep->varp();
+            UASSERT_OBJ(m_funcp, nodep, "Sensitivity local not under a CFunc");
+            UASSERT_OBJ(varp->isFuncLocal() && varp->isTemp() && !varp->valuep()
+                            && varp->aboveLoopp() == exprp,
+                        nodep, "Sensitivity local must own its declaration");
+            // Keep storage private to this invocation, including wide expression results.
+            // Only declarations move; captures still run at the expression's evaluation.
+            varp->name(m_sensitivityNames.get(varp->name()));
+            m_funcp->addVarsp(varp->unlinkFrBack());
+        }
         // Delete the varscope when we're finished
         VL_DO_DANGLING(pushDeletep(nodep->unlinkFrBack()), nodep);
     }

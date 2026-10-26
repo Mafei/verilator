@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 CONTROLS_WAVE_BUDGET = 512 * 1024
+SV_SEMANTICS_WAVE_BUDGET = 512 * 1024
 
 
 def compiler_evidence(root):
@@ -82,6 +83,28 @@ def semantic_wave_evidence(root):
     collections = [(fixture, base / fixture) for fixture in fixtures]
     wave_evidence(root, collections, "semantic-wave-evidence.json", "SEMANTIC_WAVE_BYTES",
                   128 * 1024)
+
+
+def sv_semantics_wave_evidence(root):
+    """Preserve all eight new semantic profiles, rejecting partial or extra waves."""
+    base = root / "test_regress/obj_vlt"
+    fixtures = ("t_fourstate_inout_default", "t_fourstate_nba_partselect_clip",
+                "t_fourstate_nba_repeat_control", "t_fourstate_sen_expr", "t_fourstate_sen_iff",
+                "t_timing_nba_partselect_clip", "t_timing_nba_repeat_control",
+                "t_tri_inout_default")
+    collections = [(fixture, base / fixture) for fixture in fixtures]
+    for fixture, directory in collections:
+        for ancestor in (base.parent, base, directory):
+            if ancestor.is_symlink():
+                raise ValueError("Symlinked SV semantic fixture: " + fixture)
+        if set(directory.rglob("*.vcd")) != {directory / "simx.vcd"}:
+            raise ValueError("Missing or unexpected SV semantic VCD: " + fixture)
+    wave_evidence(root,
+                  collections,
+                  "sv-semantics-wave-evidence.json",
+                  "SV_SEMANTICS_WAVE_BYTES",
+                  SV_SEMANTICS_WAVE_BUDGET,
+                  require_complete=True)
 
 
 def finish_wave_evidence(root):
@@ -213,9 +236,9 @@ def main():
     """Report the compiler after building or the outputs after validation."""
     if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results", "semantic-waves",
                                                  "finish-waves", "controls-waves", "ram-waves",
-                                                 "thread-waves"):
+                                                 "thread-waves", "sv-semantics-waves"):
         raise SystemExit("Usage: log_evidence.py compiler|results|semantic-waves|finish-waves|"
-                         "controls-waves|ram-waves|thread-waves")
+                         "controls-waves|ram-waves|thread-waves|sv-semantics-waves")
     root = Path.cwd()
     if sys.argv[1] == "compiler":
         compiler_evidence(root)
@@ -223,6 +246,8 @@ def main():
         results_evidence(root)
     elif sys.argv[1] == "semantic-waves":
         semantic_wave_evidence(root)
+    elif sys.argv[1] == "sv-semantics-waves":
+        sv_semantics_wave_evidence(root)
     elif sys.argv[1] == "finish-waves":
         finish_wave_evidence(root)
     elif sys.argv[1] == "controls-waves":

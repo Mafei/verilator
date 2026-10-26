@@ -90,7 +90,7 @@ VL_DEFINE_DEBUG_FUNCTIONS;
 // reads before task inlining or expression lowering adds reads of helper variables. In
 // particular, @* includes function arguments, but not reads inside the called function.
 class TimingImplicitReadsVisitor final : public VNVisitorConst {
-    AstSenTree* const m_sentreep;
+    AstSenTree* const m_sentreep;  // Collected implicit sensitivity list
     std::unordered_set<VNRef<AstNode>> m_refs;  // Unique read expressions, in encounter order
 
     void visit(AstNodeVarRef* nodep) override {
@@ -575,6 +575,7 @@ class TimingControlVisitor final : public VNVisitor {
     V3UniqueNames m_intraValueNames{"__Vintraval"};  // Intra assign delay value var names
     V3UniqueNames m_intraIndexNames{"__Vintraidx"};  // Intra assign delay index var names
     V3UniqueNames m_intraLsbNames{"__Vintralsb"};  // Intra assign delay LSB var names
+    V3UniqueNames m_intraCountNames{"__Vintracount"};  // Intra assign repeat count names
     V3UniqueNames m_trigSchedNames{"__VtrigSched"};  // Trigger scheduler name generator
     V3UniqueNames m_dynTrigNames{"__VdynTrigger"};  // Dynamic trigger name generator
     // Module level temporary variables, shared by instances
@@ -616,6 +617,10 @@ class TimingControlVisitor final : public VNVisitor {
             stmtp->replaceWith(eventControlp);
             eventControlp->addStmtsp(stmtp);
             stmtp = eventControlp;
+        } else if (AstRepeatControl* const repeatp = VN_CAST(controlp, RepeatControl)) {
+            stmtp->replaceWith(repeatp->unlinkFrBack());
+            repeatp->addStmtsp(stmtp);
+            stmtp = repeatp;
         } else if (AstBegin* const beginp = VN_CAST(controlp, Begin)) {
             // Begin from V3AssertPre
             stmtp->replaceWith(beginp->unlinkFrBack());
@@ -1302,6 +1307,10 @@ class TimingControlVisitor final : public VNVisitor {
         }
         // Replace the RHS with an intermediate value var
         replaceWithIntermediate(nodep->rhsp(), m_intraValueNames.get(nodep));
+        if (AstRepeatControl* const repeatp = VN_CAST(timingp, RepeatControl)) {
+            // Each pending NBA receives the caller's count snapshot by value.
+            replaceWithIntermediate(repeatp->countp(), m_intraCountNames.get(nodep));
+        }
         if (!inAssignDly) return;
         // The process executing the NBA evaluates its delay (IEEE 1800-2023 4.9.4), not the forked
         // process, if it has side effects, e.g. calling a function that checks its process. A pure
@@ -1311,6 +1320,35 @@ class TimingControlVisitor final : public VNVisitor {
                 replaceWithIntermediate(delayp->lhsp(), m_intraValueNames.get(nodep));
             }
         }
+    }
+    void visit(AstRepeatControl* nodep) override {
+        FileLine* const flp = nodep->fileline();
+        AstNodeExpr* const countp = nodep->countp()->unlinkFrBack();
+        // A coroutine-local counter cannot be overwritten by another pending update.
+        AstVarScope* const vscp
+            = createTemp(flp, m_intraCountNames.get(nodep), countp->dtypep(), nodep);
+        nodep->addHereThisAsNext(
+            new AstAssign{flp, new AstVarRef{flp, vscp, VAccess::WRITE}, countp});
+        const V3Number zero{nodep, countp->width(), 0};
+        AstNodeExpr* const condp
+            = countp->isSigned()
+                  ? static_cast<AstNodeExpr*>(new AstGtS{
+                        flp, new AstVarRef{flp, vscp, VAccess::READ}, new AstConst{flp, zero}})
+                  : static_cast<AstNodeExpr*>(new AstGt{
+                        flp, new AstVarRef{flp, vscp, VAccess::READ}, new AstConst{flp, zero}});
+        AstLoop* const loopp = new AstLoop{flp};
+        loopp->addStmtsp(new AstLoopTest{flp, loopp, condp});
+        loopp->addStmtsp(new AstEventControl{flp, nodep->sentreep()->unlinkFrBack(), nullptr});
+        const V3Number one{nodep, countp->width(), 1};
+        loopp->addStmtsp(new AstAssign{
+            flp, new AstVarRef{flp, vscp, VAccess::WRITE},
+            new AstSub{flp, new AstVarRef{flp, vscp, VAccess::READ}, new AstConst{flp, one}}});
+        if (AstNode* const stmtsp = nodep->stmtsp()) {
+            loopp->addNextHere(stmtsp->unlinkFrBackWithNext());
+        }
+        nodep->replaceWith(loopp);
+        VL_DO_DANGLING(pushDeletep(nodep), nodep);
+        iterate(loopp);
     }
     void visit(AstFireEvent* nodep) override {
         // V3Delayed handles '->>' of a variable in a process. Like NBAs in non-inlined functions,

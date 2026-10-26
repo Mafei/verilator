@@ -411,7 +411,12 @@ public:
     std::pair<AstNodeExpr*, bool> build(const AstSenItem* senItemp) {
         auto term = createTerm(senItemp);
         if (AstNodeExpr* const condp = senItemp->condp()) {
-            term.first = new AstAnd{senItemp->fileline(), condp->cloneTreePure(false), term.first};
+            // Fourstate lowering has checked the source condition's purity. Its local
+            // capture assignments are synthetic and remain inside the expression.
+            AstNodeExpr* const conditionp = v3Global.opt.fourstate() && VN_IS(condp, ExprStmt)
+                                                ? condp->cloneTree(false)
+                                                : condp->cloneTreePure(false);
+            term.first = new AstAnd{senItemp->fileline(), conditionp, term.first};
         }
         return term;
     }

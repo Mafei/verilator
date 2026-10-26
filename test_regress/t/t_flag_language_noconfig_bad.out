@@ -1,0 +1,5 @@
+%Error: t/t_flag_language_noconfig_bad.v:8:11: syntax error, unexpected config
+    8 |   integer config;
+      |           ^~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=latest for more assistance.
+%Error: Exiting due to

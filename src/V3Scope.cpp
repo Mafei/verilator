@@ -53,6 +53,8 @@ class ScopeVisitor final : public VNVisitor {
     AstNodeModule* m_modp = nullptr;  // Current module
     AstNodeProcedure* m_procedurep = nullptr;  // Current procedure
     AstScope* m_scopep = nullptr;  // Current scope we are building
+    bool m_inSensitivity = false;  // Inside a sensitivity expression
+    AstExprStmt* m_sensitivityExprp = nullptr;  // Owner of sensitivity-local temporaries
     // STATE, for passing down one level of hierarchy (may need save/restore)
     AstCell* m_aboveCellp = nullptr;  // Cell that instantiates this module
     AstScope* m_aboveScopep = nullptr;  // Scope that instantiates this scope
@@ -296,6 +298,16 @@ class ScopeVisitor final : public VNVisitor {
         // We iterate under the *clone*
         iterateChildren(clonep);
     }
+    void visit(AstSenItem* nodep) override {
+        VL_RESTORER(m_inSensitivity);
+        m_inSensitivity = true;
+        iterateChildren(nodep);
+    }
+    void visit(AstExprStmt* nodep) override {
+        VL_RESTORER(m_sensitivityExprp);
+        if (m_inSensitivity) m_sensitivityExprp = nodep;
+        iterateChildren(nodep);
+    }
     void visit(AstVar* nodep) override {
         // Make new scope variable
         if (!nodep->user1p()) {
@@ -310,7 +322,13 @@ class ScopeVisitor final : public VNVisitor {
             nodep->user1p(varscp);
             UASSERT_OBJ(m_scopep, nodep, "No scope for var");
             m_varScopes.emplace(std::make_pair(nodep, m_scopep), varscp);
-            m_scopep->addVarsp(varscp);
+            if (m_sensitivityExprp && nodep->isFuncLocal() && nodep->isTemp()) {
+                // Sensitivity trees are cloned after scoping. Keep each local VarScope
+                // with its declaration so cloneRelink copies both links together.
+                m_sensitivityExprp->addStmtsp(varscp);
+            } else {
+                m_scopep->addVarsp(varscp);
+            }
         }
         iterateChildren(nodep);
     }

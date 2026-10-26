@@ -72,6 +72,10 @@ module t (/*AUTOARG*/
   nmos debug_nmos_gate(debug_nmos, in, clk);
   pmos debug_pmos_gate(debug_pmos, in, clk);
 
+  logic [6:0] debug_repeat;
+  event debug_repeat_event;
+  initial debug_repeat <= repeat(2) @debug_repeat_event 7'h25;
+
   // verilator lint_off UNPACKED
 
   typedef enum [2:0] {

@@ -416,8 +416,7 @@ void inlineScope(AstScope* scopep, AstCell* cellp, const std::string& prefix,
     UINFO(6, "  Inline Scope " << scopep);
     UINFO(6, "     into      " << parentScopep);
 
-    // Move the variables of the inlined scope into the scope above
-    for (AstVarScope* const vscp : scopep->varspList()) {
+    const auto retargetVarScope = [&](AstVarScope* const vscp) {
         // Note V3Scope attaches variables of non-virtual interface references to the
         // scope of the interface instance, so only update if it is this scope
         if (vscp->scopep() == scopep) vscp->scopep(parentScopep);
@@ -427,11 +426,17 @@ void inlineScope(AstScope* scopep, AstCell* cellp, const std::string& prefix,
             vscp->dtypeFrom(newVarp);
         }
         if (!cellp->isTrace()) vscp->trace(false);
+    };
+    // Move the variables of the inlined scope into the scope above.
+    for (AstVarScope* const vscp : scopep->varspList()) {
+        retargetVarScope(vscp);
         parentScopep->addVarsp(vscp->unlinkFrBack());
     }
 
     // Move the logic of the inlined scope into the scope above
     for (AstNode* const nodep : scopep->blockspList()) {
+        // Sensitivity-expression locals own their VarScopes inside the logic.
+        nodep->foreach(retargetVarScope);
         nodep->unlinkFrBack();
         if (AstNodeFTask* const ftaskp = VN_CAST(nodep, NodeFTask)) {
             ftaskp->name(prefix + ftaskp->name());

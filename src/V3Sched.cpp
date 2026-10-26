@@ -271,8 +271,8 @@ class FinalFinishVisitor final : public VNVisitor {
     // NODE STATE
     //  AstFinish::user3() -> bool, final request and local exit inserted
     const VNUser3InUse m_user3InUse;
-    AstJumpBlock* const m_exitp;
-    AstVarScope* const m_requestedp;
+    AstJumpBlock* const m_exitp;  // Exit target for this final invocation
+    AstVarScope* const m_requestedp;  // Model-level final termination request
 
     void visit(AstFinish* nodep) override {
         // Prepending a statement makes the iterator revisit this same finish.

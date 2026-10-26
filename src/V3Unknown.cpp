@@ -156,7 +156,7 @@ class UnknownVisitor final : public VNVisitor {
         // still needs every index bit and its X/Z mask.
         if (!v3Global.opt.fourstate() && indexp->width() > VL_IDATASIZE) {
             AstSel* const selp = new AstSel{indexp->fileline(), indexp, 0, VL_IDATASIZE};
-            selp->dtypeSetBitSized(VL_IDATASIZE, VSigning::UNSIGNED);
+            selp->dtypeSetBitSized(VL_IDATASIZE, VSigning::fromBool(indexp->isSigned()));
             return selp;
         }
         return indexp;
@@ -395,10 +395,9 @@ class UnknownVisitor final : public VNVisitor {
         const AstMemberSel* const memberSelp = VN_CAST(basefromp, MemberSel);
         const bool lvalue = (varrefp && varrefp->access().isWriteOrRW())
                             || (memberSelp && memberSelp->access().isWriteOrRW());
-        // Four-state reads are checked in V3Fourstate. Its unknown bit-write sentinel
-        // still needs the normal lvalue guard before expansion into destination words.
-        if ((!v3Global.opt.fourstate() || (lvalue && nodep->widthConst() == 1))
-            && !nodep->user1SetOnce()) {
+        // Four-state reads are checked in V3Fourstate. Writes still need an
+        // overlap guard, including the sentinel used for unknown indices.
+        if ((!v3Global.opt.fourstate() || lvalue) && !nodep->user1SetOnce()) {
             // Guard against reading/writing past end of bit vector array
             // Find range of dtype we are selecting from
             // Similar code in V3Const::warnSelect
@@ -412,24 +411,47 @@ class UnknownVisitor final : public VNVisitor {
             AstConst* const maxmsbConstp
                 = new AstConst{nodep->fileline(), AstConst::WidthedValue{}, compareWidth, maxmsb};
             AstNodeExpr* lsbp = V3Const::constifyEdit(nodep->lsbp()->unlinkFrBack());
-            if ((!v3Global.opt.fourstate() || !lsbp->isSigned())
+            const bool signedLvalue = lvalue && lsbp->isSigned();
+            if (!signedLvalue && (!v3Global.opt.fourstate() || !lsbp->isSigned())
                 && V3Unknown::isStaticlyGte(maxmsbConstp->num(), lsbp)) {
                 // We don't need to add a conditional; we know the existing expression is ok
                 VL_DO_DANGLING(maxmsbConstp->deleteTree(), maxmsbConstp);
                 nodep->lsbp(indexForSelect(lsbp));
                 return;
             }
-            nodep->lsbp(indexForSelect(newExprStmtOrClone(lsbp)));
-            if (lsbp->width() < compareWidth) {
-                lsbp = lsbp->isSigned()
-                           ? static_cast<AstNodeExpr*>(
-                                 new AstExtendS{nodep->fileline(), lsbp, compareWidth})
-                           : static_cast<AstNodeExpr*>(
-                                 new AstExtend{nodep->fileline(), lsbp, compareWidth});
-                lsbp->dtypeSetBitSized(compareWidth, VSigning::UNSIGNED);
+            AstNodeExpr* const selectLsbp = newExprStmtOrClone(lsbp);
+            AstNodeExpr* const lowerLsbp
+                = signedLvalue ? selectLsbp->cloneTreePure(false) : nullptr;
+            nodep->lsbp(indexForSelect(selectLsbp));
+            const auto extendIndex = [nodep, compareWidth](AstNodeExpr* exprp) -> AstNodeExpr* {
+                if (exprp->width() < compareWidth) {
+                    exprp = exprp->isSigned()
+                                ? static_cast<AstNodeExpr*>(
+                                      new AstExtendS{nodep->fileline(), exprp, compareWidth})
+                                : static_cast<AstNodeExpr*>(
+                                      new AstExtend{nodep->fileline(), exprp, compareWidth});
+                    exprp->dtypeSetBitSized(compareWidth, VSigning::UNSIGNED);
+                }
+                return exprp;
+            };
+            lsbp = extendIndex(lsbp);
+            AstNodeExpr* condp;
+            if (signedLvalue) {
+                // A write is valid when any selected bit overlaps the destination.
+                // Compare the LSB with the lower bound instead of adding the select
+                // width to it, which could overflow the original index type.
+                V3Number minLsb{nodep, compareWidth};
+                minLsb.opExtendS(
+                    V3Number{nodep, VL_IDATASIZE, static_cast<uint32_t>(1 - nodep->widthConst())},
+                    VL_IDATASIZE);
+                condp = new AstLogAnd{nodep->fileline(),
+                                      new AstGteS{nodep->fileline(), maxmsbConstp, lsbp},
+                                      new AstGteS{nodep->fileline(), extendIndex(lowerLsbp),
+                                                  new AstConst{nodep->fileline(), minLsb}}};
+            } else {
+                condp = new AstGte{nodep->fileline(), maxmsbConstp, lsbp};
             }
-            AstNodeExpr* condp
-                = V3Const::constifyEdit(new AstGte{nodep->fileline(), maxmsbConstp, lsbp});
+            condp = V3Const::constifyEdit(condp);
             if (!lvalue) {
                 // SEL(...) -> COND(LTE(bit<=maxmsb), ARRAYSEL(...), {width{1'bx}})
                 VNRelinker replaceHandle;

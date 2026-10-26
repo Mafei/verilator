@@ -2818,7 +2818,7 @@ class AstVarScope final : public AstNode {
     // A particular scoped usage of a variable
     // That is, as a module is used under multiple cells, we get a different
     // varscope for each var in the module
-    // Parents: MODULE
+    // Parents: AstScope, sensitivity AstExprStmt (internal function locals)
     // Children: none
     //
     // @astgen ptr := m_scopep : Optional[AstScope]  // Scope variable is underneath
@@ -2841,7 +2841,12 @@ public:
     ASTGEN_MEMBERS_AstVarScope;
     void cloneRelink() override {
         if (m_varp && m_varp->clonep()) {
-            UASSERT(m_scopep->clonep(), "No clone cross link: " << this);
+            const AstVar* const newVarp = m_varp->clonep();
+            const AstNode* const ownerp = aboveLoopp();
+            const bool expressionLocal = newVarp->isFuncLocal() && newVarp->isTemp()
+                                         && VN_IS(ownerp, ExprStmt)
+                                         && newVarp->aboveLoopp() == ownerp;
+            UASSERT(m_scopep->clonep() || expressionLocal, "No clone cross link: " << this);
         }
         cloneRelinkGen();
     }

@@ -4589,9 +4589,10 @@ class ConstVisitor final : public VNVisitor {
     TREEOPV("AstLte   {$lhsp->width()==$rhsp->width(), $rhsp.isAllOnes}", "replaceNum(nodep,1)");
     // Simplify reduction operators
     // This also gets &{...,0,....} => const 0  (Common for unused_ok signals)
-    TREEOPV("AstRedAnd{$lhsp, $lhsp.width1}",   "replaceWLhs(nodep)");
-    TREEOPV("AstRedOr {$lhsp, $lhsp.width1}",   "replaceWLhs(nodep)");
-    TREEOPV("AstRedXor{$lhsp, $lhsp.width1}",   "replaceWLhs(nodep)");
+    // A four-state scalar reduction converts Z to X until four-state lowering.
+    TREEOPV("AstRedAnd{$lhsp, $lhsp.width1, (v3Global.fourstateHandled() || !$lhsp->isFourstateOrNoDtype())}", "replaceWLhs(nodep)");
+    TREEOPV("AstRedOr {$lhsp, $lhsp.width1, (v3Global.fourstateHandled() || !$lhsp->isFourstateOrNoDtype())}", "replaceWLhs(nodep)");
+    TREEOPV("AstRedXor{$lhsp, $lhsp.width1, (v3Global.fourstateHandled() || !$lhsp->isFourstateOrNoDtype())}", "replaceWLhs(nodep)");
     TREEOPV("AstRedAnd{$lhsp.castConcat}",      "AstAnd{AstRedAnd{$lhsp->castConcat()->lhsp()}, AstRedAnd{$lhsp->castConcat()->rhsp()}}");  // &{a,b} => {&a}&{&b}
     TREEOPV("AstRedOr {$lhsp.castConcat}",      "AstOr {AstRedOr {$lhsp->castConcat()->lhsp()}, AstRedOr {$lhsp->castConcat()->rhsp()}}");  // |{a,b} => {|a}|{|b}
     TREEOPV("AstRedXor{$lhsp.castConcat}",      "AstXor{AstRedXor{$lhsp->castConcat()->lhsp()}, AstRedXor{$lhsp->castConcat()->rhsp()}}");  // ^{a,b} => {^a}^{^b}

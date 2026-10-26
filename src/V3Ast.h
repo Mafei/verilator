@@ -1397,9 +1397,7 @@ template <>
 inline bool AstNode::mayBeUnder<AstVarScope>(const AstNode* nodep) {
     if (VN_IS(nodep, VarScope)) return false;  // Should not nest
     if (VN_IS(nodep, Var)) return false;
-    if (VN_IS(nodep, Active)) return false;
-    if (VN_IS(nodep, NodeStmt)) return false;
-    if (VN_IS(nodep, NodeExpr)) return false;
+    // Sensitivity expressions own their local VarScopes, including under Active.
     return true;
 }
 template <>

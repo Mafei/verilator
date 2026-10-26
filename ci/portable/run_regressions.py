@@ -153,6 +153,45 @@ GROUPS = {
         "opt_const_static_dead", "display_m_combine", "scope_shared",
         "flag_output_groups_max_size", "flag_output_groups_max_size_bad", "class_extends_this",
         "randcase", "covergroup_with_sample_warn", "covergroup_sized_bad"
+    ],
+    "sv_semantics_20261026": [
+        "flag_language_noconfig", "flag_language_noconfig_bad", "fourstate_inout_default",
+        "fourstate_nba_partselect_clip", "fourstate_nba_repeat_control", "fourstate_reduce_scalar",
+        "fourstate_sen_expr", "fourstate_sen_iff", "fourstate_case_equal_known", "fourstate_sen_impure_unsup",
+        "fourstate_wildcard", "fourstate_nba_clip_bounds", "timing_nba_clip_bounds",
+        "timing_nba_partselect_clip", "timing_nba_repeat_control", "timing_nba_repeat_unsup",
+        "tri_inout_default"
+    ],
+    "fourstate_constructors_20261026": [
+        "fourstate_cons_copy", "fourstate_cons_keyed", "fourstate_cons_queue",
+        "fourstate_cons_struct", "fourstate_cons_unpacked_unsup"
+    ],
+    # New official constructor, scheduling, VPI and side-effect regressions through cecfb438.
+    "upstream_sync_20261026": [
+        "dynarray_new_pattern",
+        "dynarray_concat",
+        "dynarray_unpacked",
+        "array_pattern_concat",
+        "unpacked_concat",
+        "unpacked_concat_noslice",
+        "queue_concat_type_param",
+        "assoc",
+        "assoc_wildcard",
+        "const_pool",
+        "vpi_param",
+        "nba_noninlined_await",
+        "opt_inline_getters",
+        "opt_inline_getters_off",
+        "expr_shortcircuit",
+        "case_impure",
+        "const_zero_impure",
+        "dynarray_unpacked_size_bad",
+        "pattern_key_bad",
+        "pattern_key_unsup",
+    ],
+    "tri_storage_20261026": [
+        "tri_proc_reassign", "tri_proc_reassign_timing", "tri_various", "tri_inout", "tri_inz",
+        "tri_struct", "tri_top_en_out", "tri_pullvec"
     ]
 }
 

@@ -1163,6 +1163,21 @@ public:
     int instrCount() const override { return INSTR_COUNT_BRANCH; }
     bool sameNode(const AstNode* /*samep*/) const override { return true; }
 };
+class AstRepeatControl final : public AstNodeStmt {
+    // Intra-assignment repeat event control retained until timing lowering.
+    // @astgen op1 := countp : AstNodeExpr
+    // @astgen op2 := sentreep : AstSenTree
+    // @astgen op3 := stmtsp : List[AstNode]
+public:
+    AstRepeatControl(FileLine* fl, AstNodeExpr* countp, AstSenTree* sentreep)
+        : ASTGEN_SUPER_RepeatControl(fl) {
+        this->countp(countp);
+        this->sentreep(sentreep);
+    }
+    ASTGEN_MEMBERS_AstRepeatControl;
+    bool isTimingControl() const override { return true; }
+    int instrCount() const override { return INSTR_COUNT_BRANCH; }
+};
 class AstReturn final : public AstNodeStmt {
     // @astgen op1 := lhsp : Optional[AstNodeExpr]
 public:

@@ -243,7 +243,7 @@ class FourstatePortKindVisitor final : public VNVisitor {
     }
     void visit(AstNode* const nodep) override { iterateChildren(nodep); }
 
-    explicit FourstatePortKindVisitor(AstNetlist* const netlistp) { iterateAndNextNull(netlistp); }
+    explicit FourstatePortKindVisitor(AstNetlist* const netlistp) { iterate(netlistp); }
     ~FourstatePortKindVisitor() override {
         V3Stats::addStat("Fourstate, Resolved omitted port kinds", m_statPortKinds);
     }
@@ -509,6 +509,11 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         // Constructor items are not expressions; propagate their values' subtree state.
         iterateChildrenSeparately(nodep);
     }
+    void visit(AstConsDynArray* const nodep) override {
+        iterateChildrenSeparately(nodep);
+        setFourstate(nodep, needsSplitting(nodep->dtypep()), m_fourstateInSubtree);
+        m_fourstateInSubtree |= isFourstate(nodep);
+    }
 
     void visit(AstStructSel* const nodep) override {
         iterateChildrenSeparately(nodep);
@@ -593,8 +598,8 @@ public:
 class FourstateDriveAudit final : public VNVisitorConst {
     using Owners = std::map<const AstVar*, const AstNodeModule*>;
     class DeclarationOwners final : public VNVisitorConst {
-        Owners m_owners;
-        AstNodeModule* m_modp = nullptr;
+        Owners m_owners;  // Declaring module for each variable
+        AstNodeModule* m_modp = nullptr;  // Current declaration owner
         void visit(AstNodeModule* nodep) override {
             VL_RESTORER(m_modp);
             m_modp = nodep;
@@ -1255,7 +1260,7 @@ class FourstateVisitor final : public VNVisitor {
     }
 
     V3UniqueNames m_tmpNames;  // Unique names generator for temporary variables
-    V3UniqueNames m_pinHelpersNames;
+    V3UniqueNames m_pinHelpersNames;  // Unique names for pin conversion helpers
 
     AstNode* m_currentTmpSpotp = nullptr;  // Node after which put AstVar* for temporary variable
     bool m_tmpFuncLocal
@@ -1264,7 +1269,7 @@ class FourstateVisitor final : public VNVisitor {
     AstNode* m_lastCalculationStatp = nullptr;  // Last calculation statement
     AstNodeModule* m_modp = nullptr;  // Current module
     std::vector<AstVar*> m_varpsToRemove;  // Vars to unlink and remove in destructor
-    AstNodeExpr* m_caseMaskp = nullptr;
+    AstNodeExpr* m_caseMaskp = nullptr;  // Active case selector XZ mask
     VCaseType m_caseType = VCaseType::CT_CASE;  // Active case wildcard semantics
 
     std::vector<FTaskPortsHelper> m_ftaskPortHelpers;  // Cache of FTaskPortsHelpers
@@ -1390,10 +1395,11 @@ class FourstateVisitor final : public VNVisitor {
         }
     };
     class StmtHelper final {
-        const VRestorerTrivial<AstNode*> m_currentStmtRestorer;
-        const VRestorerTrivial<AstNode*> m_lastStmtRestorer;
-        const VRestorerClear<decltype(m_arrayIndexCaptures)> m_arrayIndexRestorer;
-        const TmpVarsReleaser m_tmpVarsReleaser;
+        const VRestorerTrivial<AstNode*> m_currentStmtRestorer;  // Saved current statement context
+        const VRestorerTrivial<AstNode*> m_lastStmtRestorer;  // Saved last calculation statement
+        const VRestorerClear<decltype(m_arrayIndexCaptures)>
+            m_arrayIndexRestorer;  // Saved array index captures
+        const TmpVarsReleaser m_tmpVarsReleaser;  // Temporary variable lifetime for this statement
 
     public:
         StmtHelper(FourstateVisitor& visitor, AstNode* const stmtp)
@@ -1405,8 +1411,8 @@ class FourstateVisitor final : public VNVisitor {
         }
     };
     class StatementPlaceHolder final {
-        AstNodeStmt* const m_stmtp;
-        const StmtHelper m_stmtHelper;
+        AstNodeStmt* const m_stmtp;  // Placeholder anchoring generated statements
+        const StmtHelper m_stmtHelper;  // Statement capture context
 
     public:
         StatementPlaceHolder(FourstateVisitor& visitor, FileLine* const flp)
@@ -2053,29 +2059,34 @@ class FourstateVisitor final : public VNVisitor {
             selp->lsbp(lsbp);
             selp->fromp(fromp);
             if (isFourstate(lsbp)) {
-                auto assureWidth = [flp, signExtend = lsbp->isSigned(),
-                                    minWidth = std::max(VL_QUADSIZE, lsbp->width())](
-                                       AstNodeExpr* const exprp) -> AstNodeExpr* {
-                    UASSERT_OBJ(exprp->width() <= minWidth, exprp,
+                const bool signedIndex = lsbp->isSigned();
+                const int indexWidth = std::max(VL_QUADSIZE, lsbp->width());
+                const auto assureWidth
+                    = [flp, signedIndex, indexWidth](AstNodeExpr* exprp) -> AstNodeExpr* {
+                    UASSERT_OBJ(exprp->width() <= indexWidth, exprp,
                                 "This function shall only expand values");
-                    if (exprp->width() < minWidth) {
-                        AstNodeExpr* const extendedp
-                            = signExtend
-                                  ? static_cast<AstNodeExpr*>(new AstExtendS{flp, exprp, minWidth})
-                                  : static_cast<AstNodeExpr*>(new AstExtend{flp, exprp, minWidth});
-                        extendedp->dtypeSetBitSized(minWidth, VSigning::UNSIGNED);
-                        return extendedp;
+                    if (exprp->width() < indexWidth) {
+                        exprp = signedIndex ? static_cast<AstNodeExpr*>(
+                                                  new AstExtendS{flp, exprp, indexWidth})
+                                            : static_cast<AstNodeExpr*>(
+                                                  new AstExtend{flp, exprp, indexWidth});
                     }
+                    exprp->dtypeSetBitSized(indexWidth, VSigning::fromBool(signedIndex));
                     return exprp;
                 };
-                // The assumption is that no signal/array will ever have 2^64 indexes so,
-                // V3Unknown will handle x/z
-                AstConst* const constp = new AstConst{flp, 0};
-                constp->dtypeSetBitSized(64, VSigning::UNSIGNED);
-                constp->num().setAllBits1();
+                // A signed -1 is a valid start for a partially overlapping write.
+                // Use the signed minimum instead; at >=64 bits it cannot overlap
+                // any packed destination, whose width is limited to an int.
+                V3Number invalidIndex{selp, indexWidth};
+                if (signedIndex) {
+                    invalidIndex.setBit(indexWidth - 1, 1);
+                } else {
+                    invalidIndex.setAllBits1();
+                }
                 newp->lsbp(new AstCond{
                     flp, new AstNeq{flp, getFourstateExpressionXZ(lsbp), createZeroOrOnesp(lsbp)},
-                    assureWidth(constp), assureWidth(getFourstateExpressionValue(lsbp))});
+                    assureWidth(new AstConst{flp, invalidIndex}),
+                    assureWidth(getFourstateExpressionValue(lsbp))});
             } else {
                 newp->lsbp(getOnceExpressionValue(lsbp));
             }
@@ -2971,6 +2982,12 @@ class FourstateVisitor final : public VNVisitor {
             m_resultp = getExprValuep(cMethodHardp);
         }
 
+        void visit(AstConsDynArray* const nodep) override {
+            // Constructor shape is an aggregate, not a packed temporary of its width().
+            noTmp();
+            m_resultp = fourstateExpressionConsDynArrayHandler(nodep, false);
+        }
+
         void visit(AstSampled* const sampledp) override {
             m_resultp = new AstSampled{
                 sampledp->fileline(),
@@ -3082,22 +3099,24 @@ class FourstateVisitor final : public VNVisitor {
         void visit(AstLtS* const ltp) override { visitCompare(ltp); }
         void visit(AstLteS* const ltep) override { visitCompare(ltep); }
 
-        void visit(AstEqWild* const eqWildp) override {
-            // |(a.xz & ~b.xz)
+        void visitWildcardCompare(AstNodeBiop* const cmpp) {
             enforceTmp();
-            FileLine* const flp = eqWildp->fileline();
-            m_resultp = new AstRedOr{
-                flp, new AstAnd{flp, getFourstateExpressionXZ(eqWildp->lhsp(), false),
-                                new AstNot{flp, getFourstateExpressionXZ(eqWildp->rhsp())}}};
+            FileLine* const flp = cmpp->fileline();
+            AstNodeExpr* const unknownp = new AstRedOr{
+                flp, new AstAnd{flp, getFourstateExpressionXZ(cmpp->lhsp(), false),
+                                new AstNot{flp, getFourstateExpressionXZ(cmpp->rhsp())}}};
+            AstNodeExpr* const mismatchp = new AstRedOr{
+                flp,
+                new AstAnd{flp,
+                           new AstXor{flp, getFourstateExpressionValue(cmpp->lhsp(), false),
+                                      getFourstateExpressionValue(cmpp->rhsp(), false)},
+                           new AstNot{flp, new AstOr{flp, getFourstateExpressionXZ(cmpp->lhsp()),
+                                                     getFourstateExpressionXZ(cmpp->rhsp())}}}};
+            // A known non-wildcard mismatch decides equality despite unknown bits elsewhere.
+            m_resultp = new AstLogAnd{flp, unknownp, new AstLogNot{flp, mismatchp}};
         }
-        void visit(AstNeqWild* const neqWildp) override {
-            // |(a.xz & ~b.xz)
-            enforceTmp();
-            FileLine* const flp = neqWildp->fileline();
-            m_resultp = new AstRedOr{
-                flp, new AstAnd{flp, getFourstateExpressionXZ(neqWildp->lhsp(), false),
-                                new AstNot{flp, getFourstateExpressionXZ(neqWildp->rhsp())}}};
-        }
+        void visit(AstEqWild* const nodep) override { visitWildcardCompare(nodep); }
+        void visit(AstNeqWild* const nodep) override { visitWildcardCompare(nodep); }
 
         void visit(AstInsideRange* const insideRangep) override {
             AstNodeExpr* const lhsp = VN_IS(insideRangep->lhsp(), Unbounded)
@@ -3322,6 +3341,12 @@ class FourstateVisitor final : public VNVisitor {
             m_resultp = getExprXZp(cMethodHardp);
         }
 
+        void visit(AstConsDynArray* const nodep) override {
+            // Element and size snapshots already share side effects between both halves.
+            noTmp();
+            m_resultp = fourstateExpressionConsDynArrayHandler(nodep, true);
+        }
+
         void visit(AstSampled* const sampledp) override {
             m_resultp = new AstSampled{
                 sampledp->fileline(),
@@ -3502,7 +3527,8 @@ class FourstateVisitor final : public VNVisitor {
         if (AstAssign* const assignp = VN_CAST(nodep, Assign)) {
             if (isFourstate(nodep->lhsp())) {
                 AstNode* const controlp = nodep->timingControlp();
-                if (VN_IS(controlp, Delay) || VN_IS(controlp, SenTree)) {
+                if (VN_IS(controlp, Delay) || VN_IS(controlp, SenTree)
+                    || VN_IS(controlp, RepeatControl)) {
                     lowerBlockingControl(assignp, controlp);
                     return;
                 }
@@ -3568,6 +3594,9 @@ class FourstateVisitor final : public VNVisitor {
                 lowerFourstateDelay(delayp);
                 waitp = delayp;
                 ++m_statBlockingDelays;
+            } else if (AstRepeatControl* const repeatp = VN_CAST(controlp, RepeatControl)) {
+                waitp = repeatp;
+                ++m_statBlockingEvents;
             } else {
                 waitp = new AstEventControl{flp, VN_AS(controlp, SenTree), nullptr};
                 ++m_statBlockingEvents;
@@ -3576,6 +3605,8 @@ class FourstateVisitor final : public VNVisitor {
             StatementPlaceHolder lhsPlaceholder{*this, flp};
             if (AstDelay* const delayp = VN_CAST(waitp, Delay)) {
                 delayp->addStmtsp(lhsPlaceholder.stmtp());
+            } else if (AstRepeatControl* const repeatp = VN_CAST(waitp, RepeatControl)) {
+                repeatp->addStmtsp(lhsPlaceholder.stmtp());
             } else {
                 VN_AS(waitp, EventControl)->addStmtsp(lhsPlaceholder.stmtp());
             }
@@ -4000,16 +4031,102 @@ class FourstateVisitor final : public VNVisitor {
         }
         iterateChildren(nodep);
     }
-    void visit(AstSenItem* const nodep) override {
-        if (nodep->sensp() && !VN_IS(nodep->sensp(), FourstateExpr)
-            && isFourstate(nodep->sensp())) {
-            AstNodeExpr* const sensp = nodep->sensp()->unlinkFrBack();
-            pushDeletep(sensp);
-            nodep->sensp(new AstFourstateExpr{nodep->fileline(),
-                                              getFourstateExpressionValue(sensp),
-                                              getFourstateExpressionXZ(sensp)});
+    void captureSensitivityResult(AstExprStmt* const capturep) {
+        AstNodeExpr* const resultp = capturep->resultp();
+        // Wide descendants lower to statements before their enclosing statement.
+        // Evaluate the complete result after the captures, including scalar iff conditions.
+        FileLine* const flp = capturep->fileline();
+        AstVar* const varp
+            = new AstVar{flp, VVarType::STMTTEMP, m_tmpNames.get(resultp), resultp->dtypep()};
+        varp->funcLocal(true);
+        varp->noSubst(true);
+        capturep->prependStmtsp(varp);
+        resultp->unlinkFrBack();
+        capturep->addStmtsp(new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE}, resultp});
+        capturep->resultp(new AstVarRef{flp, varp, VAccess::READ});
+    }
+    AstNodeExpr* newSensitivityExpression(AstNodeExpr* const originalp, const bool truth) {
+        FileLine* const flp = originalp->fileline();
+        if (truth && !originalp->isPure()) {
+            originalp->v3warn(E_UNSUPPORTED,
+                              "Unsupported: Impure sensitivity condition with --fourstate.");
+            pushDeletep(originalp);
+            return new AstConst{flp, AstConst::BitFalse{}};
         }
-        iterateChildren(nodep);
+        if (!truth && isFourstate(originalp) && !originalp->isPure()) {
+            originalp->v3warn(
+                E_UNSUPPORTED,
+                "Unsupported: Impure four-state sensitivity expression with --fourstate.");
+            pushDeletep(originalp);
+            return new AstConst{flp, AstConst::BitFalse{}};
+        }
+        // Captures must execute when the sensitivity is evaluated, before its process runs.
+        // Keep declarations local to this expression, including two-state results such as ===.
+        VL_RESTORER_CLEAR(m_tmpUnusedVarps);
+        VL_RESTORER(m_currentTmpSpotp);
+        VL_RESTORER(m_tmpFuncLocal);
+        m_tmpFuncLocal = true;
+        AstExprStmt* const capturep = new AstExprStmt{flp, nullptr, originalp};
+        {
+            StatementPlaceHolder placeholder{*this, flp};
+            capturep->addStmtsp(placeholder.stmtp());
+            m_currentTmpSpotp = placeholder.stmtp();
+            if (!VN_IS(originalp, FourstateExpr) && isFourstate(originalp)) {
+                originalp->unlinkFrBack();
+                capturep->resultp(
+                    truth
+                        ? static_cast<AstNodeExpr*>(new AstRedOr{flp, getTwoStateCast(originalp)})
+                        : new AstFourstateExpr{flp, getFourstateExpressionValue(originalp),
+                                               getFourstateExpressionXZ(originalp)});
+                pushDeletep(originalp);
+            }
+            iterate(capturep->resultp());
+        }
+        if (!capturep->stmtsp()) {
+            AstNodeExpr* const resultp = capturep->resultp()->unlinkFrBack();
+            pushDeletep(capturep);
+            return resultp;
+        }
+        // Branch lowering can use a temporary before its declaration was inserted.
+        // Move declarations ahead of all captures without moving any evaluation.
+        AstNode* varsp = nullptr;
+        for (AstNode *stmtp = capturep->stmtsp(), *nextp; stmtp; stmtp = nextp) {
+            nextp = stmtp->nextp();
+            if (AstVar* const varp = VN_CAST(stmtp, Var)) {
+                varsp = AstNode::addNext(varsp, varp->unlinkFrBack());
+            }
+        }
+        capturep->prependStmtsp(varsp);
+        capturep->dtypeFrom(capturep->resultp());
+        if (AstFourstateExpr* const valuePairp = VN_CAST(capturep->resultp(), FourstateExpr)) {
+            // Each half owns all its captures and repeats only pure source reads.
+            // Clone declarations and results together so cloneRelink keeps references local.
+            AstExprStmt* const xzCapturep = capturep->cloneTree(false);
+            AstFourstateExpr* const xzPairp = VN_AS(xzCapturep->resultp(), FourstateExpr);
+            AstNodeExpr* const valuep = valuePairp->valuep()->unlinkFrBack();
+            AstNodeExpr* const xzp = xzPairp->xzp()->unlinkFrBack();
+            valuePairp->replaceWith(valuep);
+            xzPairp->replaceWith(xzp);
+            pushDeletep(valuePairp);
+            pushDeletep(xzPairp);
+            capturep->dtypeFrom(valuep);
+            xzCapturep->dtypeFrom(xzp);
+            captureSensitivityResult(capturep);
+            captureSensitivityResult(xzCapturep);
+            return new AstFourstateExpr{flp, capturep, xzCapturep};
+        }
+        captureSensitivityResult(capturep);
+        return capturep;
+    }
+    void visit(AstSenItem* const nodep) override {
+        if (AstNodeExpr* const sensp = nodep->sensp()) {
+            nodep->sensp(newSensitivityExpression(sensp->unlinkFrBack(), false));
+            FourstateLogicTypePropagator{nodep->sensp()};
+        }
+        if (AstNodeExpr* const condp = nodep->condp()) {
+            nodep->condp(newSensitivityExpression(condp->unlinkFrBack(), true));
+            FourstateLogicTypePropagator{nodep->condp()};
+        }
     }
     AstNodeExpr* newReadMemBound(AstNodeExpr* const exprp) {
         FileLine* const flp = exprp->fileline();
@@ -4344,6 +4461,22 @@ class FourstateVisitor final : public VNVisitor {
         }
         iterateChildren(nodep);
     }
+    void visit(AstConsQueue* const nodep) override {
+        const AstNodeDType* const elementDTypep
+            = nodep->dtypep()->skipRefp()->subDTypep()->skipRefp();
+        if (elementDTypep->isIntegralOrPacked() && !needsSplitting(elementDTypep)) {
+            for (AstConsQueueItem* const itemp : nodep->itemspList()) {
+                AstNodeExpr* const valuep = itemp->valuep();
+                if (valuep->dtypep()->skipRefp()->isIntegralOrPacked() && isFourstate(valuep)) {
+                    // Constant folding can remove an explicit bit cast but retain X/Z digits.
+                    // The constructor element's two-state context still clears those bits.
+                    valuep->replaceWith(getTwoStateCast(valuep));
+                    pushDeletep(valuep);
+                }
+            }
+        }
+        iterateChildren(nodep);
+    }
     void visit(AstIToRD* const nodep) override {
         if (isFourstate(nodep->lhsp())) {
             AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
@@ -4376,7 +4509,7 @@ class FourstateVisitor final : public VNVisitor {
                                                  ? nodep->rhsp()->unlinkFrBack()
                                                  : nodep->lhsp()->unlinkFrBack();
             newp = new AstAnd{
-                flp, new AstNot{flp, getFourstateExpressionXZ(fourstateHsp)},
+                flp, new AstLogNot{flp, new AstRedOr{flp, getFourstateExpressionXZ(fourstateHsp)}},
                 new AstEq{flp, getFourstateExpressionValue(fourstateHsp), twostateHsp}};
         } else {
             newp = new AstEq{flp, nodep->lhsp()->unlinkFrBack(), nodep->rhsp()->unlinkFrBack()};

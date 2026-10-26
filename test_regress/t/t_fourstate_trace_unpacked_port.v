@@ -5,11 +5,11 @@
 // SPDX-License-Identifier: CC0-1.0
 
 module t(
-    input logic [31:0] priv_ids_i[4],
-    input logic [31:0] priv_ids_2d_i[2][4]
+  input logic [31:0] priv_ids_i[4],
+  input logic [31:0] priv_ids_2d_i[2][4]
 );
-    localparam int C_LAT = 0;
-    localparam int DW = 32;
+  localparam int C_LAT = 0;
+  localparam int DW = 32;
 
-    logic [C_LAT+1:0] [DW-1:0] dp_rdata;
+  logic [C_LAT+1:0] [DW-1:0] dp_rdata;
 endmodule

@@ -1,0 +1,11 @@
+%Error-UNSUPPORTED: t/t_fourstate_sen_impure_unsup.v:24:17: Unsupported: Impure four-state sensitivity expression with --fourstate.
+   24 |   always @(words[next_index()]) selected = words[index];
+      |                 ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error-UNSUPPORTED: t/t_fourstate_sen_impure_unsup.v:25:12: Unsupported: Impure four-state sensitivity expression with --fourstate.
+   25 |   always @(next_value()) whole = words[index];
+      |            ^~~~~~~~~~
+%Error-UNSUPPORTED: t/t_fourstate_sen_impure_unsup.v:29:41: Unsupported: Impure sensitivity condition with --fourstate.
+   29 |   always @(posedge clk iff next_index() != 0) whole = words[index];
+      |                                         ^~
+%Error: Exiting due to

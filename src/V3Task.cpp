@@ -443,7 +443,7 @@ struct TaskDpiUtils final {
 // scope across task expansion. Their VarScopes must follow each cloned declaration.
 class TaskCLocalVarVisitor final : public VNVisitorConst {
     bool m_underCLocalScope = false;
-    std::vector<AstVar*> m_varps;
+    std::vector<AstVar*> m_varps;  // Declarations owned by C local scopes
 
     void visit(AstCLocalScope* nodep) override {
         VL_RESTORER(m_underCLocalScope);

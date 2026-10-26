@@ -471,6 +471,8 @@ class TristateVisitor final : public TristateBaseVisitor {
     VarToAssignsMap m_assigns;  // Assigns in current module
     AssignEnableMap m_assignEnps;  // Raw enable expression for each procedural assignment
     ProceduralEnableMap m_proceduralEnables;  // Enable updates to merge into assignments
+    std::map<AstVar*, AstVar*>
+        m_storedVarValues;  // Original output var -> procedural value storage
     int m_unique = 0;
     bool m_alhs = false;  // On LHS of assignment
     bool m_inAlias = false;  // Inside alias statement
@@ -511,6 +513,11 @@ class TristateVisitor final : public TristateBaseVisitor {
         if (ones) num.setAllBits1();
         AstConst* const newp = new AstConst{nodep->fileline(), num};
         return newp;
+    }
+    static bool undrivenIsOne(const AstVar* const varp, const AstPull* const pullp) {
+        // Explicit pulls supply known values. Floating four-state nets retain Z
+        // through their zero value half and all-ones XZ complement.
+        return pullp ? pullp->direction() == 1 : varp->isFourstateComplement();
     }
     // Create AstVarXRef with inlinedDots copied from a source xref
     AstVarXRef* newVarXRef(FileLine* fl, AstVar* varp, const string& dotted, VAccess access,
@@ -1042,6 +1049,18 @@ class TristateVisitor final : public TristateBaseVisitor {
         ++m_statTriSigs;
         m_tgraph.didProcess(invarp);
 
+        // A variable with one procedural driver stores data and its Z enable
+        // directly. An extra continuous resolver would delay blocking stores.
+        // Determine this before port conversion changes the original direction.
+        const AstNodeProcedure* const procedurep
+            = refsp->empty() ? nullptr : refsp->front().m_procedurep;
+        const bool isStoredVariable
+            = procedurep && !isIfaceTri && !invarp->isNet() && !invarp->isInout()
+              && !m_varAux(invarp).pullp && !hasPerBitPulls(invarp)
+              && std::all_of(refsp->begin(), refsp->end(), [procedurep](const RefStrength& ref) {
+                     return ref.m_procedurep == procedurep && !VN_IS(ref.m_varrefp, VarXRef);
+                 });
+
         // If the lhs var is a port, then we need to create ports for
         // the output (__out) and output enable (__en) signals. The
         // original port gets converted to an input. Don't tristate expand
@@ -1080,6 +1099,22 @@ class TristateVisitor final : public TristateBaseVisitor {
             } else if (invarp->user1p()) {
                 envarp = VN_AS(invarp->user1p(), Var);  // From CASEEQ, foo === 1'bz
             }
+        }
+
+        if (isStoredVariable) {
+            if (!envarp) envarp = getCreateEnVarp(invarp, false);
+            if (outvarp) m_storedVarValues.emplace(invarp, outvarp);
+            for (RefStrength& ref : *refsp) {
+                UASSERT_OBJ(ref.m_assignp && ref.m_enLhsp && ref.m_enVarrefp && ref.m_enRhsp,
+                            ref.m_varrefp, "Procedural variable without projected enable");
+                ref.m_enVarrefp->varp(envarp);
+                m_proceduralEnables[ref.m_assignp].push_back(
+                    ProceduralEnable{ref.m_enLhsp, ref.m_enRhsp});
+                ref.m_enLhsp = nullptr;
+                ref.m_enVarrefp = nullptr;
+                ref.m_enRhsp = nullptr;
+            }
+            return;
         }
 
         AstNodeExpr* orp = nullptr;
@@ -1209,9 +1244,8 @@ class TristateVisitor final : public TristateBaseVisitor {
         }
 
         // Apply pull formula: final = orp | (~enp & pull_value)
-        // Always run at top level (!outvarp) so that the strength-enable expression (enp)
-        // is consumed into orp even when no pull is present; pull_value is then all-zeros
-        // so this is semantically a no-op but it links enp into the tree.
+        // Always run at top level (!outvarp) to retain the floating XZ default and keep
+        // the strength-enable expression (enp) linked into the resolution tree.
         // Also run at intermediate levels when there's a pull, so the pull is baked into
         // the contribution flowing up the hierarchy.
         const bool hasPull = m_varAux(lhsp).pullp || hasPerBitPulls(lhsp);
@@ -1232,7 +1266,7 @@ class TristateVisitor final : public TristateBaseVisitor {
                 pullConstp = createPerBitPullConst(lhsp);
             } else {
                 const AstPull* const pullp = m_varAux(lhsp).pullp;
-                const bool pull1 = pullp && pullp->direction() == 1;
+                const bool pull1 = undrivenIsOne(invarp, pullp);
                 pullConstp = newAllZerosOrOnes(invarp, pull1);
             }
 
@@ -2413,6 +2447,7 @@ class TristateVisitor final : public TristateBaseVisitor {
         VL_RESTORER_CLEAR(m_assigns);
         VL_RESTORER_CLEAR(m_assignEnps);
         VL_RESTORER_CLEAR(m_proceduralEnables);
+        VL_RESTORER_CLEAR(m_storedVarValues);
         // Not preserved, needs pointer instead: TristateGraph origTgraph = m_tgraph;
         UASSERT_OBJ(m_tgraph.empty(), nodep, "Unsupported: NodeModule under NodeModule");
 
@@ -2444,6 +2479,16 @@ class TristateVisitor final : public TristateBaseVisitor {
         // Insert new logic for all tristates
         insertTristates(nodep);
         insertProceduralEnableAssignments(nodep);
+
+        // Output variables read their own storage, not the externally resolved
+        // input from port lowering. Retarget once per module after the detached
+        // enable projections have also been inserted into the tree.
+        if (!m_storedVarValues.empty()) {
+            nodep->foreach([this](AstNodeVarRef* refp) {
+                const auto it = m_storedVarValues.find(refp->varp());
+                if (it != m_storedVarValues.end()) refp->varp(it->second);
+            });
+        }
 
         for (auto& assignEnp : m_assignEnps) {
             VL_DO_DANGLING(assignEnp.second->deleteTree(), assignEnp.second);
@@ -2528,7 +2573,7 @@ class TristateVisitor final : public TristateBaseVisitor {
 
             // Pull resolution
             const AstPull* const pullp = m_varAux(invarp).pullp;
-            const bool pull1 = pullp && pullp->direction() == 1;  // Else default is down
+            const bool pull1 = undrivenIsOne(invarp, pullp);
 
             AstNodeExpr* undrivenp = new AstNot{fl, new AstVarRef{fl, envarp, VAccess::READ}};
             undrivenp = new AstAnd{fl, undrivenp, newAllZerosOrOnes(invarp, pull1)};

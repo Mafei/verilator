@@ -34,6 +34,7 @@ public:
         L_ERROR,  // Must be first.
         L1364_1995,
         L1364_2001,
+        L1364_2001_NOCONFIG,
         L1364_2005,
         L1800_2005,
         L1800_2009,
@@ -46,8 +47,8 @@ public:
     const char* ascii() const {
         const char* const names[]
             = {// These must match the `begin_keywords values
-               " ERROR",    "1364-1995", "1364-2001", "1364-2005", "1800-2005",
-               "1800-2009", "1800-2012", "1800-2017", "1800-2023"};
+               " ERROR",    "1364-1995", "1364-2001", "1364-2001-noconfig", "1364-2005",
+               "1800-2005", "1800-2009", "1800-2012", "1800-2017",          "1800-2023"};
         return names[m_e];
     }
     static V3LangCode mostRecent() VL_MT_SAFE { return V3LangCode{L1800_2023}; }

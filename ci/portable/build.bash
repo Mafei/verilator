@@ -88,6 +88,7 @@ fi
 python3 ci/portable/test_flexfix.py
 python3 ci/portable/test_regression_results.py
 python3 ci/portable/test_icarus_acceptance.py
+python3 ci/portable/test_icarus_sweep.py
 python3 ci/portable/test_lint_status.py
 python3 ci/portable/test_finish_acceptance.py
 python3 ci/portable/test_finish_wave_evidence.py
@@ -151,8 +152,8 @@ export VERILATOR_ROOT="$root"
 # Keep the original per-process CPU limits while compiling generated files separately.
 export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
-# Preserve all 246 PR23 selections and add 17 upstream controls and the finish coverage regression.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 || regress_status=$?
+# Preserve every baseline selection and add the independently checked SV semantic controls.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 || regress_status=$?
 if [[ ${smoke_status:-0} != 0 || $regress_status != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, regress=$regress_status"
     exit 1
@@ -162,6 +163,7 @@ python3 ci/portable/log_evidence.py results
 python3 ci/portable/log_evidence.py semantic-waves
 python3 ci/portable/log_evidence.py finish-waves
 python3 ci/portable/log_evidence.py controls-waves
+python3 ci/portable/log_evidence.py sv-semantics-waves
 thread_controls_status=0
 ram_matrix_status=0
 python3 ci/portable/run_thread_controls.py || thread_controls_status=$?
@@ -187,7 +189,7 @@ python3 ci/portable/finish_acceptance.py check --expected-head "$icarus_head" ||
 printf 'ORIGINAL_ACCEPTANCE_EXITS icarus18_run=%s applicable16_check=%s full18_check=%s finish9_run=%s finish9_check=%s\n' \
     "$icarus_run_status" "$icarus_check_status" "$icarus_full18_status" "$finish9_run_status" "$finish9_check_status"
 python3 ci/portable/log_evidence.py results
-if [[ $icarus_run_status != 0 || $icarus_check_status != 0 || $finish9_run_status != 0 || $finish9_check_status != 0 || $thread_controls_status != 0 || $ram_matrix_status != 0 ]]; then
+if [[ $icarus_run_status != 0 || $icarus_check_status != 0 || $icarus_full18_status != 0 || $finish9_run_status != 0 || $finish9_check_status != 0 || $thread_controls_status != 0 || $ram_matrix_status != 0 ]]; then
     echo "Original acceptance validation failed: Icarus-run=$icarus_run_status, applicable16=$icarus_check_status, full18=$icarus_full18_status, finish9-run=$finish9_run_status, finish9-check=$finish9_check_status"
     exit 1
 fi

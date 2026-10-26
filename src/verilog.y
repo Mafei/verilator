@@ -3051,9 +3051,19 @@ assignOne<alwaysp>:
         ;
 
 delay_or_event_controlE<nodep>:  // IEEE: delay_or_event_control plus empty
+                delay_or_event_controlBasicE             { $$ = $1; }
+        |       yREPEAT '(' expr ')' event_control
+                        { $$ = new AstRepeatControl{$1, $3, $5}; }
+        ;
+
+delay_or_event_controlBasicE<nodep>:
                 /* empty */                             { $$ = nullptr; }
         |       delay_control                           { $$ = $1; }
         |       event_control                           { $$ = $1; }
+        ;
+
+delay_or_event_controlUnsupportedRepeatE<nodep>:
+                delay_or_event_controlBasicE             { $$ = $1; }
         |       yREPEAT '(' expr ')' event_control
                         { $$ = $5; BBUNSUP($1, "Unsupported: repeat event control"); }
         ;
@@ -3624,7 +3634,7 @@ statement_item<nodeStmtp>:          // IEEE: statement_item
         |       fexprLvalue yP_LTE cycle_delay expr ';'
                         { $$ = new AstAssignDly{$2, $1, $4, $3}; }
         //UNSUP cycle_delay fexprLvalue yP_LTE ';'      { UNSUP }
-        |       yASSIGN variable_lvalue '=' delay_or_event_controlE expr ';'
+        |       yASSIGN variable_lvalue '=' delay_or_event_controlUnsupportedRepeatE expr ';'
                         { $$ = new AstAssignCont{$1, $2, $5, $4};
                           $1->v3warn(IEEEMAYDEPRECATE, "Feature may be deprecated in future IEEE standard"); v3Global.setHasAssignDeassign(); }
         |       yDEASSIGN variable_lvalue ';'
@@ -3718,7 +3728,7 @@ statement_item<nodeStmtp>:          // IEEE: statement_item
         //                      // IEEE: event_trigger
         |       yP_MINUSGT expr ';'
                         { $$ = new AstFireEvent{$1, $2, false}; }
-        |       yP_MINUSGTGT delay_or_event_controlE expr ';'
+        |       yP_MINUSGTGT delay_or_event_controlUnsupportedRepeatE expr ';'
                         { $$ = new AstFireEvent{$1, $3, true}; }
         //
         // do/for/forever/while loops all modelled as AstLoop

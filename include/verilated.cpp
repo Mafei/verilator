@@ -3277,10 +3277,10 @@ void vlReadMemFourstateError(const std::string& filename, int line,
 // Independent token reader for the additive four-state path. The legacy VlReadMem
 // parser and randomized-X behavior deliberately do not participate here.
 class VlReadMemFourstateTokens final {
-    FILE* m_fp;
-    const std::string& m_filename;
-    int m_line = 1;
-    int m_saved = EOF;
+    FILE* m_fp;  // Input stream owned by this token reader
+    const std::string& m_filename;  // Source filename used in diagnostics
+    int m_line = 1;  // Current input line
+    int m_saved = EOF;  // One character of lookahead, or EOF when empty
 
     int get() {
         const int ch = m_saved == EOF ? std::fgetc(m_fp) : m_saved;
