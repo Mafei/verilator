@@ -49,9 +49,9 @@ execution controls and reference-only tests are counted separately.
      - partial
      - Public bounds/unknown-index checks and six-lane RAM matrix; not vendor RAM timing or collision modes.
      - fourstate_mem_index, fourstate_array_guard; ram_acceptance.py
-   * - Indexed packed reads
+   * - Indexed packed part-select reads
      - partial
-     - Signed and unsigned domains through 95-bit indices, partial overlap, shifted/ascending declarations and +:/-: coordinates. Carry arithmetic preserves the existing index diagnostics.
+     - Signed and unsigned domains through 95-bit indices, partial overlap, shifted/ascending declarations and +:/-: coordinates. Carry arithmetic preserves the existing index diagnostics. Existing bit-selection and write lowering remain separately bounded.
      - fourstate_slice_index_domain:3840 checks,80 literal reports,64 complete histories; slice_packed_domain:98 checks,24 reports,4 histories; slice_index_width and bad profiles
    * - Clipped partial writes
      - partial
@@ -133,6 +133,15 @@ original default inventory has 3850 scenarios: 3069 positive runtime, 711 CE,
 27 CO, 2 RE, 21 EF and 20 NI. The fixed 128 pair retains 3722 UNRUN slots and
 full_suite_complete=false. Unsupported cases and unresolved differences keep
 that pair's real gate nonzero. No reference fixture/gold is modified.
+
+An unsigned 32-bit all-ones index remains 4294967295 even when the packed
+declaration includes negative indices. The slice-bounds once-evaluation control
+checks this out-of-range read separately from an explicit signed -1 call. Pinned
+Icarus instead treats both as -1 in the independent negative-bound probe; this
+reference difference remains recorded. The exact new packed-word fixture also
+triggers a pinned-Icarus elaborator assertion, so no reference runtime acceptance
+is claimed for that fixture. These are separate from the immutable fixed128 and
+Strict18 inputs and expectations.
 
 The legacy strict18 original-output gate is reported separately from the
 applicable16 gate, and its nonzero result propagates to the build exit. Earlier green jobs with full18_gate_exit=1 are not accepted

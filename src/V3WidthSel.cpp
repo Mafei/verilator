@@ -44,6 +44,8 @@ class WidthSelVisitor final : public VNVisitor {
     //  on if widthing top-down or just for parameters.
 #define iterateChildren DO_NOT_iterateChildern_IN_V3WidthSel
 
+    bool m_readCoordinate = false;  // Preserve full coordinates for indexed part-select reads
+
     // METHODS
 
     void checkConstantOrReplace(AstNode* nodep, const string& message) {
@@ -149,8 +151,8 @@ class WidthSelVisitor final : public VNVisitor {
             m_width = VL_IDATASIZE;
             m_widthMin = std::max(V3Number::log2b(elwidth) + 1, m_widthMin);
         }
-        void store(AstSel* const nodep) const {
-            if (!v3Global.opt.fourstate()) return;
+        void store(AstSel* const nodep, bool carryCoordinate) const {
+            if (!carryCoordinate) return;
             nodep->declIndexWidth(m_width);
             nodep->declIndexWidthMin(m_widthMin);
         }
@@ -182,7 +184,7 @@ class WidthSelVisitor final : public VNVisitor {
         // which may be INT32_MIN. The legacy path uses an add for negative rhs.
         if (rhs == 0) {
             return lhsp;
-        } else if (v3Global.opt.fourstate() && packedCoordinate) {
+        } else if (m_readCoordinate && packedCoordinate) {
             lhsp = newRangeCoordinate(lhsp);
             AstNodeExpr* const newp
                 = new AstSub{lhsp->fileline(), lhsp, newCoordinateConst(lhsp, rhs)};
@@ -213,7 +215,7 @@ class WidthSelVisitor final : public VNVisitor {
     }
     AstNodeExpr* newSubNeg(int32_t lhs, AstNodeExpr* rhsp, bool packedCoordinate = false) {
         // Return lhs-rhs
-        const bool widened = v3Global.opt.fourstate() && packedCoordinate;
+        const bool widened = m_readCoordinate && packedCoordinate;
         if (widened) rhsp = newRangeCoordinate(rhsp);
         AstConst* const constantp
             = widened ? newCoordinateConst(rhsp, lhs) : newRangeConst(rhsp, lhs);
@@ -243,7 +245,7 @@ class WidthSelVisitor final : public VNVisitor {
         }
     }
     AstNodeExpr* newMulConst(FileLine* fl, uint32_t elwidth, AstNodeExpr* indexp) {
-        if (v3Global.opt.fourstate()) {
+        if (m_readCoordinate) {
             if (elwidth == 1) return indexp;
             AstNodeExpr* const coordinatep
                 = newRangeCoordinate(indexp, V3Number::log2b(elwidth) + 1);
@@ -350,7 +352,7 @@ class WidthSelVisitor final : public VNVisitor {
             AstSel* const newp = new AstSel{
                 nodep->fileline(), fromp, newMulConst(nodep->fileline(), elwidth, subp), elwidth};
             newp->declRange(fromRange);
-            diagnostic.store(newp);
+            diagnostic.store(newp, m_readCoordinate);
             newp->declElWidth(elwidth);
             newp->dtypeFrom(adtypep->subDTypep());  // Need to strip off array reference
             if (VN_IS(adtypep->subDTypep(), BasicDType)) {
@@ -433,7 +435,7 @@ class WidthSelVisitor final : public VNVisitor {
             AstSel* const newp
                 = new AstSel{nodep->fileline(), fromp, newSubLsbOf(rhsp, fromRange), 1};
             newp->declRange(fromRange);
-            diagnostic.store(newp);
+            diagnostic.store(newp, m_readCoordinate);
             UINFO(6, "   new " << newp);
             UINFOTREE(9, newp, "", "SELBTn");
             nodep->replaceWith(newp);
@@ -444,7 +446,7 @@ class WidthSelVisitor final : public VNVisitor {
             AstSel* const newp
                 = new AstSel{nodep->fileline(), fromp, newSubLsbOf(rhsp, fromRange), 1};
             newp->declRange(fromRange);
-            diagnostic.store(newp);
+            diagnostic.store(newp, m_readCoordinate);
             UINFO(6, "   new " << newp);
             UINFOTREE(9, newp, "", "SELBTn");
             nodep->replaceWith(newp);
@@ -558,7 +560,7 @@ class WidthSelVisitor final : public VNVisitor {
                              newMulConst(nodep->fileline(), elwidth, newSubLsbOf(lsbp, fromRange)),
                              (msb - lsb + 1) * elwidth};
             newp->declRange(fromRange);
-            diagnostic.store(newp);
+            diagnostic.store(newp, m_readCoordinate);
             newp->declElWidth(elwidth);
             newp->dtypeFrom(sliceDType(adtypep, msb, lsb));
             // UINFOTREE(9, newp, "", "EXTBTn");
@@ -580,7 +582,7 @@ class WidthSelVisitor final : public VNVisitor {
             AstSel* const newp = new AstSel{nodep->fileline(), fromp, newSubLsbOf(lsbp, fromRange),
                                             msb + 1 - lsb};
             newp->declRange(fromRange);
-            diagnostic.store(newp);
+            diagnostic.store(newp, m_readCoordinate);
             UINFO(6, "   new " << newp);
             // UINFOTREE(9, newp, "", "SELEXnew");
             nodep->replaceWith(newp);
@@ -599,7 +601,7 @@ class WidthSelVisitor final : public VNVisitor {
             AstSel* const newp = new AstSel{nodep->fileline(), fromp, newSubLsbOf(lsbp, fromRange),
                                             msb + 1 - lsb};
             newp->declRange(fromRange);
-            diagnostic.store(newp);
+            diagnostic.store(newp, m_readCoordinate);
             UINFO(6, "   new " << newp);
             // UINFOTREE(9, newp, "", "SELEXnew");
             nodep->replaceWith(newp);
@@ -712,7 +714,7 @@ class WidthSelVisitor final : public VNVisitor {
             }
             AstSel* const newp = new AstSel{nodep->fileline(), fromp, newlsbp, newwidth};
             newp->declRange(fromRange);
-            diagnostic.store(newp);
+            diagnostic.store(newp, m_readCoordinate);
             newp->declElWidth(elwidth);
             UINFO(6, "   new " << newp);
             UINFOTREE(9, newp, "", "SELNEW");
@@ -745,7 +747,17 @@ public:
     // CONSTRUCTORS
     WidthSelVisitor() = default;
     ~WidthSelVisitor() override = default;
-    AstNode* mainAcceptEdit(AstNode* nodep) { return iterateSubtreeReturnEdits(nodep); }
+    AstNode* mainAcceptEdit(AstNode* nodep) {
+        const AstNodePreSel* const selp = VN_AS(nodep, NodePreSel);
+        const AstNode* const basep = selp->fromp()->baseFromp(false);
+        const AstNodeVarRef* const varrefp = VN_CAST(basep, NodeVarRef);
+        const AstMemberSel* const memberp = VN_CAST(basep, MemberSel);
+        const bool writes = (varrefp && varrefp->access().isWriteOrRW())
+                            || (memberp && memberp->access().isWriteOrRW());
+        m_readCoordinate = v3Global.opt.fourstate() && !writes
+                           && (VN_IS(nodep, SelPlus) || VN_IS(nodep, SelMinus));
+        return iterateSubtreeReturnEdits(nodep);
+    }
 };
 
 //######################################################################

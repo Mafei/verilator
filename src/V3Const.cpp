@@ -1640,6 +1640,28 @@ class ConstVisitor final : public VNVisitor {
         return (VN_IS(nodep->lsbp(), Const) && nodep->lsbConst() == 0
                 && static_cast<int>(nodep->widthConst()) == nodep->fromp()->width());
     }
+    bool operandSelSel(const AstSel* nodep) {
+        if (!v3Global.opt.fourstate() || v3Global.fourstateHandled()
+            || !nodep->isFourstateOrNoDtype()) {
+            return true;
+        }
+        const AstNode* const basep = nodep->fromp()->baseFromp(false);
+        const AstNodeVarRef* const varrefp = VN_CAST(basep, NodeVarRef);
+        const AstMemberSel* const memberp = VN_CAST(basep, MemberSel);
+        if ((varrefp && varrefp->access().isWriteOrRW())
+            || (memberp && memberp->access().isWriteOrRW())) {
+            return true;
+        }
+        // A fully contained constant read cannot expose an adjacent packed element.
+        const AstConst* const indexp = VN_CAST(nodep->lsbp(), Const);
+        if (!indexp || indexp->num().isFourState()
+            || (indexp->isSigned() && indexp->num().isNegative())
+            || indexp->num().mostSetBitP1() > VL_IDATASIZE) {
+            return false;
+        }
+        return static_cast<uint64_t>(indexp->toUInt()) + nodep->widthConst()
+               <= static_cast<uint64_t>(nodep->fromp()->width());
+    }
     bool operandSelExtend(AstSel* nodep) {
         if (!m_doV) return false;
         AstExtend* const extendp = VN_CAST(nodep->fromp(), Extend);
@@ -4643,7 +4665,7 @@ class ConstVisitor final : public VNVisitor {
     TREEOPV("AstSel{operandSelExtend(nodep)}",  "DONE");
     TREEOPV("AstSel{operandSelFull(nodep)}",    "replaceWChild(nodep, nodep->fromp())");
     // Preserve each nested packed boundary until four-state reads receive X padding.
-    TREEOPV("AstSel{$fromp.castSel, (v3Global.fourstateHandled() || !nodep->isFourstateOrNoDtype())}", "replaceSelSel(nodep)");
+    TREEOPV("AstSel{$fromp.castSel, operandSelSel(nodep)}", "replaceSelSel(nodep)");
     TREEOPV("AstSel{$fromp.castAdd, operandSelBiLower(nodep)}", "DONE");
     TREEOPV("AstSel{$fromp.castAnd, operandSelBiLower(nodep)}", "DONE");
     TREEOPV("AstSel{$fromp.castOr,  operandSelBiLower(nodep)}", "DONE");

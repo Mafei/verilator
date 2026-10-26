@@ -44,6 +44,10 @@ module slice_bounds_case #(
     calls++;
     return index;
   endfunction
+  function automatic int called_signed_index(input int index);
+    calls++;
+    return index;
+  endfunction
 
   initial begin
     done = 0;
@@ -86,6 +90,16 @@ module slice_bounds_case #(
       calls = 0;
       actual = descending[called_index(unsigned_requested)+:SLICE];
       `checkh(calls, 1);
+      // An unsigned all-ones value is positive, even with a negative declaration bound.
+      if (LOW + 1 < 0) begin
+        `checkh(actual, {SLICE{1'bx}});
+      end
+      else begin
+        `checkh(actual, expected_slice(1, phase));
+      end
+      requested = LOW + 1;
+      actual = descending[called_signed_index(requested)+:SLICE];
+      `checkh(calls, 2);
       `checkh(actual, expected_slice(1, phase));
     end
     $display("CHECKS %m %0d", checks);

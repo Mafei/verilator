@@ -168,6 +168,7 @@ GROUPS = {
     ],
     # New official constructor, scheduling, VPI and side-effect regressions through cecfb438.
     "upstream_sync_20261026": [
+        "stream_unpack_wider",
         "dynarray_new_pattern",
         "dynarray_concat",
         "dynarray_unpacked",
