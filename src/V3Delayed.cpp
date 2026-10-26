@@ -1250,7 +1250,11 @@ class DelayedVisitor final : public VNVisitor {
     }
     void visit(AstFork* nodep) override {
         VL_RESTORER(m_inSuspendableOrFork);
+        VL_RESTORER(m_inNonCombLogic);
         m_inSuspendableOrFork = true;
+        // Each branch runs as a process of its own (V3SchedTiming transformForks), so its
+        // blocking assignments are not combinational logic, like a suspendable process
+        m_inNonCombLogic = true;
         iterateChildren(nodep);
     }
     void visit(AstCAwait* nodep) override {
@@ -1453,6 +1457,8 @@ class DelayedVisitor final : public VNVisitor {
         // Check whether it was already visited by visitCalledCFunc()
         if (value.m_state != CFuncCache::UNINITIALIZED) return;
         VL_RESTORER(m_cfuncp);
+        // Its timing domains are those of the processes calling it, see visitCalledCFunc()
+        VL_RESTORER_CLEAR(m_timingDomains);
         m_cfuncp = nodep;
         iterateChildren(nodep);
     }

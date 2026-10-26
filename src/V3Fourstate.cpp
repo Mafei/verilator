@@ -505,9 +505,9 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         setFourstate(nodep, isFourstate(nodep->resultp()), m_fourstateInSubtree);
     }
 
-    void visit(AstConsPackMember* const nodep) override {
+    void visit(AstNodeConsItem* const nodep) override {
+        // Constructor items are not expressions; propagate their values' subtree state.
         iterateChildrenSeparately(nodep);
-        setFourstate(nodep, isFourstate(nodep->rhsp()), m_fourstateInSubtree);
     }
 
     void visit(AstStructSel* const nodep) override {
@@ -2446,25 +2446,37 @@ class FourstateVisitor final : public VNVisitor {
         }
 
         AstConsDynArray*
-        fourstateExpressionConsDynArrayHandler(AstConsDynArray* const consDynArrayp, bool xz) {
-            AstNodeExpr* const lhsp
-                = consDynArrayp->lhsp() ? consDynArrayp->lhsp()->unlinkFrBack() : nullptr;
-            AstNodeExpr* const rhsp
-                = consDynArrayp->rhsp() ? consDynArrayp->rhsp()->unlinkFrBack() : nullptr;
+        fourstateExpressionConsDynArrayHandler(AstConsDynArray* const consDynArrayp,
+                                               const bool xz) {
             AstConsDynArray* const newp = consDynArrayp->cloneTree(false);
-            consDynArrayp->lhsp(lhsp);
-            consDynArrayp->rhsp(rhsp);
-            if (AstConsDynArray* const cp = VN_CAST(lhsp, ConsDynArray)) {
-                newp->lhsp(fourstateExpressionConsDynArrayHandler(cp, xz));
-            } else if (lhsp) {
-                newp->lhsp(xz ? getFourstateExpressionXZ(lhsp)
-                              : getFourstateExpressionValue(lhsp));
+            newp->dtypep(getTwoStateDtype(consDynArrayp->dtypep()));
+            const auto project = [this, xz](AstNodeExpr* const exprp) -> AstNodeExpr* {
+                if (AstConsDynArray* const consp = VN_CAST(exprp, ConsDynArray)) {
+                    return fourstateExpressionConsDynArrayHandler(consp, xz);
+                }
+                return xz ? getFourstateExpressionXZ(exprp)
+                          : m_fourstateVisitor.getOnceExpressionValue(exprp);
+            };
+            if (AstNodeExpr* const sizep = consDynArrayp->sizep()) {
+                // Both halves have the same shape and share any size-expression side effects.
+                pushDeletep(newp->sizep()->unlinkFrBack());
+                AstNodeExpr* sizeValuep = m_fourstateVisitor.getOnceExpressionValue(sizep);
+                if (isFourstate(sizep)) {
+                    sizeValuep = m_fourstateVisitor.getTwoStateCast(
+                        sizeValuep, getFourstateExpressionXZ(sizep));
+                }
+                newp->sizep(sizeValuep);
             }
-            if (AstConsDynArray* const cp = VN_CAST(rhsp, ConsDynArray)) {
-                newp->rhsp(fourstateExpressionConsDynArrayHandler(cp, xz));
-            } else if (rhsp) {
-                newp->rhsp(xz ? getFourstateExpressionXZ(rhsp)
-                              : getFourstateExpressionValue(rhsp));
+            if (AstNodeExpr* const defaultp = consDynArrayp->defaultp()) {
+                pushDeletep(newp->defaultp()->unlinkFrBack());
+                newp->defaultp(project(defaultp));
+            }
+            AstConsDynArrayItem* newItemp = newp->itemsp();
+            for (AstConsDynArrayItem* const itemp : consDynArrayp->itemspList()) {
+                // Keep the item order and immutable index key; replace only its value.
+                pushDeletep(newItemp->valuep()->unlinkFrBack());
+                newItemp->valuep(project(itemp->valuep()));
+                newItemp = VN_AS(newItemp->nextp(), ConsDynArrayItem);
             }
             { FourstateLogicTypePropagator{newp}; }
             return newp;
@@ -4588,7 +4600,7 @@ class FourstateVisitor final : public VNVisitor {
     // LCOV_EXCL_START
     void visit(AstCvtPackedToArray* const) override {}
     void visit(AstFOpenMcd* const) override {}
-    void visit(AstConsPackUOrStruct* const) override {}
+    void visit(AstConsStruct* const) override {}
     // LCOV_EXCL_STOP
 
     void visit(AstNodeFTask* const nodep) override {

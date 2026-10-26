@@ -49,8 +49,7 @@ TimingKit::externalTriggerIndices(const TriggerKit& trigKit,
         std::vector<uint32_t>& indices = result[vscpDomains.first];
         bool usesDelayDomain = false;
         for (const AstSenTree* const domainp : vscpDomains.second) {
-            for (const AstSenItem* itemp = domainp->sensesp(); itemp;
-                 itemp = VN_AS(itemp->nextp(), SenItem)) {
+            for (const AstSenItem* const itemp : domainp->sensespList()) {
                 indices.push_back(trigKit.senItem2TrigIdx(itemp));
                 const AstCMethodHard* const methodp = VN_CAST(itemp->sensp(), CMethodHard);
                 if (methodp && methodp->method() == VCMethod::SCHED_AWAITING_CURRENT_TIME) {
