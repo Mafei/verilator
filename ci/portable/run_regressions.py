@@ -199,7 +199,8 @@ GROUPS = {
     # Official fixes throughbe33a0f6; sampler positives need an available solver.
     "upstream_late_20261026": [
         "fork_taskarg", "timing_sched_ready", "sys_monitor_changes", "opt_reloop_inlined",
-        "opt_expand_keep_widths", "constraint_rand_sampler_bad", "constraint_rand_sampler_env_bad"
+        "opt_expand_keep_widths", "constraint_rand_sampler_bad", "constraint_rand_sampler_env_bad",
+        "restorer_clear"
     ],
     "sv_read_string_20261026": [
         "fourstate_slice_index_domain", "fourstate_slice_index_width",

@@ -880,9 +880,13 @@ class VRestorerClear final {
 public:
     explicit VRestorerClear(T& val)
         : m_ref{val} {
-        std::swap(m_ref, m_saved);
+        using std::swap;
+        swap(m_ref, m_saved);
     }
-    ~VRestorerClear() { std::swap(m_ref, m_saved); }
+    ~VRestorerClear() {
+        using std::swap;
+        swap(m_ref, m_saved);
+    }
     VL_UNCOPYABLE(VRestorerClear);
     // Must be stack allocated
     void* operator new(size_t) = delete;
