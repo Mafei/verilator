@@ -4261,6 +4261,26 @@ class FourstateVisitor final : public VNVisitor {
     }
     void visit(AstCExprUser* const nodep) override { cArgsHandler(nodep->nodesp()); }
     void visit(AstCExpr* const nodep) override { cArgsHandler(nodep->nodesp()); }
+    void visit(AstSFormat* const nodep) override {
+        StmtHelper stmtHelper{*this, nodep};
+        const AstNodeVarRef* const refp = VN_CAST(nodep->lhsp(), NodeVarRef);
+        if (refp && needsSplitting(refp->varp()->dtypep())
+            && refp->varp()->dtypep()->skipRefp()->isIntegralOrPacked()) {
+            AstNodeExpr* const lhsp = nodep->lhsp()->unlinkFrBack();
+            // A whole variable has no destination index or receiver to evaluate twice.
+            // Its storage type determines whether both value and X/Z need writing.
+            setLogicType(lhsp, FOUR_STATE);
+            nodep->lhsp(getFourstateExpressionValue(lhsp));
+            AstNodeExpr* const xzLhsp = getFourstateExpressionXZ(lhsp);
+            // Format arguments can read this same destination, including its old mask.
+            // Clear the mask only after the existing formatter writes known string bytes.
+            addNextCalculation(new AstAssign{
+                nodep->fileline(), xzLhsp,
+                new AstConst{nodep->fileline(), AstConst::DTyped{}, xzLhsp->dtypep()}});
+            pushDeletep(lhsp);
+        }
+        iterateChildren(nodep);
+    }
     void visit(AstSFormatF* const nodep) override {
         for (AstNodeExpr* exprp = nodep->exprsp(); exprp;
              exprp = VN_AS(exprp->nextp(), NodeExpr)) {

@@ -101,6 +101,10 @@ execution controls and reference-only tests are counted separately.
      - partial
      - Fixed unpacked byte literals fill from the declared left bound with zero padding/truncation; packed integral casts retain right alignment. Nonzero/negative bounds and signed/unsigned byte typedefs are covered. Dynamic string-to-container casts are not certified.
      - string_unpacked_literal:78 checks; string_byte:8 strict checks corrected to IEEE1800-2023 5.9, with the prior test and conflict logs preserved
+   * - Packed format destinations
+     - partial
+     - $sformat/$swrite write known character bits and clear X/Z masks of whole packed variables, including task-local buffers, typedef widths29/95/129 and simple packed structs. A destination used as a format input retains its old mask until formatting completes. Two-state bit/string paths have separate controls. Four-state selected, array-element, object-member and concatenation destinations remain unsupported; long-string truncation is outside this acceptance.
+     - fourstate_format_packed:50 assertions across7 profiles
    * - Ancestor task/function lookup
      - partial
      - Per-instance ancestor lookup remains an unresolved binding gap. A shared task pointer cannot safely represent different parent-instance definitions; no generic parent fallback is claimed.
