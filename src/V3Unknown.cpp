@@ -162,6 +162,19 @@ class UnknownVisitor final : public VNVisitor {
         return indexp;
     }
 
+    static AstNodeExpr* indexForArraySelect(AstNodeExpr* const indexp,
+                                            const AstNodeArrayDType* const dtypep) {
+        // The original index is either statically in range or remains in the
+        // complete bounds guard. Only the actual access uses unsigned address bits.
+        // Four-state lowering still needs every original index and X/Z bit.
+        if (v3Global.opt.fourstate()) return indexp;
+        const int addressWidth = V3Number::log2b(dtypep->declRange().hiMaxSelect()) + 1;
+        const int width = std::min(indexp->width(), addressWidth);
+        AstSel* const selp = new AstSel{indexp->fileline(), indexp, 0, width};
+        selp->dtypeSetBitSized(width, VSigning::UNSIGNED);
+        return selp;
+    }
+
     // VISITORS
     void visit(AstNodeModule* nodep) override {
         UINFO(4, " MOD   " << nodep);
@@ -519,10 +532,10 @@ class UnknownVisitor final : public VNVisitor {
             if (V3Unknown::isStaticlyGte(declElementsp->num(), bitp)) {
                 // We don't need to add a conditional; we know the existing expression is ok
                 VL_DO_DANGLING(declElementsp->deleteTree(), declElementsp);
-                nodep->bitp(indexForSelect(bitp));
+                nodep->bitp(indexForArraySelect(bitp, adtypep));
                 return;
             }
-            nodep->bitp(indexForSelect(newExprStmtOrClone(bitp)));
+            nodep->bitp(indexForArraySelect(newExprStmtOrClone(bitp), adtypep));
             AstNodeExpr* condp = new AstGte{nodep->fileline(), declElementsp, bitp};
             // Note below has null backp(); the Edit function knows how to deal with that.
             const AstNodeDType* const nodeDtp = nodep->dtypep()->skipRefp();
