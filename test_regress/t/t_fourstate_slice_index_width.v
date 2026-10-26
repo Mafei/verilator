@@ -12,6 +12,9 @@ module t (
     input logic [1:0] i2,
     input logic [2:0] i3,
     input logic i1,
+    input logic signed [3:0] signed_i4,
+    input logic [7:0] words [1:3],
+    output wire [7:0] signed_word,
     output wire [7:0] byte_read,
     output wire [15:0] byte_plus,
     output wire [15:0] byte_minus,
@@ -26,6 +29,9 @@ module t (
   // verilator lint_off ASCRANGE
   wire [0:3][7:0] ascending = p8;
   // verilator lint_on ASCRANGE
+
+  // Generated declaration-offset subtraction must retain an unsized signed constant.
+  assign signed_word = words[signed_i4];
 
   // Address widths depend on the declared element range, not element bit width.
   assign byte_read = p8[i2];

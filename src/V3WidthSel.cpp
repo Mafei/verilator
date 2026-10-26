@@ -111,11 +111,11 @@ class WidthSelVisitor final : public VNVisitor {
         // Preserve a signed source index through range normalization. An
         // unsigned constant would make the arithmetic unsigned, allowing Width
         // to truncate the index before Unknown checks the complete bounds.
-        if (indexp->isSigned()) {
-            return new AstConst{indexp->fileline(), AstConst::Signed32{}, value};
-        }
-        return new AstConst{indexp->fileline(), AstConst::Unsized32{},
-                            static_cast<uint32_t>(value)};
+        // Keep it unsized so normalization does not demand wider source indices.
+        AstConst* const constantp = new AstConst{indexp->fileline(), AstConst::Unsized32{},
+                                                 static_cast<uint32_t>(value)};
+        constantp->dtypeChgSigned(indexp->isSigned());
+        return constantp;
     }
 
     struct IndexDiagnostic final {
