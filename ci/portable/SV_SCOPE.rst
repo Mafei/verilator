@@ -69,6 +69,10 @@ execution controls and reference-only tests are counted separately.
      - partial
      - RHS, target and index snapshots, delayed task controls and official time-zero non-inlined task repair.
      - nba and sv_controls_20261012; nba_noninlined_await
+   * - Postponed monitors
+     - partial
+     - Once-per-time-step final values and queued monitoron requests, including X/Z and 129-bit arguments. Disabled registration differs from pinned Icarus by an additional OFF14 report; that reference difference remains open. Multiple instances sharing one source monitor site are not certified.
+     - timing/fourstate_monitor_postponed:19 checks each; official sys_monitor_changes; all original gold retained
    * - Repeat event controls
      - partial
      - Packed blocking/NBA counts evaluated once, zero/negative/XZ counts and wide counters. Repeat event triggers/procedural assign remain explicit unsupported cases. Mutually interacting NBA operand side-effect order is not certified.
