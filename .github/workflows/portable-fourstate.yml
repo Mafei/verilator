@@ -282,8 +282,10 @@ jobs:
       - name: Run pinned Icarus defaults and fixed 128 pair in Rocky 8.10
         if: ${{ !cancelled() && hashFiles('bin/verilator_bin') != '' }}
         run: |
+          icarus_expected_head=$(git rev-parse HEAD)
           docker run --rm -e GITHUB_ACTIONS=true -e CC=gcc -e CXX=g++ \
             -e ARTIFACT_UID="$(id -u)" -e ARTIFACT_GID="$(id -g)" \
+            -e ICARUS_EXPECTED_SHA="$icarus_expected_head" \
             -v "$PWD:/work" -w /work rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e bash -c '
               set -e
               publish_icarus_ownership() {
@@ -300,14 +302,19 @@ jobs:
               dnf -y install dnf-plugins-core
               dnf config-manager --set-enabled powertools
               dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
-                autoconf make perl git gperf python3.11 zlib-devel bzip2-devel
+                autoconf make perl git gperf python3.11 zlib-devel bzip2-devel util-linux
               ln -s /usr/bin/python3.11 /usr/local/bin/python3
               source /opt/rh/gcc-toolset-13/enable
               source .ci-venv/bin/activate
               export PATH="/work/.ci-tools/bin:$PATH"
               export CPPFLAGS="-I/work/.ci-tools/include"
-              python3 ci/portable/run_icarus_sweep.py --platform rocky8-x86_64 \
-                --verilator-root /work --expected-verilator-sha "$(git rev-parse HEAD)" \
+              # Run Git and the models as the owner of the mounted checkout.
+              icarus_private_home=$(mktemp -d /tmp/verilator-icarus-home.XXXXXX)
+              chown "$ARTIFACT_UID:$ARTIFACT_GID" "$icarus_private_home"
+              setpriv --reuid "$ARTIFACT_UID" --regid "$ARTIFACT_GID" --clear-groups \
+                env HOME="$icarus_private_home" \
+                python3 ci/portable/run_icarus_sweep.py --platform rocky8-x86_64 \
+                --verilator-root /work --expected-verilator-sha "$ICARUS_EXPECTED_SHA" \
                 --jobs 2 --output pinned-icarus
             '
       - name: Independently verify recorded results
