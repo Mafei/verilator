@@ -390,11 +390,7 @@ class UnknownVisitor final : public VNVisitor {
 
     void visit(AstSel* nodep) override {
         iterateChildren(nodep);
-        const AstNode* const basefromp = nodep->baseFromp(true);
-        const AstNodeVarRef* const varrefp = VN_CAST(basefromp, NodeVarRef);
-        const AstMemberSel* const memberSelp = VN_CAST(basefromp, MemberSel);
-        const bool lvalue = (varrefp && varrefp->access().isWriteOrRW())
-                            || (memberSelp && memberSelp->access().isWriteOrRW());
+        const bool lvalue = nodep->fromp()->isLValue();
         // Four-state reads are checked in V3Fourstate. Writes still need an
         // overlap guard, including the sentinel used for unknown indices.
         if ((!v3Global.opt.fourstate() || lvalue) && !nodep->user1SetOnce()) {
@@ -492,15 +488,7 @@ class UnknownVisitor final : public VNVisitor {
         if (!nodep->user1SetOnce()) {
             UINFOTREE(9, nodep, "", "in");
             // Guard against reading/writing past end of arrays
-            AstNode* const basefromp = nodep->fromp()->baseFromp(true);
-            bool lvalue = false;
-            if (const AstNodeVarRef* const varrefp = VN_CAST(basefromp, NodeVarRef)) {
-                lvalue = varrefp->access().isWriteOrRW();
-            } else if (VN_IS(basefromp, Const)) {
-                // If it's a PARAMETER[bit], then basefromp may be a constant instead of a varrefp
-            } else {
-                // Normally one of above, but might have MEMBERSEL or otherwise
-            }
+            const bool lvalue = nodep->fromp()->isLValue();
             // Find range of dtype we are selecting from
             int declElements = -1;
             AstNodeDType* const dtypep = nodep->fromp()->dtypep()->skipRefp();

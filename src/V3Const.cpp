@@ -1640,19 +1640,7 @@ class ConstVisitor final : public VNVisitor {
         return (VN_IS(nodep->lsbp(), Const) && nodep->lsbConst() == 0
                 && static_cast<int>(nodep->widthConst()) == nodep->fromp()->width());
     }
-    bool operandSelSel(const AstSel* nodep) {
-        if (!v3Global.opt.fourstate() || v3Global.fourstateHandled()
-            || !nodep->isFourstateOrNoDtype()) {
-            return true;
-        }
-        const AstNode* const basep = nodep->fromp()->baseFromp(false);
-        const AstNodeVarRef* const varrefp = VN_CAST(basep, NodeVarRef);
-        const AstMemberSel* const memberp = VN_CAST(basep, MemberSel);
-        if ((varrefp && varrefp->access().isWriteOrRW())
-            || (memberp && memberp->access().isWriteOrRW())) {
-            return true;
-        }
-        // A fully contained constant read cannot expose an adjacent packed element.
+    static bool containedConstantSelect(const AstSel* nodep) {
         const AstConst* const indexp = VN_CAST(nodep->lsbp(), Const);
         if (!indexp || indexp->num().isFourState()
             || (indexp->isSigned() && indexp->num().isNegative())
@@ -1661,6 +1649,16 @@ class ConstVisitor final : public VNVisitor {
         }
         return static_cast<uint64_t>(indexp->toUInt()) + nodep->widthConst()
                <= static_cast<uint64_t>(nodep->fromp()->width());
+    }
+    bool operandSelSel(const AstSel* nodep) {
+        if (!v3Global.opt.fourstate() || v3Global.fourstateHandled()
+            || !nodep->isFourstateOrNoDtype() || nodep->fromp()->isLValue()) {
+            return true;
+        }
+        // Both reads must be contained: a dynamic inner offset could overflow
+        // when combined with an otherwise contained constant outer selection.
+        return containedConstantSelect(nodep)
+               && containedConstantSelect(VN_AS(nodep->fromp(), Sel));
     }
     bool operandSelExtend(AstSel* nodep) {
         if (!m_doV) return false;

@@ -49,14 +49,18 @@ execution controls and reference-only tests are counted separately.
      - partial
      - Public bounds/unknown-index checks and six-lane RAM matrix; not vendor RAM timing or collision modes.
      - fourstate_mem_index, fourstate_array_guard; ram_acceptance.py
-   * - Indexed packed part-select reads
+   * - Packed element and indexed part-select reads
      - partial
-     - Signed and unsigned domains through 95-bit indices, partial overlap, shifted/ascending declarations and +:/-: coordinates. Carry arithmetic preserves the existing index diagnostics. Existing bit-selection and write lowering remain separately bounded.
-     - fourstate_slice_index_domain:3840 checks,80 literal reports,64 complete histories; slice_packed_domain:98 checks,24 reports,4 histories; slice_index_width and bad profiles
+     - Signed and unsigned domains through 95-bit indices, partial overlap, shifted/ascending declarations and +:/-: coordinates. Carry arithmetic preserves the existing index diagnostics, including packed-element multiplication and nested selection without 32-bit offset wrap. Scalar bit-selection and write lowering remain separately bounded.
+     - fourstate_slice_index_domain:3840 checks,80 literal reports,64 complete histories; slice_packed_domain:98 checks,24 reports,4 histories; nested_select:34 checks,8 reports,4 histories; slice_index_width and bad profiles
    * - Clipped partial writes
      - partial
-     - Negative/overlapping/full-outside writes, signed/unsigned wide indices and X/Z suppression. W4 variable +:33 is included directly, without a narrower-width exception.
-     - timing/fourstate_nba_partselect_clip and nba_clip_bounds
+     - Negative/overlapping/full-outside writes, signed/unsigned wide indices and X/Z suppression. W4 variable +:33 is included directly. Signed offsets through supported unpacked bit-struct and class-array fields retain NBA index snapshots; this does not certify unpacked XZ structures. Runtime boundary insertion uses word-wise C++14 operations.
+     - timing/fourstate_nba_partselect_clip, nba_clip_bounds; fourstate_struct_select:1088 checks across widths7/15/31/33/65/95
+   * - Runtime insertion portability
+     - partial
+     - C++14 scalar and word-wise insertion with clipped edges, zero extension and exact same-base buffers. Arbitrary overlapping offset pointers and extreme declaration/index normalization remain outside this acceptance.
+     - runtime_insert.cpp:3296 independent bit-oracle checks; native UBSan and relocated-package smoke
    * - Memory file I/O
      - partial
      - Public read/write, range and expected-error profiles; not every external file format.

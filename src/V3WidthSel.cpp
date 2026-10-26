@@ -44,7 +44,7 @@ class WidthSelVisitor final : public VNVisitor {
     //  on if widthing top-down or just for parameters.
 #define iterateChildren DO_NOT_iterateChildern_IN_V3WidthSel
 
-    bool m_readCoordinate = false;  // Preserve full coordinates for indexed part-select reads
+    bool m_readCoordinate = false;  // Preserve packed element and indexed part-read coordinates
 
     // METHODS
 
@@ -111,7 +111,7 @@ class WidthSelVisitor final : public VNVisitor {
         // Preserve a signed source index through range normalization. An
         // unsigned constant would make the arithmetic unsigned, allowing Width
         // to truncate the index before Unknown checks the complete bounds.
-        if (!v3Global.opt.fourstate() && indexp->isSigned()) {
+        if (indexp->isSigned()) {
             return new AstConst{indexp->fileline(), AstConst::Signed32{}, value};
         }
         return new AstConst{indexp->fileline(), AstConst::Unsized32{},
@@ -749,13 +749,10 @@ public:
     ~WidthSelVisitor() override = default;
     AstNode* mainAcceptEdit(AstNode* nodep) {
         const AstNodePreSel* const selp = VN_AS(nodep, NodePreSel);
-        const AstNode* const basep = selp->fromp()->baseFromp(false);
-        const AstNodeVarRef* const varrefp = VN_CAST(basep, NodeVarRef);
-        const AstMemberSel* const memberp = VN_CAST(basep, MemberSel);
-        const bool writes = (varrefp && varrefp->access().isWriteOrRW())
-                            || (memberp && memberp->access().isWriteOrRW());
-        m_readCoordinate = v3Global.opt.fourstate() && !writes
-                           && (VN_IS(nodep, SelPlus) || VN_IS(nodep, SelMinus));
+        const bool packedElement
+            = VN_IS(nodep, SelBit) && VN_IS(selp->fromp()->dtypep()->skipRefp(), PackArrayDType);
+        m_readCoordinate = v3Global.opt.fourstate() && !selp->fromp()->isLValue()
+                           && (VN_IS(nodep, SelPlus) || VN_IS(nodep, SelMinus) || packedElement);
         return iterateSubtreeReturnEdits(nodep);
     }
 };

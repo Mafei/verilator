@@ -79,7 +79,7 @@ def sv_semantics_wave_evidence(root):
                 "t_fourstate_nba_repeat_control", "t_fourstate_sen_expr", "t_fourstate_sen_iff",
                 "t_timing_nba_partselect_clip", "t_timing_nba_repeat_control",
                 "t_tri_inout_default", "t_fourstate_slice_index_domain",
-                "t_fourstate_slice_packed_domain")
+                "t_fourstate_slice_packed_domain", "t_fourstate_nested_select")
     collections = [(fixture, base / fixture) for fixture in fixtures]
     for fixture, directory in collections:
         for ancestor in (base.parent, base, directory):

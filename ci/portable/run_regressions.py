@@ -198,7 +198,7 @@ GROUPS = {
     "sv_read_string_20261026": [
         "fourstate_slice_index_domain", "fourstate_slice_index_width",
         "fourstate_slice_index_width_bad", "fourstate_slice_packed_domain", "string_byte",
-        "string_unpacked_literal"
+        "string_unpacked_literal", "fourstate_struct_select", "fourstate_nested_select"
     ]
 }
 

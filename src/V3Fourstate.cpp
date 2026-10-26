@@ -1964,11 +1964,7 @@ class FourstateVisitor final : public VNVisitor {
         }();
         const ArrayIndexCapture& capture = getArrayIndexCapture(selp);
         AstNodeExpr* indexp = newArrayIndexValue(selp, capture);
-        const AstNode* const basep = selp->fromp()->baseFromp(false);
-        const AstNodeVarRef* const varrefp = VN_CAST(basep, NodeVarRef);
-        const AstMemberSel* const memberSelp = VN_CAST(basep, MemberSel);
-        const bool lvalue = (varrefp && varrefp->access().isWriteOrRW())
-                            || (memberSelp && memberSelp->access().isWriteOrRW());
+        const bool lvalue = selp->fromp()->isLValue();
         const bool leaf = isIntegralArrayElement(selp);
         if (lvalue || !leaf) {
             AstConst* const invalidp
@@ -2045,11 +2041,7 @@ class FourstateVisitor final : public VNVisitor {
                                                   const bool defaultsToZero) {
         // In two-state mode boundary checks are handled in V3Unknown
         FileLine* const flp = selp->fileline();
-        const AstNode* const basep = selp->fromp()->baseFromp(false);
-        const AstNodeVarRef* const varrefp = VN_CAST(basep, NodeVarRef);
-        const AstMemberSel* const memberSelp = VN_CAST(basep, MemberSel);
-        const bool lvalue = (varrefp && varrefp->access().isWriteOrRW())
-                            || (memberSelp && memberSelp->access().isWriteOrRW());
+        const bool lvalue = selp->fromp()->isLValue();
         if (lvalue) {
             AstNodeExpr* const lsbp = selp->lsbp()->unlinkFrBack();
             AstNodeExpr* const fromp = selp->fromp()->unlinkFrBack();

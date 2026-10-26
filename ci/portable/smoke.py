@@ -3,6 +3,7 @@
 """Run timing and C++14 no-timing models using only a relocated installation."""
 import os
 import pathlib
+import shlex
 import subprocess
 import sys
 
@@ -36,7 +37,30 @@ runtime = subprocess.run([str(runtime_model)], text=True, stdout=subprocess.PIPE
 print(runtime.stdout)
 assert runtime.returncode == 0 and runtime.stdout.splitlines().count(
     'CXX14_NO_TIMING_FOURSTATE_RUNTIME_PASS') == 1, runtime.returncode
+runtime_root = pathlib.Path(
+    subprocess.check_output([compiler, '--getenv', 'VERILATOR_ROOT'], text=True, env=env).strip())
+insert_model = work / 'runtime_insert'
+subprocess.run([
+    *shlex.split(env.get('CXX', 'c++')), '-std=c++14', '-O1', '-I',
+    str(runtime_root / 'include'),
+    str(pathlib.Path(__file__).with_name('runtime_insert.cpp')),
+    *(['-static-libstdc++', '-static-libgcc'] if sys.platform.startswith('linux') else []), '-o',
+    str(insert_model)
+],
+               check=True,
+               cwd=work,
+               env=env)
+insert = subprocess.run([str(insert_model)],
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        env=env)
+print(insert.stdout)
+assert insert.returncode == 0 and insert.stdout.splitlines() == ['CXX14_INSERT_PASS checks=3296'
+                                                                 ], insert.returncode
 if sys.platform.startswith('linux'):
     subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name('check_elf.py')), str(model)], check=True)
     subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name('check_elf.py')),
                     str(runtime_model)], check=True)
+    subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name('check_elf.py')),
+                    str(insert_model)], check=True)
