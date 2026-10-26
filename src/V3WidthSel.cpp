@@ -107,19 +107,24 @@ class WidthSelVisitor final : public VNVisitor {
         return FromData(errp, ddtypep, fromRange);
     }
 
+    static AstNodeExpr* newSignedRangeIndex(AstNodeExpr* const indexp) {
+        // Declaration offsets require at least 32 bits, even for negative constants.
+        if (!indexp->isSigned() || indexp->width() >= VL_IDATASIZE) return indexp;
+        AstNodeExpr* const extendedp = new AstExtendS{indexp->fileline(), indexp, VL_IDATASIZE};
+        extendedp->dtypeChgSigned(true);
+        return extendedp;
+    }
+
     static AstConst* newRangeConst(AstNodeExpr* const indexp, int32_t value) {
         // Preserve a signed source index through range normalization. An
         // unsigned constant would make the arithmetic unsigned, allowing Width
         // to truncate the index before Unknown checks the complete bounds.
-        // Match an exactly 32-bit index without a synthetic width diagnostic.
-        if (indexp->isSigned() && indexp->width() == VL_EDATASIZE) {
+        if (indexp->isSigned()) {
+            if (indexp->width() > VL_IDATASIZE) return newCoordinateConst(indexp, value);
             return new AstConst{indexp->fileline(), AstConst::Signed32{}, value};
         }
-        // Let context size constants for narrower or wider indices.
-        AstConst* const constantp = new AstConst{indexp->fileline(), AstConst::Unsized32{},
-                                                 static_cast<uint32_t>(value)};
-        constantp->dtypeChgSigned(indexp->isSigned());
-        return constantp;
+        return new AstConst{indexp->fileline(), AstConst::Unsized32{},
+                            static_cast<uint32_t>(value)};
     }
 
     struct IndexDiagnostic final {
@@ -194,7 +199,9 @@ class WidthSelVisitor final : public VNVisitor {
                 = new AstSub{lhsp->fileline(), lhsp, newCoordinateConst(lhsp, rhs)};
             newp->dtypeFrom(lhsp);
             return newp;
-        } else if (!v3Global.opt.fourstate() && lhsp->isSigned()) {
+        }
+        lhsp = newSignedRangeIndex(lhsp);
+        if (!v3Global.opt.fourstate() && lhsp->isSigned()) {
             AstNodeExpr* const newp = new AstSub{lhsp->fileline(), lhsp, newRangeConst(lhsp, rhs)};
             newp->dtypeFrom(lhsp);
             return newp;
@@ -220,7 +227,7 @@ class WidthSelVisitor final : public VNVisitor {
     AstNodeExpr* newSubNeg(int32_t lhs, AstNodeExpr* rhsp, bool packedCoordinate = false) {
         // Return lhs-rhs
         const bool widened = m_readCoordinate && packedCoordinate;
-        if (widened) rhsp = newRangeCoordinate(rhsp);
+        rhsp = widened ? newRangeCoordinate(rhsp) : newSignedRangeIndex(rhsp);
         AstConst* const constantp
             = widened ? newCoordinateConst(rhsp, lhs) : newRangeConst(rhsp, lhs);
         // We must make sure sub gets sign of original value

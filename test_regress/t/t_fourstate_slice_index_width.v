@@ -16,7 +16,9 @@ module t (
     input logic signed [30:0] signed_i31,
     input logic signed [31:0] signed_i32,
     input logic [7:0] words [1:3],
+    input logic [7:0] negative_words [-2:1],
     output wire [7:0] signed_word,
+    output wire [7:0] negative_word,
     output wire [7:0] signed_word31,
     output wire [7:0] signed_word32,
     output wire [7:0] byte_read,
@@ -34,8 +36,9 @@ module t (
   wire [0:3][7:0] ascending = p8;
   // verilator lint_on ASCRANGE
 
-  // Generated declaration-offset subtraction must retain an unsized signed constant.
+  // Generated declaration-offset arithmetic must not widen a source implicitly.
   assign signed_word = words[signed_i4];
+  assign negative_word = negative_words[signed_i4];
   // Exercise the narrow side and exact width of the sized normalization constant.
   assign signed_word31 = words[signed_i31];
   assign signed_word32 = words[signed_i32];
