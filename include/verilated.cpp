@@ -2066,6 +2066,18 @@ void _vl_string_to_vint(int obits, void* destp, size_t srclen, const char* srcp)
     for (; i < bytes; ++i) *op++ = 0;
 }
 
+static void vl_sformat_to_vint(int obits, void* destp, size_t srclen, const char* srcp) VL_MT_SAFE {
+    const size_t bytes = VL_BYTES_I(obits);
+    // Packed formatted output keeps the rightmost characters when the destination is shorter.
+    if (srclen > bytes) srcp += srclen - bytes;
+    _vl_string_to_vint(obits, destp, srclen, srcp);
+    const int tailBits = obits % VL_BYTESIZE;
+    if (tailBits) {
+        CData* const lastp = static_cast<CData*>(destp) + bytes - 1;
+        *lastp = static_cast<CData>(*lastp & VL_MASK_I(tailBits));
+    }
+}
+
 static IData getLine(std::string& str, IData fpi, size_t maxLen) VL_MT_SAFE {
     str.clear();
 
@@ -2143,7 +2155,7 @@ void VL_SFORMAT_NX(int obits, CData& destr, const std::string& format, int argc,
     _vl_vsformat(t_output, format, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, &destr, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, &destr, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(int obits, SData& destr, const std::string& format, int argc, ...) VL_MT_SAFE {
@@ -2153,7 +2165,7 @@ void VL_SFORMAT_NX(int obits, SData& destr, const std::string& format, int argc,
     _vl_vsformat(t_output, format, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, &destr, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, &destr, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(int obits, IData& destr, const std::string& format, int argc, ...) VL_MT_SAFE {
@@ -2163,7 +2175,7 @@ void VL_SFORMAT_NX(int obits, IData& destr, const std::string& format, int argc,
     _vl_vsformat(t_output, format, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, &destr, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, &destr, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(int obits, QData& destr, const std::string& format, int argc, ...) VL_MT_SAFE {
@@ -2173,7 +2185,7 @@ void VL_SFORMAT_NX(int obits, QData& destr, const std::string& format, int argc,
     _vl_vsformat(t_output, format, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, &destr, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, &destr, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(int obits, EData* destp, const std::string& format, int argc, ...) VL_MT_SAFE {
@@ -2183,7 +2195,7 @@ void VL_SFORMAT_NX(int obits, EData* destp, const std::string& format, int argc,
     _vl_vsformat(t_output, format, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, destp, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, destp, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(std::string& output, const std::string& format, int argc, ...) VL_MT_SAFE {
@@ -2236,7 +2248,7 @@ void VL_SFORMAT_NX(int obits, CData& destr, const char* formatp, int argc, ...) 
     _vl_vsformat(t_output, formatp, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, &destr, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, &destr, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(int obits, SData& destr, const char* formatp, int argc, ...) VL_MT_SAFE {
@@ -2246,7 +2258,7 @@ void VL_SFORMAT_NX(int obits, SData& destr, const char* formatp, int argc, ...) 
     _vl_vsformat(t_output, formatp, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, &destr, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, &destr, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(int obits, IData& destr, const char* formatp, int argc, ...) VL_MT_SAFE {
@@ -2256,7 +2268,7 @@ void VL_SFORMAT_NX(int obits, IData& destr, const char* formatp, int argc, ...) 
     _vl_vsformat(t_output, formatp, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, &destr, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, &destr, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(int obits, QData& destr, const char* formatp, int argc, ...) VL_MT_SAFE {
@@ -2266,7 +2278,7 @@ void VL_SFORMAT_NX(int obits, QData& destr, const char* formatp, int argc, ...) 
     _vl_vsformat(t_output, formatp, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, &destr, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, &destr, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(int obits, EData* destp, const char* formatp, int argc, ...) VL_MT_SAFE {
@@ -2276,7 +2288,7 @@ void VL_SFORMAT_NX(int obits, EData* destp, const char* formatp, int argc, ...) 
     _vl_vsformat(t_output, formatp, argc, ap);
     va_end(ap);
 
-    _vl_string_to_vint(obits, destp, t_output.length(), t_output.c_str());
+    vl_sformat_to_vint(obits, destp, t_output.length(), t_output.c_str());
 }
 
 void VL_SFORMAT_NX(std::string& output, const char* formatp, int argc, ...) VL_MT_SAFE {

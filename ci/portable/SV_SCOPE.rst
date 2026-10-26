@@ -103,8 +103,8 @@ execution controls and reference-only tests are counted separately.
      - string_unpacked_literal:78 checks; string_byte:8 strict checks corrected to IEEE1800-2023 5.9, with the prior test and conflict logs preserved
    * - Packed format destinations
      - partial
-     - $sformat/$swrite write known character bits and clear X/Z masks of whole packed variables, including task-local buffers, typedef widths29/95/129 and simple packed structs. A destination used as a format input retains its old mask until formatting completes. Two-state bit/string paths have separate controls. Four-state selected, array-element, object-member and concatenation destinations remain unsupported; long-string truncation is outside this acceptance.
-     - fourstate_format_packed:50 assertions across7 profiles
+     - $sformat/$swrite write known character bits and clear X/Z masks of whole packed variables, including task-local buffers, typedef widths29/95/129 and simple packed structs. A destination used as a format input retains its old mask until formatting completes. Two-state bit/string paths have separate controls. Four-state selected, array-element, object-member and concatenation destinations remain unsupported. Separate fourstate_format_trunc C++14/two-state/four-state controls cover packed suffix truncation and partial-byte masking; real default field widths and file-I/O conversion behavior are outside this change.
+     - fourstate_format_packed:50 assertions across7 profiles; fourstate_format_trunc:182 checks (146 C++14 runtime,18 default two-state,18 four-state)
    * - Ancestor task/function lookup
      - partial
      - Per-instance ancestor lookup remains an unresolved binding gap. A shared task pointer cannot safely represent different parent-instance definitions; no generic parent fallback is claimed.
