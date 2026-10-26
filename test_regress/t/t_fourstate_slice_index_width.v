@@ -15,12 +15,10 @@ module t (
     input logic signed [3:0] signed_i4,
     input logic signed [30:0] signed_i31,
     input logic signed [31:0] signed_i32,
-    input logic signed [32:0] signed_i33,
     input logic [7:0] words [1:3],
     output wire [7:0] signed_word,
     output wire [7:0] signed_word31,
     output wire [7:0] signed_word32,
-    output wire [7:0] signed_word33,
     output wire [7:0] byte_read,
     output wire [15:0] byte_plus,
     output wire [15:0] byte_minus,
@@ -38,10 +36,9 @@ module t (
 
   // Generated declaration-offset subtraction must retain an unsized signed constant.
   assign signed_word = words[signed_i4];
-  // Exercise both sides of the sized normalization constant's 32-bit threshold.
+  // Exercise the narrow side and exact width of the sized normalization constant.
   assign signed_word31 = words[signed_i31];
   assign signed_word32 = words[signed_i32];
-  assign signed_word33 = words[signed_i33];
 
   // Address widths depend on the declared element range, not element bit width.
   assign byte_read = p8[i2];

@@ -11,11 +11,15 @@ import vltest_bootstrap
 
 test.scenarios('vlt')
 test.lint(fails=True, verilator_flags2=['--fourstate', '-Wno-FUTURE', '--debug-check'])
-test.file_grep_count(test.compile_log_filename, r'^%Warning-', 5)
+test.file_grep_count(test.compile_log_filename, r'^%Warning-', 6)
 test.file_grep_count(test.compile_log_filename, r'^%Error', 1)
-test.file_grep(test.compile_log_filename, r'^%Error: Exiting due to 5 warning\(s\)$')
+test.file_grep(test.compile_log_filename, r'^%Error: Exiting due to 6 warning\(s\)$')
 test.file_grep_count(test.compile_log_filename, r'%Warning-WIDTHEXPAND:', 2)
-test.file_grep_count(test.compile_log_filename, r'%Warning-WIDTHTRUNC:', 3)
+test.file_grep_count(test.compile_log_filename, r'%Warning-WIDTHTRUNC:', 4)
+test.file_grep_count(
+    test.compile_log_filename,
+    r'%Warning-WIDTHTRUNC: [^\n]*: Bit extraction of array\[3:1\] requires 2 bit index, not 33 bits\.',
+    1)
 test.file_grep_count(test.compile_log_filename, r'requires 7 bit index, not 4 bits\.', 2)
 test.file_grep_count(test.compile_log_filename, r'requires 7 bit index, not 64 bits\.', 3)
 test.passes()

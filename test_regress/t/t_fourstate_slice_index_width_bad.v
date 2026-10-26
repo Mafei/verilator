@@ -9,11 +9,16 @@ module t (
     input logic [3:0][7:0] packed_bytes,
     input logic [3:0] i4,
     input logic [63:0] i64,
+    input logic signed [32:0] signed_i33,
+    input logic [7:0] words [1:3],
+    output wire [7:0] signed_word33,
     output wire [2:0] direct4, minus4, shifted4,
     output wire [2:0] direct64, minus64, shifted64, constant4,
     output wire [7:0] packed4, packed64
 );
   wire [98:4] shifted = data;
+  // Retain the original too-wide source index diagnostic after normalization.
+  assign signed_word33 = words[signed_i33];
   // The original diagnostic expands the direct narrow index.
   assign direct4 = data[i4+:3];
   // Nonconstant range subtraction previously used 32-bit arithmetic and its exemption.
