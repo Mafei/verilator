@@ -139,6 +139,7 @@ for line in subprocess.check_output(['otool','-L',binary],text=True).splitlines(
     assert path.startswith(('/usr/lib/','/System/Library/')), path
 PY
 fi
+cat out/dependencies.txt
 cp out/dependencies.txt stage/opt/verilator-fourstate/
 tar -czf "out/verilator-fourstate-$platform.tar.gz" -C stage/opt verilator-fourstate
 if [[ $platform == macos-arm64 ]]; then
