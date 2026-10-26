@@ -196,10 +196,10 @@ GROUPS = {
         "tri_struct", "tri_top_en_out", "tri_pullvec"
     ],
     "optimizer_alias_20261026": ["opt_merge_cond", "opt_merge_cond_member"],
-    # Official fixes through241e45b9: writable fork args, scheduler ready and monitor slots.
+    # Official fixes throughbe33a0f6; sampler positives need an available solver.
     "upstream_late_20261026": [
         "fork_taskarg", "timing_sched_ready", "sys_monitor_changes", "opt_reloop_inlined",
-        "opt_expand_keep_widths"
+        "opt_expand_keep_widths", "constraint_rand_sampler_bad", "constraint_rand_sampler_env_bad"
     ],
     "sv_read_string_20261026": [
         "fourstate_slice_index_domain", "fourstate_slice_index_width",
