@@ -208,7 +208,8 @@ class SVSemanticsWaveEvidenceTest(unittest.TestCase):
         fixtures = ("t_fourstate_inout_default", "t_fourstate_nba_partselect_clip",
                     "t_fourstate_nba_repeat_control", "t_fourstate_sen_expr",
                     "t_fourstate_sen_iff", "t_timing_nba_partselect_clip",
-                    "t_timing_nba_repeat_control", "t_tri_inout_default")
+                    "t_timing_nba_repeat_control", "t_tri_inout_default",
+                    "t_fourstate_slice_index_domain", "t_fourstate_slice_packed_domain")
         self.paths = [
             self.root / "test_regress/obj_vlt" / fixture / "simx.vcd" for fixture in fixtures
         ]
@@ -225,10 +226,10 @@ class SVSemanticsWaveEvidenceTest(unittest.TestCase):
             log_evidence.sv_semantics_wave_evidence(self.root)
         return output.getvalue()
 
-    def test_all_eight_profiles_preserve_complete_bytes(self):
+    def test_all_ten_profiles_preserve_complete_bytes(self):
         console = self.emit()
         result = json.loads((self.root / "out/sv-semantics-wave-evidence.json").read_text())
-        self.assertEqual(len(result["records"]), 8)
+        self.assertEqual(len(result["records"]), 10)
         self.assertEqual(result["total_bytes"], sum(path.stat().st_size for path in self.paths))
         self.assertEqual(json.loads(console.removeprefix("SV_SEMANTICS_WAVE_BYTES ")), result)
         for record, path in zip(result["records"], self.paths):

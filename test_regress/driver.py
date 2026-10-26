@@ -2572,17 +2572,13 @@ class VlTest:
         l1s = f1.readlines()
         l2s = f2.readlines() if f2 else []
         if normalize_enum_hash:
-            # Enum type hashes vary with host-dependent dtype hashing. Preserve
-            # distinct hash identities, all references, and the numeric suffix.
-            hashes = {}
-
-            def enum_hash(match):
-                value = match.group(1)
-                if value not in hashes:
-                    hashes[value] = len(hashes)
-                return '__Venum_hHASH' + str(hashes[value])
-
-            l1s = [re.sub(r'\b__Venum_h([0-9a-f]{8})(?=__\d+\b)', enum_hash, line) for line in l1s]
+            # Keep the existing option name while also handling repeat-counter
+            # hashes. Both files retain complete identifier-binding structure.
+            normalizer = runpy.run_path(
+                os.path.join(os.path.dirname(__file__), 'vltest_generated_ids.py'))[
+                    'normalize_generated_identifiers']
+            l1s = normalizer(''.join(l1s))[0].splitlines(keepends=True)
+            l2s = normalizer(''.join(l2s))[0].splitlines(keepends=True)
         # print(" rawGOT="+pformat(l1s)+"\n rawEXP="+pformat(l2s))
         # With VERILATOR_TESTS_OBJ_ROOT, obj_dir is a symlink, and Verilator resolves
         # symlinks when making paths relative to obj_dir. Map those paths back to what

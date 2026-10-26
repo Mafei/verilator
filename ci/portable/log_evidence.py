@@ -6,6 +6,7 @@
 import hashlib
 import json
 import re
+import runpy
 import sys
 from pathlib import Path
 
@@ -24,33 +25,19 @@ def compiler_evidence(root):
 
 
 def enum_evidence(path, root):
-    """Normalize only enum type hashes, preserving suffixes and alias identity."""
+    """Record enum/counter hashes with the harness's exact normalization rules."""
     raw = path.read_bytes()
-    identities = {}
-
-    def replace(match):
-        original = match.group(1)
-        if original not in identities:
-            identities[original] = len(identities)
-        return b"__Venum_hHASH" + str(identities[original]).encode("ascii")
-
-    normalized = re.sub(rb"\b__Venum_h([0-9a-f]{8})(?=__\d+\b)", replace, raw)
+    normalizer = runpy.run_path(
+        Path(__file__).resolve().parents[2] /
+        'test_regress/vltest_generated_ids.py')['normalize_generated_identifiers']
+    normalized, tokens, identities = normalizer(raw.decode('latin-1'))
     return {
-        "path":
-        str(path.relative_to(root)),
-        "raw_sha256":
-        hashlib.sha256(raw).hexdigest(),
-        "normalized_sha256":
-        hashlib.sha256(normalized).hexdigest(),
-        "raw_tokens":
-        list(
-            dict.fromkeys(
-                token.decode("ascii")
-                for token in re.findall(rb"\b__Venum_h[0-9a-f]{8}__\d+\b", raw))),
-        "identities": {
-            original.decode("ascii"): "HASH" + str(index)
-            for original, index in identities.items()
-        }
+        "path": str(path.relative_to(root)),
+        "raw_sha256": hashlib.sha256(raw).hexdigest(),
+        "normalized_sha256": hashlib.sha256(normalized.encode('latin-1')).hexdigest(),
+        "raw_tokens": tokens,
+        "identities": identities.get('__Venum_h', {}),
+        "generated_identities": identities
     }
 
 
@@ -86,12 +73,13 @@ def semantic_wave_evidence(root):
 
 
 def sv_semantics_wave_evidence(root):
-    """Preserve all eight new semantic profiles, rejecting partial or extra waves."""
+    """Preserve complete semantic profiles, rejecting partial or extra waves."""
     base = root / "test_regress/obj_vlt"
     fixtures = ("t_fourstate_inout_default", "t_fourstate_nba_partselect_clip",
                 "t_fourstate_nba_repeat_control", "t_fourstate_sen_expr", "t_fourstate_sen_iff",
                 "t_timing_nba_partselect_clip", "t_timing_nba_repeat_control",
-                "t_tri_inout_default")
+                "t_tri_inout_default", "t_fourstate_slice_index_domain",
+                "t_fourstate_slice_packed_domain")
     collections = [(fixture, base / fixture) for fixture in fixtures]
     for fixture, directory in collections:
         for ancestor in (base.parent, base, directory):

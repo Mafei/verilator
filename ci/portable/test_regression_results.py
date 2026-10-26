@@ -439,7 +439,7 @@ class LogEvidenceTest(unittest.TestCase):
 
 
 class EnumHashTest(unittest.TestCase):
-    """Ensure enum hash normalization preserves identity and structure."""
+    """Ensure generated hash normalization preserves identity and SV payloads."""
 
     @classmethod
     def setUpClass(cls):
@@ -482,6 +482,63 @@ class EnumHashTest(unittest.TestCase):
         self.assertTrue(self.compare(actual, golden))
         self.assertFalse(self.compare(actual.replace("87654321", "123abcde"), golden))
         self.assertFalse(self.compare(actual.replace("123abcde__1", "87654321__1"), golden))
+
+    def test_repeat_counter_hashes_on_both_sides_preserve_values_and_bindings(self):
+        actual = ("logic [6:0] __VrepeatCount_h55eae1c7__2;\n"
+                  "__VrepeatCount_h55eae1c7__2 = 7'h25;\n")
+        golden = actual.replace('55eae1c7', 'a04b7265')
+        self.assertTrue(self.compare(actual, golden))
+        self.assertFalse(self.compare(actual, golden, normalize=False))
+        self.assertFalse(self.compare(actual.replace("7'h25", "7'h24"), golden))
+        self.assertFalse(self.compare(actual.replace('[6:0]', '[7:0]'), golden))
+        self.assertFalse(self.compare(actual.replace('__2 =', '__1 ='), golden))
+        self.assertFalse(self.compare(actual.replace('h55eae1c7__2 =', 'h123abcde__2 ='), golden))
+
+    def test_hash_named_payloads_comments_and_escaped_identifiers_are_unchanged(self):
+        payload = ('"__VrepeatCount_h123abcde__2";\n'
+                   '// __VrepeatCount_h123abcde__2\n'
+                   '/* __VrepeatCount_h123abcde__2\n second line */\n'
+                   '\\__VrepeatCount_h123abcde__2 ;\n'
+                   "32'h123abcde;\n")
+        actual = '__VrepeatCount_h11111111__2;\n' + payload
+        golden = '__VrepeatCount_h22222222__2;\n' + payload
+        self.assertTrue(self.compare(actual, golden))
+        for old, new in (('"__VrepeatCount_h123abcde__2"', '"__VrepeatCount_h87654321__2"'),
+                         ('// __VrepeatCount_h123abcde__2', '// __VrepeatCount_h87654321__2'),
+                         ('/* __VrepeatCount_h123abcde__2', '/* __VrepeatCount_h87654321__2'),
+                         ('\\__VrepeatCount_h123abcde__2 ',
+                          '\\__VrepeatCount_h87654321__2 '), ("32'h123abcde", "32'h87654321")):
+            with self.subTest(payload=old):
+                self.assertFalse(self.compare(actual.replace(old, new), golden))
+
+    def test_mixed_generated_namespaces_preserve_each_identity_graph(self):
+        actual = ('__Venum_h123abcde__0; __Venum_h123abcde__1;\n'
+                  '__VrepeatCount_h123abcde__0; __VrepeatCount_h87654321__1;\n')
+        golden = ('__Venum_hHASH0__0; __Venum_hHASH0__1;\n'
+                  '__VrepeatCount_h11111111__0; __VrepeatCount_h22222222__1;\n')
+        self.assertTrue(self.compare(actual, golden))
+        self.assertFalse(self.compare(actual.replace('h87654321', 'h123abcde'), golden))
+        self.assertFalse(self.compare(actual.replace('__VrepeatCount_', '__Vother_'), golden))
+
+    def test_evidence_and_comparator_use_identical_counter_normalization(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tree = root / 'width.tree.v'
+            raw = ('__VrepeatCount_h123abcde__0; __VrepeatCount_h123abcde__1;\n'
+                   '__VrepeatCount_h87654321__0; "__VrepeatCount_h123abcde__0";\n')
+            tree.write_text(raw)
+            first = log_evidence.enum_evidence(tree, root)
+            changed = raw.replace('h123abcde__0;', 'h11111111__0;').replace(
+                'h123abcde__1;', 'h11111111__1;').replace('h87654321__0;', 'h22222222__0;')
+            tree.write_text(changed)
+            second = log_evidence.enum_evidence(tree, root)
+            self.assertTrue(self.compare(raw, changed))
+            self.assertNotEqual(first['raw_sha256'], second['raw_sha256'])
+            self.assertEqual(first['normalized_sha256'], second['normalized_sha256'])
+            self.assertEqual(first['generated_identities']['__VrepeatCount_h'], {
+                '123abcde': 'HASH0',
+                '87654321': 'HASH1'
+            })
 
 
 if __name__ == "__main__":

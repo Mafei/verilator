@@ -16,14 +16,14 @@ module t;
   byte bl[0:3] = "lo2";
 
   initial begin
-    `checkh(bh[0], "2");
-    `checkh(bh[1], "i");
-    `checkh(bh[2], "h");
-    `checkh(bh[3], 0);
-    `checkh(bl[0], 0);
-    `checkh(bl[1], "l");
-    `checkh(bl[2], "o");
-    `checkh(bl[3], "2");
+    `checkh(bh[0], 0);
+    `checkh(bh[1], "2");
+    `checkh(bh[2], "i");
+    `checkh(bh[3], "h");
+    `checkh(bl[0], "l");
+    `checkh(bl[1], "o");
+    `checkh(bl[2], "2");
+    `checkh(bl[3], 0);
     $write("*-* All Finished *-*\n");
     $finish;
   end

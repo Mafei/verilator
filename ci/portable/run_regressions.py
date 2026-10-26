@@ -193,7 +193,12 @@ GROUPS = {
         "tri_proc_reassign", "tri_proc_reassign_timing", "tri_various", "tri_inout", "tri_inz",
         "tri_struct", "tri_top_en_out", "tri_pullvec"
     ],
-    "optimizer_alias_20261026": ["opt_merge_cond", "opt_merge_cond_member"]
+    "optimizer_alias_20261026": ["opt_merge_cond", "opt_merge_cond_member"],
+    "sv_read_string_20261026": [
+        "fourstate_slice_index_domain", "fourstate_slice_index_width",
+        "fourstate_slice_index_width_bad", "fourstate_slice_packed_domain", "string_byte",
+        "string_unpacked_literal"
+    ]
 }
 
 

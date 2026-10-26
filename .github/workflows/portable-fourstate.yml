@@ -82,6 +82,10 @@ jobs:
             test_regress/obj_vlt/t_tri_inout_default/*.status
             test_regress/obj_vlt/t_fourstate_inout_default/simx.vcd
             test_regress/obj_vlt/t_fourstate_nba_partselect_clip/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_index_domain/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_packed_domain/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_index_width/*_width.tree.json
+            test_regress/obj_vlt/t_fourstate_slice_index_width/*_width.tree
             test_regress/obj_vlt/t_fourstate_nba_repeat_control/simx.vcd
             test_regress/obj_vlt/t_fourstate_sen_expr/simx.vcd
             test_regress/obj_vlt/t_fourstate_sen_iff/simx.vcd
@@ -366,6 +370,10 @@ jobs:
             test_regress/obj_vlt/t_tri_inout_default/*.status
             test_regress/obj_vlt/t_fourstate_inout_default/simx.vcd
             test_regress/obj_vlt/t_fourstate_nba_partselect_clip/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_index_domain/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_packed_domain/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_index_width/*_width.tree.json
+            test_regress/obj_vlt/t_fourstate_slice_index_width/*_width.tree
             test_regress/obj_vlt/t_fourstate_nba_repeat_control/simx.vcd
             test_regress/obj_vlt/t_fourstate_sen_expr/simx.vcd
             test_regress/obj_vlt/t_fourstate_sen_iff/simx.vcd

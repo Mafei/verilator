@@ -4202,6 +4202,8 @@ class AstSel final : public AstNodeBiop {
     // @astgen alias op2 := lsbp
     VNumRange m_declRange;  // Range of the 'from' array if isRanged() is set, else invalid
     int m_declElWidth;  // If a packed array, the number of bits per element
+    int m_declIndexWidth = 0;  // Diagnostic index width before carry arithmetic
+    int m_declIndexWidthMin = 0;  // Diagnostic minimum width before carry arithmetic
     // Selection width (!= this->width() from V3Clean onwards, != this->widthMin() in V3Width)
     int m_widthConst;
 
@@ -4250,6 +4252,10 @@ public:
     VNumRange& declRange() VL_MT_STABLE { return m_declRange; }
     const VNumRange& declRange() const VL_MT_STABLE { return m_declRange; }
     void declRange(const VNumRange& flag) { m_declRange = flag; }
+    int declIndexWidth() const { return m_declIndexWidth; }
+    void declIndexWidth(int value) { m_declIndexWidth = value; }
+    int declIndexWidthMin() const { return m_declIndexWidthMin; }
+    void declIndexWidthMin(int value) { m_declIndexWidthMin = value; }
     int declElWidth() const { return m_declElWidth; }
     void declElWidth(int flag) { m_declElWidth = flag; }
 };

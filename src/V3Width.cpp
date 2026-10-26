@@ -1300,18 +1300,23 @@ class WidthVisitor final : public VNVisitor {
                 nodep->lsbp()->dtypep()->isFourstate());
             userIterateAndNext(nodep->fromp(), WidthVP{SELF, FINAL}.p());
             userIterateAndNext(nodep->lsbp(), WidthVP{SELF, FINAL}.p());
-            if (widthBad(nodep->lsbp(), selwidthDTypep) && nodep->lsbp()->width() != 32) {
+            // Keep diagnostics from normalization before introducing carry bits.
+            const int diagnosticWidth
+                = nodep->declIndexWidth() ? nodep->declIndexWidth() : nodep->lsbp()->width();
+            const int diagnosticWidthMin
+                = nodep->declIndexWidth() ? nodep->declIndexWidthMin() : nodep->lsbp()->widthMin();
+            if (widthBad(nodep->lsbp(), selwidthDTypep, diagnosticWidth, diagnosticWidthMin)
+                && diagnosticWidth != VL_IDATASIZE) {
                 if (!nodep->fileline()->warnIsOff(V3ErrorCode::WIDTH)) {
-                    nodep->v3widthWarn(
-                        (selwidth / elw), (nodep->lsbp()->width() / elw),
-                        "Bit extraction of var["
-                            << (frommsb / elw) << ":" << (fromlsb / elw) << "] requires "
-                            << (selwidth / elw) << " bit index, not "
-                            << (nodep->lsbp()->width() / elw)
-                            << (nodep->lsbp()->width() != nodep->lsbp()->widthMin()
-                                    ? " or " + cvtToStr(nodep->lsbp()->widthMin() / elw)
-                                    : "")
-                            << " bits.");
+                    nodep->v3widthWarn((selwidth / elw), (diagnosticWidth / elw),
+                                       "Bit extraction of var["
+                                           << (frommsb / elw) << ":" << (fromlsb / elw)
+                                           << "] requires " << (selwidth / elw)
+                                           << " bit index, not " << (diagnosticWidth / elw)
+                                           << (diagnosticWidth != diagnosticWidthMin
+                                                   ? " or " + cvtToStr(diagnosticWidthMin / elw)
+                                                   : "")
+                                           << " bits.");
                     UINFO(1, "    Related node: " << nodep);
                 }
             }
@@ -9632,24 +9637,30 @@ class WidthVisitor final : public VNVisitor {
     //----------------------------------------------------------------------
     // LOWER LEVEL WIDTH METHODS  (none iterate)
 
-    bool widthBad(AstNode* nodep, AstNodeDType* expDTypep) {
+    bool widthBad(AstNode* nodep, AstNodeDType* expDTypep, int actualWidth = 0,
+                  int actualWidthMin = 0) {
         const int expWidth = expDTypep->width();
         int expWidthMin = expDTypep->widthMin();
         UASSERT_OBJ(nodep->dtypep(), nodep,
                     "Under node " << nodep->prettyTypeName()
                                   << " has no dtype?? Missing Visitor func?");
+        if (!actualWidth) {
+            actualWidth = nodep->width();
+            actualWidthMin = nodep->widthMin();
+        }
         if (expDTypep->basicp()->untyped() || nodep->dtypep()->basicp()->untyped()) return false;
         // During DepGraph execution, expected width may be 0 if the type hasn't been
-        UASSERT_OBJ(nodep->width() != 0, nodep,
+        UASSERT_OBJ(actualWidth != 0, nodep,
                     "Under node " << nodep->prettyTypeName()
                                   << " has no expected width?? Missing Visitor func?");
         UASSERT_OBJ(expWidth != 0, nodep,
                     "Node " << nodep->prettyTypeName()
                             << " has no expected width?? Missing Visitor func?");
         if (expWidthMin == 0) expWidthMin = expWidth;
-        if (nodep->dtypep()->width() == expWidth) return false;
-        if (nodep->dtypep()->widthSized() && nodep->width() != expWidthMin) return true;
-        if (!nodep->dtypep()->widthSized() && nodep->widthMin() > expWidthMin) return true;
+        if (actualWidth == expWidth) return false;
+        const bool actualSized = !actualWidthMin || actualWidthMin == actualWidth;
+        if (actualSized && actualWidth != expWidthMin) return true;
+        if (!actualSized && actualWidthMin > expWidthMin) return true;
         return false;
     }
 
@@ -10076,16 +10087,21 @@ class WidthVisitor final : public VNVisitor {
                         AstConsArray* newp = new AstConsArray{
                             constp->fileline(), lhsDTypep,
                             new AstConst{constp->fileline(), AstConst::WidthedValue{}, 8, 0}};
+                        const int stringBytes = constp->num().width() / 8;
                         for (const int aindex : arrayp->declRange().seqLoToHi()) {
-                            int cindex = arrayp->declRange().ascending() ? (arrayp->hi() - aindex)
-                                                                         : (aindex - arrayp->lo());
+                            // Unpacked bytes are left-justified, unlike packed integral values.
+                            const int leftOffset = arrayp->declRange().ascending()
+                                                       ? aindex - arrayp->lo()
+                                                       : arrayp->hi() - aindex;
+                            const int cindex = stringBytes - leftOffset - 1;
+                            if (cindex < 0) continue;  // Remaining bytes retain the zero default.
                             V3Number selected{constp, 8};
                             selected.opSel(constp->num(), cindex * 8 + 7, cindex * 8);
                             UINFO(0, "   aindex=" << aindex << "  cindex=" << cindex
                                                   << "  c=" << selected);
                             if (!selected.isFourState()) {
                                 if (const uint32_t c = selected.toUInt()) {
-                                    newp->valuep(aindex,
+                                    newp->valuep(aindex - arrayp->lo(),
                                                  new AstConst{constp->fileline(),
                                                               AstConst::WidthedValue{}, 8, c});
                                 }

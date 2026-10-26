@@ -3874,6 +3874,7 @@ std::string AstScopeName::scopePrettyNameFormatter(const std::string& text) {
 void AstSel::dump(std::ostream& str) const {
     Super::dump(str);
     str << " widthConst=" << this->widthConst();
+    str << " declIndexWidth=" << declIndexWidth() << "/" << declIndexWidthMin();
     if (declRange().ranged()) {
         str << " decl" << declRange() << "]";
         if (declElWidth() != 1) str << "/" << declElWidth();
@@ -3881,6 +3882,8 @@ void AstSel::dump(std::ostream& str) const {
 }
 void AstSel::dumpJson(std::ostream& str) const {
     dumpJsonNumFunc(str, widthConst);
+    dumpJsonNumFunc(str, declIndexWidth);
+    dumpJsonNumFunc(str, declIndexWidthMin);
     if (declRange().ranged()) {
         dumpJsonStr(str, "declRange", cvtToStr(declRange()));
         dumpJsonNumFunc(str, declElWidth);

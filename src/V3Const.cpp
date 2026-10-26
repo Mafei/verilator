@@ -4642,7 +4642,8 @@ class ConstVisitor final : public VNVisitor {
     TREEOPV("AstSel{matchSelRand(nodep)}",      "DONE");
     TREEOPV("AstSel{operandSelExtend(nodep)}",  "DONE");
     TREEOPV("AstSel{operandSelFull(nodep)}",    "replaceWChild(nodep, nodep->fromp())");
-    TREEOPV("AstSel{$fromp.castSel}",           "replaceSelSel(nodep)");
+    // Preserve each nested packed boundary until four-state reads receive X padding.
+    TREEOPV("AstSel{$fromp.castSel, (v3Global.fourstateHandled() || !nodep->isFourstateOrNoDtype())}", "replaceSelSel(nodep)");
     TREEOPV("AstSel{$fromp.castAdd, operandSelBiLower(nodep)}", "DONE");
     TREEOPV("AstSel{$fromp.castAnd, operandSelBiLower(nodep)}", "DONE");
     TREEOPV("AstSel{$fromp.castOr,  operandSelBiLower(nodep)}", "DONE");

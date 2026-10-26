@@ -49,6 +49,10 @@ execution controls and reference-only tests are counted separately.
      - partial
      - Public bounds/unknown-index checks and six-lane RAM matrix; not vendor RAM timing or collision modes.
      - fourstate_mem_index, fourstate_array_guard; ram_acceptance.py
+   * - Indexed packed reads
+     - partial
+     - Signed and unsigned domains through 95-bit indices, partial overlap, shifted/ascending declarations and +:/-: coordinates. Carry arithmetic preserves the existing index diagnostics.
+     - fourstate_slice_index_domain:3840 checks,80 literal reports,64 complete histories; slice_packed_domain:98 checks,24 reports,4 histories; slice_index_width and bad profiles
    * - Clipped partial writes
      - partial
      - Negative/overlapping/full-outside writes, signed/unsigned wide indices and X/Z suppression. W4 variable +:33 is included directly, without a narrower-width exception.
@@ -85,6 +89,14 @@ execution controls and reference-only tests are counted separately.
      - partial
      - Packed fields and unpacked bit fields; unpacked XZ fields remain unsupported.
      - fourstate_struct; cons_struct:8; cons_unpacked_unsup diagnostic
+   * - String literals and byte arrays
+     - partial
+     - Fixed unpacked byte literals fill from the declared left bound with zero padding/truncation; packed integral casts retain right alignment. Nonzero/negative bounds and signed/unsigned byte typedefs are covered. Dynamic string-to-container casts are not certified.
+     - string_unpacked_literal:78 checks; string_byte:8 strict checks corrected to IEEE1800-2023 5.9, with the prior test and conflict logs preserved
+   * - Ancestor task/function lookup
+     - partial
+     - Per-instance ancestor lookup remains an unresolved binding gap. A shared task pointer cannot safely represent different parent-instance definitions; no generic parent fallback is claimed.
+     - Pinned sv_task_call_instance_lookup remains a compile failure in fixed128
    * - Resolved nets and supplies
      - partial
      - Public supply/pull/default/inout, multi-driver and procedural-enable profiles. Complex strengths and hierarchical cases retain explicit boundaries.
