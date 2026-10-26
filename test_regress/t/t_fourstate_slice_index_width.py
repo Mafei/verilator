@@ -8,8 +8,11 @@
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 
 import vltest_bootstrap
+from pathlib import Path
 
 test.scenarios('vlt')
+test.lint(verilator_flags2=['--debug-check'])
+Path(test.compile_log_filename).rename(test.obj_dir + '/two_state_compile.log')
 test.lint(verilator_flags2=[
     '--fourstate', '-Wno-FUTURE', '--debug-check', '--dumpi-tree-json', '9', '--dumpi-tree', '9'
 ])
