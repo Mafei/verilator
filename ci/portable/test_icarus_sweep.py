@@ -114,9 +114,43 @@ class SweepControls(unittest.TestCase):
         self.assertEqual(sweep.stage_status(record, "RUNTIME_FAILED"), "TIMEOUT")
 
     def test_missing_tool_is_infrastructure_failure(self):
-        record = sweep.stage(self.root, "compile", [self.root / "missing-tool"], self.root, 5,
-                             dict(os.environ), 0)
-        self.assertEqual(record["actual_exit"], 127)
+        missing = self.root / "missing-tool"
+        self.assertFalse(missing.exists())
+        self.assertFalse(missing.is_symlink())
+        record = sweep.stage(self.root, "compile", [missing], self.root, 5, dict(os.environ), 0)
+        # The shell exec launcher reports this ENOENT as 127 on Linux Bash and
+        # 126 on the observed macOS Bash. Keep both native failures unchanged.
+        self.assertIn(record["actual_exit"], (126, 127))
+        self.assertEqual(record["raw_wait_status"], record["actual_exit"] << 8)
+        self.assertTrue(record["exited_normally"])
+        self.assertIsNone(record["signal"])
+        self.assertIsNone(record["termination_reason"])
+        self.assertEqual(record["observer_exit"], record["actual_exit"])
+        self.assertEqual(record["pid"], record["wait4_pid"])
+        self.assertEqual(record["invoked_argv"], [str(missing)])
+        self.assertIn(str(missing), Path(record["stderr"]).read_text())
+        self.assertFalse(missing.exists())
+        self.assertFalse(sweep.unsupported_only(record))
+        self.assertEqual(sweep.stage_status(record, "COMPILE_FAILED"), "INFRASTRUCTURE_ERROR")
+
+    def test_nonexecutable_tool_is_infrastructure_failure(self):
+        blocked = self.root / "nonexecutable-tool"
+        blocked.write_text("#!/bin/sh\nexit 0\n")
+        blocked.chmod(0o644)
+        self.assertTrue(blocked.is_file())
+        self.assertFalse(blocked.is_symlink())
+        self.assertFalse(os.access(blocked, os.X_OK))
+        record = sweep.stage(self.root, "compile", [blocked], self.root, 5, dict(os.environ), 0)
+        self.assertEqual(record["actual_exit"], 126)
+        self.assertEqual(record["raw_wait_status"], record["actual_exit"] << 8)
+        self.assertTrue(record["exited_normally"])
+        self.assertIsNone(record["signal"])
+        self.assertIsNone(record["termination_reason"])
+        self.assertEqual(record["observer_exit"], record["actual_exit"])
+        self.assertEqual(record["pid"], record["wait4_pid"])
+        self.assertEqual(record["invoked_argv"], [str(blocked)])
+        self.assertIn(str(blocked), Path(record["stderr"]).read_text())
+        self.assertFalse(sweep.unsupported_only(record))
         self.assertEqual(sweep.stage_status(record, "COMPILE_FAILED"), "INFRASTRUCTURE_ERROR")
 
     def test_existing_stage_cannot_overwrite_evidence(self):

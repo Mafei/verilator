@@ -157,10 +157,10 @@ GROUPS = {
     "sv_semantics_20261026": [
         "flag_language_noconfig", "flag_language_noconfig_bad", "fourstate_inout_default",
         "fourstate_nba_partselect_clip", "fourstate_nba_repeat_control", "fourstate_reduce_scalar",
-        "fourstate_sen_expr", "fourstate_sen_iff", "fourstate_case_equal_known", "fourstate_sen_impure_unsup",
-        "fourstate_wildcard", "fourstate_nba_clip_bounds", "timing_nba_clip_bounds",
-        "timing_nba_partselect_clip", "timing_nba_repeat_control", "timing_nba_repeat_unsup",
-        "tri_inout_default"
+        "fourstate_sen_expr", "fourstate_sen_iff", "fourstate_case_equal_known",
+        "fourstate_sen_impure_unsup", "fourstate_wildcard", "fourstate_nba_clip_bounds",
+        "timing_nba_clip_bounds", "timing_nba_partselect_clip", "timing_nba_repeat_control",
+        "timing_nba_repeat_unsup", "tri_inout_default"
     ],
     "fourstate_constructors_20261026": [
         "fourstate_cons_copy", "fourstate_cons_keyed", "fourstate_cons_queue",
@@ -192,7 +192,8 @@ GROUPS = {
     "tri_storage_20261026": [
         "tri_proc_reassign", "tri_proc_reassign_timing", "tri_various", "tri_inout", "tri_inz",
         "tri_struct", "tri_top_en_out", "tri_pullvec"
-    ]
+    ],
+    "optimizer_alias_20261026": ["opt_merge_cond", "opt_merge_cond_member"]
 }
 
 

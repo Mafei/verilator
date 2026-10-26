@@ -194,7 +194,7 @@ def stage_status(record, failure):
         return "INFRASTRUCTURE_ERROR"
     if record["termination_reason"]:
         return "TIMEOUT" if record["termination_reason"] == "timeout" else "RESOURCE_ABORT"
-    if record["actual_exit"] == 127:
+    if record["actual_exit"] in (126, 127):
         return "INFRASTRUCTURE_ERROR"
     if record["actual_exit"] != 0:
         return failure
@@ -369,7 +369,8 @@ def run_engine(engine, row, contract, args, manifest, case):  # pylint: disable=
         executed = stage(folder, "run", command, scratch, args.timeout, environment,
                          args.min_disk_bytes)
         result["stages"]["run"] = executed
-        result["runtime_executed"] = ("actual_exit" in executed and executed["actual_exit"] != 127
+        result["runtime_executed"] = ("actual_exit" in executed
+                                      and executed["actual_exit"] not in (126, 127)
                                       and not executed.get("missing_stream"))
         status = stage_status(executed, "RUNTIME_FAILED")
         if "actual_exit" in executed and not executed["termination_reason"]:

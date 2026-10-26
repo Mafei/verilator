@@ -452,6 +452,12 @@ class UnknownVisitor final : public VNVisitor {
                 condp = new AstGte{nodep->fileline(), maxmsbConstp, lsbp};
             }
             condp = V3Const::constifyEdit(condp);
+            if (lvalue && condp->isOne()) {
+                // Preserve a simple continuous driver when its write always overlaps.
+                // A procedural guard would hide array drivers from DFG synthesis.
+                VL_DO_DANGLING(condp->deleteTree(), condp);
+                return;
+            }
             if (!lvalue) {
                 // SEL(...) -> COND(LTE(bit<=maxmsb), ARRAYSEL(...), {width{1'bx}})
                 VNRelinker replaceHandle;

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
-"""Compile and run a real timing model using only a relocated installation."""
+"""Run timing and C++14 no-timing models using only a relocated installation."""
 import os
 import pathlib
 import subprocess
@@ -24,5 +24,19 @@ subprocess.run([compiler, '--binary', '--fourstate', '-Wno-FUTURE', '--top-modul
 rejected = subprocess.run([str(work / 'reject_obj/Vt')], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
 print(rejected.stdout)
 assert rejected.returncode != 0 and 'FOURSTATE_UNKNOWN_REJECTED' in rejected.stdout, rejected.returncode
+runtime_source = pathlib.Path(__file__).with_name('runtime_cxx14.sv')
+subprocess.run([
+    compiler, '--binary', '--no-timing', '--fourstate', '-Wno-FUTURE', '--top-module',
+    'runtime_cxx14', '--Mdir', str(work / 'cxx14_obj'), '-j', '1', '-CFLAGS', '-std=c++14',
+    *link_flags, str(runtime_source)
+], check=True, cwd=work, env=env)
+runtime_model = work / 'cxx14_obj/Vruntime_cxx14'
+runtime = subprocess.run([str(runtime_model)], text=True, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, env=env)
+print(runtime.stdout)
+assert runtime.returncode == 0 and runtime.stdout.splitlines().count(
+    'CXX14_NO_TIMING_FOURSTATE_RUNTIME_PASS') == 1, runtime.returncode
 if sys.platform.startswith('linux'):
     subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name('check_elf.py')), str(model)], check=True)
+    subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name('check_elf.py')),
+                    str(runtime_model)], check=True)
