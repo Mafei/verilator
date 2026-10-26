@@ -7,7 +7,6 @@ export TMPDIR=/tmp
 export LC_ALL=C
 unset VERILATOR_ROOT
 root=$(pwd)
-git config --global --add safe.directory "$root"
 platform=${1:?platform}
 mkdir -p out logs .ci-tools-src
 exec > >(tee logs/build.log) 2>&1

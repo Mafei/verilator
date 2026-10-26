@@ -233,29 +233,12 @@ jobs:
             -e ARTIFACT_UID="$(id -u)" -e ARTIFACT_GID="$(id -g)" \
             -v "$PWD:/work" -w /work rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e bash -c '
               set -e
-              publish_artifact_ownership() {
-                local result=$?
-                trap - EXIT
-                local ownership_result=0
-                local path
-                for path in out logs test_regress/obj_vlt; do
-                  if [[ -e "$path" ]]; then
-                    chown -hR -P -- "$ARTIFACT_UID:$ARTIFACT_GID" "$path" || ownership_result=$?
-                  fi
-                done
-                if (( ownership_result != 0 )); then
-                  printf "Artifact ownership transfer failed: exit %s\n" "$ownership_result" >&2
-                  if (( result == 0 )); then result=$ownership_result; fi
-                fi
-                exit "$result"
-              }
-              trap publish_artifact_ownership EXIT
               dnf -y install dnf-plugins-core
               dnf config-manager --set-enabled powertools
               dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
                 gcc-toolset-13-libasan-devel \
                 autoconf automake make perl git curl tar gzip xz findutils diffutils \
-                python3.11 python3.11-pip zlib-devel lz4-devel help2man
+                python3.11 python3.11-pip zlib-devel lz4-devel help2man util-linux
               ln -s /usr/bin/python3.11 /usr/local/bin/python3
               source /opt/rh/gcc-toolset-13/enable
               asan_probe_directory=$(mktemp -d /tmp/verilator-asan-probe.XXXXXX)
@@ -269,7 +252,13 @@ jobs:
               ldd "$asan_probe_directory/probe"
               sha256sum "$asan_probe_directory/probe"
               printf "ASAN_TOOLSET13_PREFLIGHT_PASSED\n"
-              bash ci/portable/build.bash rocky8-x86_64
+              # Run repository work as the mounted checkout owner.
+              setpriv --reuid "$ARTIFACT_UID" --regid "$ARTIFACT_GID" --clear-groups \
+                bash -c "
+                  set -euo pipefail
+                  portable_owner_home=\$(mktemp -d /tmp/verilator-owner-home.XXXXXX)
+                  exec env HOME=\"\$portable_owner_home\" \"\$@\"
+                " portable-owner bash ci/portable/build.bash rocky8-x86_64
             '
       - name: Verify package in a fresh Rocky 8.10 container
         if: ${{ !cancelled() && hashFiles('out/verilator-fourstate-rocky8-x86_64.tar.gz') != '' }}
@@ -293,17 +282,6 @@ jobs:
             -e ICARUS_EXPECTED_SHA="$icarus_expected_head" \
             -v "$PWD:/work" -w /work rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e bash -c '
               set -e
-              publish_icarus_ownership() {
-                local result=$?
-                trap - EXIT
-                local ownership_result=0
-                if [[ -e pinned-icarus ]]; then
-                  chown -hR -P -- "$ARTIFACT_UID:$ARTIFACT_GID" pinned-icarus || ownership_result=$?
-                fi
-                if (( result == 0 && ownership_result != 0 )); then result=$ownership_result; fi
-                exit "$result"
-              }
-              trap publish_icarus_ownership EXIT
               dnf -y install dnf-plugins-core
               dnf config-manager --set-enabled powertools
               dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
@@ -313,11 +291,13 @@ jobs:
               source .ci-venv/bin/activate
               export PATH="/work/.ci-tools/bin:$PATH"
               export CPPFLAGS="-I/work/.ci-tools/include"
-              # Run Git and the models as the owner of the mounted checkout.
-              icarus_private_home=$(mktemp -d /tmp/verilator-icarus-home.XXXXXX)
-              chown "$ARTIFACT_UID:$ARTIFACT_GID" "$icarus_private_home"
+              # Run Git and the models as the mounted checkout owner.
               setpriv --reuid "$ARTIFACT_UID" --regid "$ARTIFACT_GID" --clear-groups \
-                env HOME="$icarus_private_home" \
+                bash -c "
+                  set -euo pipefail
+                  portable_owner_home=\$(mktemp -d /tmp/verilator-owner-home.XXXXXX)
+                  exec env HOME=\"\$portable_owner_home\" \"\$@\"
+                " portable-owner \
                 python3 ci/portable/run_icarus_sweep.py --platform rocky8-x86_64 \
                 --verilator-root /work --expected-verilator-sha "$ICARUS_EXPECTED_SHA" \
                 --jobs 2 --output pinned-icarus
