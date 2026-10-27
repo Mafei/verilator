@@ -2659,7 +2659,7 @@ class LinkDotParamVisitor final : public VNVisitor {
             nodep->v3error("Pin is not an in/out/inout/interface: " << nodep->prettyNameQ());
         } else {
             const bool repeated = refp->user4();
-            if (repeated && refp->isAnsi()) {
+            if (repeated && (refp->isAnsi() || !v3Global.opt.fourstate())) {
                 nodep->v3error("Duplicate declaration of port: "
                                << nodep->prettyNameQ() << '\n'
                                << nodep->warnContextPrimary() << '\n'
@@ -2687,16 +2687,17 @@ class LinkDotParamVisitor final : public VNVisitor {
                                   "with --fourstate and native output.");
                 }
             }
-            m_statep->recordPortSlot(refp);
+            // Keep repeated-port fanout resolution inactive without --fourstate.
+            if (v3Global.opt.fourstate()) m_statep->recordPortSlot(refp);
             refp->user4(true);
             VSymEnt* const symp = m_statep->insertSym(m_statep->getNodeSym(m_modp),
                                                       "__pinNumber" + cvtToStr(nodep->pinNum()),
                                                       refp, nullptr /*classOrPackagep*/);
             symp->exported(false);
-            if (!repeated) {
+            if (!repeated || !v3Global.opt.fourstate()) {
                 refp->pinNum(nodep->pinNum());
-                // A repeated source slot has no second variable declaration to move.
-                // Keep the first slot's order for the remaining variable-based APIs.
+                // Legacy error recovery moves every slot; four-state fanout keeps only
+                // the first variable declaration and its canonical slot number.
                 nodep->addHereThisAsNext(refp->unlinkFrBack());
             }
         }
