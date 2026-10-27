@@ -1,0 +1,5 @@
+%Error-UNSUPPORTED: t/t_func_ancestor_wrongkind_unsup.v:8:11: Unsupported: ancestor task lookup with a nearer non-subroutine declaration.
+    8 |   initial emit();
+      |           ^~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

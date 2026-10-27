@@ -1,5 +1,9 @@
+// DESCRIPTION: Verilator: Parameterized ancestor task context boundary
+//
+// This file ONLY is placed under the Creative Commons Public Domain.
+// SPDX-FileCopyrightText: 2026 Mafei
 // SPDX-License-Identifier: CC0-1.0
-// UNEXECUTED prototype boundary: parent parameter specialization is not guessed.
+
 module leaf(output reg [7:0] value);
   initial emit(value);
 endmodule

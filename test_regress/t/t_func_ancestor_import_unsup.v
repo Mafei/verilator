@@ -1,5 +1,9 @@
+// DESCRIPTION: Verilator: Source package imports in ancestor task context boundary
+//
+// This file ONLY is placed under the Creative Commons Public Domain.
+// SPDX-FileCopyrightText: 2026 Mafei
 // SPDX-License-Identifier: CC0-1.0
-// UNEXECUTED: source imports in the affected cone must reject before clone/binding.
+
 package p;
   task emit(output reg [7:0] value);
     value = 8'h22;

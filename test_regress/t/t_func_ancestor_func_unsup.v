@@ -1,5 +1,9 @@
+// DESCRIPTION: Verilator: Ancestor functions require type and constant context support
+//
+// This file ONLY is placed under the Creative Commons Public Domain.
+// SPDX-FileCopyrightText: 2026 Mafei
 // SPDX-License-Identifier: CC0-1.0
-// UNEXECUTED prototype boundary: ancestor functions require type/constant context support.
+
 module leaf(output reg [7:0] value);
   initial value = lookup(8'd0);
 endmodule

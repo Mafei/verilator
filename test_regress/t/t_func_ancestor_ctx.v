@@ -1,5 +1,9 @@
+// DESCRIPTION: Verilator: Static ancestor task instance context and known-bit state checks
+//
+// This file ONLY is placed under the Creative Commons Public Domain.
+// SPDX-FileCopyrightText: 2026 Mafei
 // SPDX-License-Identifier: CC0-1.0
-// Independent diagnostic draft. UNEXECUTED; no acceptance credit.
+
 module state_leaf(output reg [7:0] first, second);
   initial begin
     #1; emit(8'h01, first);

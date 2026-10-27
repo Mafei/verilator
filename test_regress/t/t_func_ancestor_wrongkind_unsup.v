@@ -1,5 +1,9 @@
+// DESCRIPTION: Verilator: Mixed-name ancestor lookup implementation boundary
+//
+// This file ONLY is placed under the Creative Commons Public Domain.
+// SPDX-FileCopyrightText: 2026 Mafei
 // SPDX-License-Identifier: CC0-1.0
-// Mixed-name ancestor lookup is outside this prototype's supported subset.
+
 module leaf;
   initial emit();
 endmodule

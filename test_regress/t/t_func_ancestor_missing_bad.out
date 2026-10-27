@@ -1,0 +1,5 @@
+%Error: t/t_func_ancestor_missing_bad.v:8:11: Can't find definition of task/function: 'absent_task'
+    8 |   initial absent_task();
+      |           ^~~~~~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=latest for more assistance.
+%Error: Exiting due to

@@ -1,5 +1,9 @@
+// DESCRIPTION: Verilator: Missing ancestor task remains an ordinary user diagnostic
+//
+// This file ONLY is placed under the Creative Commons Public Domain.
+// SPDX-FileCopyrightText: 2026 Mafei
 // SPDX-License-Identifier: CC0-1.0
-// UNEXECUTED: a missing task remains a user-code error after context preflight.
+
 module leaf;
   initial absent_task();
 endmodule
