@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 Mafei
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
-"""Read selected same-run artifact bytes without executing producer programs."""
+"""Check producer files before upload, then relay limited typed job outputs."""
 import argparse
 from contextlib import redirect_stdout
 import datetime
@@ -367,7 +367,7 @@ def reported(main, pair, head):
     }, any(gates)
 
 
-def review_platform(main, pair, source, platform, head, run_id, needs):
+def review_platform(main, pair, source, platform, head, run_id, needs, producer_root=None):
     require(needs in ('success', 'failure'), 'producer_job_not_completed')
     require((main / 'out/provenance.txt').read_text().splitlines()[0] == head,
             'artifact_head_mismatch')
@@ -405,6 +405,7 @@ def review_platform(main, pair, source, platform, head, run_id, needs):
         'public_ast': ast_evidence(main, source)
     }
     result['threads'], producer, failed = thread_evidence(main, source, head)
+    require(producer_root is None or producer == producer_root, 'producer_root_mapping_mismatch')
     semantic = semantic or failed
     result['ram'], failed = ram_evidence(main, source, head, producer)
     semantic = semantic or failed
@@ -438,38 +439,242 @@ def review_platform(main, pair, source, platform, head, run_id, needs):
     return result, semantic or failed
 
 
-def review(args):
-    require(not sys.flags.optimize, 'optimized_python_not_supported')
-    require(git_head(ROOT) == args.expected_head, 'review_checkout_head_mismatch')
-    result = {
-        'schema': 'portable-artifact-core-review-v1',
-        'head': args.expected_head,
-        'run_id': args.run_id,
-        'audit_integrity': args.downloads_ok == 'true',
-        'semantic_gate_exit': int(args.macos_result == 'failure'
-                                  or args.rocky8_result == 'failure'),
-        'platforms': {},
-        'core_scope': 'counts_public_ast_package_RAM_MT',
-        'full18_finish_pair_scope': 'producer_reported_only',
-        'artifact_zip_transport_digest': 'NOT_INDEPENDENTLY_VERIFIED',
-        'producer_programs_executed': False
-    }
-    for name, platform, needs in [('mac', 'macos-arm64', args.macos_result),
-                                  ('rocky', 'rocky8-x86_64', args.rocky8_result)]:
+SCOPE = 'PRODUCER_FILES_RECOMPUTED_BEFORE_UPLOAD'
+EVIDENCE_ERRORS = (OSError, ValueError, KeyError, AssertionError, TypeError, IndexError,
+                   AttributeError, EOFError, tarfile.TarError)
+
+
+def integer(value, signed=False):
+    require(type(value) is int and (signed or value >= 0), 'invalid_typed_integer')
+    return value
+
+
+def integers(row, keys):
+    return {key: integer(row[key]) for key in keys}
+
+
+def count_fields(row):
+    require(
+        isinstance(row, dict)
+        and all(isinstance(key, str) and re.fullmatch(r'[A-Za-z0-9_]{1,64}', key) for key in row),
+        'invalid_typed_counts')
+    return {key: integer(value) for key, value in row.items()}
+
+
+def hash_fields(row, keys):
+    require(
+        all(isinstance(row[key], str) and re.fullmatch(r'[0-9a-f]{64}', row[key]) for key in keys),
+        'invalid_typed_hash')
+    return {key: row[key] for key in keys}
+
+
+def core_fields(data, platform):
+    """Whitelist small typed fields; never relay arbitrary text or raw logs."""
+    result = integers(data, ('groups', 'selected_drivers'))
+    require(result == {
+        'groups': len(GROUPS),
+        'selected_drivers': sum(map(len, GROUPS.values()))
+    }, 'typed_regression_selection_mismatch')
+    bundle = data['package']
+    architecture = 'Mach-O64 arm64' if platform == 'macos-arm64' else 'ELF64 x86_64'
+    require(bundle['header'] == architecture and bundle['producer_program_executed'] is False,
+            'typed_package_mismatch')
+    result['package'] = dict(hash_fields(bundle, ('archive_sha256', 'compiler_sha256')),
+                             header=architecture,
+                             producer_program_executed=False)
+    require(isinstance(data['public_ast'], list) and data['public_ast'], 'typed_ast_missing')
+    result['public_ast'] = []
+    for row in data['public_ast']:
+        require(row['golden_equal'] is True, 'typed_ast_golden_mismatch')
+        result['public_ast'].append(
+            dict(hash_fields(row, ('raw_sha256', 'normalized_sha256')), golden_equal=True))
+    thread = data['threads']
+    result['threads'] = dict(integers(thread, ('passed_names', )),
+                             counts=count_fields(thread['counts']),
+                             native_exit=integer(thread['native_exit'], signed=True),
+                             waves=[])
+    require(result['threads']['passed_names'] <= len(NAMES), 'typed_thread_count_mismatch')
+    require([row['profile'] for row in thread['waves']] == ['two_state', 'four_state'],
+            'typed_thread_profiles_mismatch')
+    for row in thread['waves']:
+        require(
+            row['histories'] == 3
+            and row['records'] == (25 if row['profile'] == 'two_state' else 26),
+            'typed_thread_wave_count_mismatch')
+        result['threads']['waves'].append(
+            dict(integers(row, ('histories', 'records')),
+                 **hash_fields(row, ('sha256', )),
+                 profile=row['profile']))
+    result['ram'] = dict(integers(data['ram'], ('assertions', 'reports', 'histories', 'records')),
+                         **hash_fields(data['ram'], ('wave_sha256', )))
+    require(
+        integers(result['ram'], ('assertions', 'reports', 'histories', 'records')) == {
+            'assertions': 318,
+            'reports': 84,
+            'histories': 30,
+            'records': 228
+        }, 'typed_ram_count_mismatch')
+    if platform == 'macos-arm64':
+        migration = data['migration']
+        require(
+            migration['scope'] == 'direct_producer_shell_return'
+            and migration['raw_wait_status'] == 'NOT_RECORDED', 'typed_migration_mismatch')
+        status = integer(migration['returned_status'])
+        require(status <= 255, 'typed_shell_status_invalid')
+        result['migration'] = dict(scope='direct_producer_shell_return',
+                                   returned_status=status,
+                                   raw_wait_status='NOT_RECORDED')
+    else:
+        result['migration'] = {'scope': 'not_recomputed_by_producer_review'}
+    other = data['other_gates']
+    gates = integers(other, ('full18_gate_exit', 'finish9_gate_exit', 'fixed128_overall_exit'))
+    require(
+        all(value in (0, 1) for value in gates.values())
+        and other['scope'] == 'producer_reported_not_independently_recomputed',
+        'typed_reported_gate_invalid')
+    full = dict(integers(other['full18'], ('selected', )),
+                counts=count_fields(other['full18']['counts']))
+    finish = integers(other['finish9'], ('selected', 'executed', 'passed', 'failed'))
+    paired = dict(integers(other['fixed128'],
+                           ('fixed_selected', 'default_denominator', 'unselected_UNRUN')),
+                  pair_status_counts=count_fields(other['fixed128']['pair_status_counts']))
+    complete = other['fixed128']['full_suite_complete']
+    require(
+        full['selected'] == sum(full['counts'].values()) == 18 and finish['selected'] == 9
+        and finish['passed'] + finish['failed'] == finish['executed']
+        and finish['executed'] <= finish['selected']
+        and paired['fixed_selected'] == sum(paired['pair_status_counts'].values()) == 128
+        and paired['default_denominator'] == paired['fixed_selected'] + paired['unselected_UNRUN']
+        == 3850 and type(complete) is bool and complete == (paired['unselected_UNRUN'] == 0),
+        'typed_reported_counts_mismatch')
+    paired['full_suite_complete'] = complete
+    result['other_gates'] = dict(gates,
+                                 scope='producer_reported_not_independently_recomputed',
+                                 full18=full,
+                                 finish9=finish,
+                                 fixed128=paired)
+    return result
+
+
+def publish(output, result):
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
+    print('PORTABLE_CORE_REVIEW ' + json.dumps(result, sort_keys=True))
+    print('PORTABLE_CORE_REVIEW_SHA256 ' + sha(output))
+
+
+def producer(args):
+    """Read this job's existing files before their ordinary artifact upload."""
+    result = dict(schema='portable-producer-core-review-v1',
+                  head=args.expected_head,
+                  run_id=args.run_id,
+                  run_attempt=int(os.environ.get('GITHUB_RUN_ATTEMPT', '1')),
+                  platform=args.platform,
+                  verification_scope=SCOPE,
+                  audit_integrity=True,
+                  semantic_gate_exit=int(args.prior_result == 'failure'),
+                  prior_job_result=args.prior_result,
+                  producer_programs_executed=False,
+                  artifact_zip_transport_digest='NOT_INDEPENDENTLY_VERIFIED',
+                  file_mapping={
+                      'recorded_root': args.producer_root,
+                      'reader_root': str(ROOT)
+                  })
+    try:
+        require(not sys.flags.optimize and git_head(ROOT) == args.expected_head,
+                'producer_checkout_mismatch')
+        require(args.producer_root == ('/work' if args.platform == 'rocky8-x86_64' else str(ROOT)),
+                'unexpected_producer_root')
+        data, failed = review_platform(ROOT,
+                                       ROOT / 'pinned-icarus',
+                                       ROOT,
+                                       args.platform,
+                                       args.expected_head,
+                                       args.run_id,
+                                       args.prior_result,
+                                       producer_root=args.producer_root)
+        result['core'] = core_fields(data, args.platform)
+        result['semantic_gate_exit'] |= int(failed)
+    except EVIDENCE_ERRORS:
+        result['audit_integrity'] = False
+        result['reason'] = 'missing_or_invalid_producer_files'
+    result['actual_exit'] = result['semantic_gate_exit'] if result['audit_integrity'] else 2
+    publish(args.output, result)
+    # One compact JSON value uses the native runner output file, never shell evaluation.
+    with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as stream:
+        stream.write('core_review=' + json.dumps(result, sort_keys=True, separators=(',', ':')) +
+                     '\n')
+    return result['actual_exit']
+
+
+def summarize(args):
+    """Validate typed needs outputs; this job reads no producer files or artifacts."""
+    require(not sys.flags.optimize and git_head(ROOT) == args.expected_head,
+            'summary_checkout_mismatch')
+    result = dict(schema='portable-core-summary-v2',
+                  head=args.expected_head,
+                  run_id=args.run_id,
+                  verification_scope=SCOPE,
+                  audit_integrity=True,
+                  semantic_gate_exit=0,
+                  platforms={},
+                  full18_finish_pair_scope='producer_reported_only',
+                  artifact_zip_transport_digest='NOT_INDEPENDENTLY_VERIFIED',
+                  artifact_bytes_independently_recomputed_after_upload=False,
+                  producer_programs_executed=False)
+    for name, platform in [('MACOS', 'macos-arm64'), ('ROCKY8', 'rocky8-x86_64')]:
+        needs = os.environ.get(name + '_JOB_RESULT', '')
+        result['semantic_gate_exit'] |= int(needs == 'failure')
         try:
-            data, failed = review_platform(args.artifacts / (name + '-main'),
-                                           args.artifacts / (name + '-pair'), ROOT, platform,
-                                           args.expected_head, args.run_id, needs)
-            result['platforms'][platform] = data
-            result['semantic_gate_exit'] |= int(failed)
-        except (OSError, ValueError, KeyError, AssertionError, TypeError, IndexError,
-                AttributeError, EOFError, tarfile.TarError) as error:
+            require(needs in ('success', 'failure'), 'producer_job_not_completed')
+            row = json.loads(os.environ.get(name + '_CORE_REVIEW', ''))
+            require(
+                row['schema'] == 'portable-producer-core-review-v1'
+                and row['head'] == args.expected_head and type(row['run_id']) is int
+                and row['run_id'] == args.run_id and type(row['run_attempt']) is int
+                and row['run_attempt'] == int(os.environ.get('GITHUB_RUN_ATTEMPT', '1'))
+                and row['platform'] == platform and row['verification_scope'] == SCOPE
+                and row['producer_programs_executed'] is False
+                and row['artifact_zip_transport_digest'] == 'NOT_INDEPENDENTLY_VERIFIED'
+                and row['prior_job_result'] in ('success', 'failure')
+                and (needs == 'failure' or row['prior_job_result'] == 'success')
+                and type(row['audit_integrity']) is bool and type(row['semantic_gate_exit']) is int
+                and row['semantic_gate_exit'] in (0, 1) and type(row['actual_exit']) is int and
+                row['actual_exit'] == (row['semantic_gate_exit'] if row['audit_integrity'] else 2),
+                'invalid_producer_identity_or_status')
+            require(row['audit_integrity'], 'producer_file_integrity_failed')
+            mapping = row['file_mapping']
+            require(
+                all(
+                    isinstance(mapping[key], str) and mapping[key].startswith('/')
+                    and '\n' not in mapping[key] and '\r' not in mapping[key]
+                    for key in ('recorded_root', 'reader_root')) and mapping['recorded_root']
+                == ('/work' if platform == 'rocky8-x86_64' else mapping['reader_root']),
+                'invalid_root_mapping')
+            data = core_fields(row['core'], platform)
+            result['platforms'][platform] = dict(
+                data,
+                producer_job_result=needs,
+                file_mapping={key: mapping[key]
+                              for key in ('recorded_root', 'reader_root')})
+            visible_failure = (
+                any(data['other_gates'][key]
+                    for key in ('full18_gate_exit', 'finish9_gate_exit', 'fixed128_overall_exit'))
+                or data['threads']['native_exit'] != 0
+                or data['threads']['passed_names'] != len(NAMES)
+                or not passed_counts('PASSED', data['threads']['counts'], len(NAMES))
+                or data['other_gates']['full18']['counts'] != {
+                    'passed': 18
+                } or data['other_gates']['finish9']['passed'] != 9
+                or data['other_gates']['fixed128']['pair_status_counts'] != {
+                    'PASS_BOTH': 128
+                } or (platform == 'macos-arm64' and data['migration']['returned_status'] != 0))
+            result['semantic_gate_exit'] |= int(row['semantic_gate_exit'] or visible_failure)
+        except EVIDENCE_ERRORS:
             result['audit_integrity'] = False
             result['platforms'][platform] = {
-                'integrity_error': type(error).__name__,
-                'reason': str(error)
-                if re.fullmatch(r'[a-z0-9_]+', str(error)) else 'missing_or_invalid_evidence',
-                'producer_job_result': needs
+                'producer_job_result': needs,
+                'reason': 'missing_or_invalid_typed_producer_output'
             }
     if result['audit_integrity']:
         result['cross_host_ast_equal'] = ([
@@ -477,10 +682,7 @@ def review(args):
         ] == [x['normalized_sha256'] for x in result['platforms']['rocky8-x86_64']['public_ast']])
         result['audit_integrity'] = result['cross_host_ast_equal']
     result['actual_exit'] = result['semantic_gate_exit'] if result['audit_integrity'] else 2
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
-    print('PORTABLE_ARTIFACT_REVIEW ' + json.dumps(result, sort_keys=True))
-    print('PORTABLE_ARTIFACT_REVIEW_SHA256 ' + sha(args.output))
+    publish(args.output, result)
     return result['actual_exit']
 
 
@@ -491,23 +693,25 @@ def main():
     record.add_argument('--returned-status', required=True, type=int)
     record.add_argument('--package', required=True, type=Path)
     record.add_argument('--relocated-compiler', required=True, type=Path)
-    check = commands.add_parser('review')
-    check.add_argument('--expected-head', required=True)
-    check.add_argument('--run-id', required=True, type=int)
-    check.add_argument('--artifacts', required=True, type=Path)
-    check.add_argument('--output', required=True, type=Path)
-    check.add_argument('--macos-result', required=True)
-    check.add_argument('--rocky8-result', required=True)
-    check.add_argument('--downloads-ok', choices=('true', 'false'), required=True)
+    for action in ('producer', 'summarize'):
+        check = commands.add_parser(action)
+        check.add_argument('--expected-head', required=True)
+        check.add_argument('--run-id', required=True, type=int)
+        check.add_argument('--output', required=True, type=Path)
+        if action == 'producer':
+            check.add_argument('--platform',
+                               choices=('macos-arm64', 'rocky8-x86_64'),
+                               required=True)
+            check.add_argument('--producer-root', required=True)
+            check.add_argument('--prior-result', choices=('success', 'failure'), required=True)
     args = parser.parse_args()
     if args.action == 'record-migration':
         record_migration(args)
         return 0
     try:
-        return review(args)
-    except (OSError, ValueError, KeyError, AssertionError, TypeError, IndexError, AttributeError,
-            EOFError, tarfile.TarError):
-        print('PORTABLE_ARTIFACT_REVIEW ' + json.dumps({
+        return producer(args) if args.action == 'producer' else summarize(args)
+    except EVIDENCE_ERRORS:
+        print('PORTABLE_CORE_REVIEW ' + json.dumps({
             'audit_integrity': False,
             'actual_exit': 2,
             'reason': 'review_preflight_failed'

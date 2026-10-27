@@ -35,16 +35,19 @@ class ArtifactsTest(unittest.TestCase):
         self.head = 'a' * 40
         self.args = SimpleNamespace(expected_head=self.head,
                                     run_id=123,
-                                    artifacts=self.root,
-                                    output=self.root / 'review.json',
-                                    macos_result='success',
-                                    rocky8_result='success',
-                                    downloads_ok='true')
+                                    output=self.root / 'review.json')
+        self.needs = {'mac': 'success', 'rocky': 'success'}
+        self.missing_output = False
         self.compiler = {}
         for name, platform in [('mac', 'macos-arm64'), ('rocky', 'rocky8-x86_64')]:
             main = self.root / (name + '-main')
             (main / 'out').mkdir(parents=True)
             (main / 'logs').mkdir()
+            for relative in ('ci/portable/smoke.py', 'test_regress/vltest_generated_ids.py',
+                             'test_regress/t/t_debug_emitv.out'):
+                destination = main / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes((review.ROOT / relative).read_bytes())
             (main / 'out/provenance.txt').write_text(self.head + '\n')
             rows = {}
             for group, names in GROUPS.items():
@@ -95,7 +98,7 @@ class ArtifactsTest(unittest.TestCase):
                     'failed': 0
                 })
             write_json(
-                self.root / (name + '-pair/RUN_SUMMARY.json'), {
+                main / 'pinned-icarus/RUN_SUMMARY.json', {
                     'verilator_head': self.head,
                     'pin': review.PIN,
                     'overall_exit': 0,
@@ -120,14 +123,33 @@ class ArtifactsTest(unittest.TestCase):
         self.stack.enter_context(
             mock.patch.object(review,
                               'thread_evidence',
-                              return_value=({
-                                  'scope': 'fixture_only'
-                              }, '/fixture/producer', False)))
+                              side_effect=lambda main, *_args: ({
+                                  'passed_names':
+                                  6,
+                                  'counts': {
+                                      'passed': 6,
+                                      'failed': 0
+                                  },
+                                  'native_exit':
+                                  0,
+                                  'waves': [{
+                                      'profile': profile,
+                                      'histories': 3,
+                                      'records': records,
+                                      'sha256': 'a' * 64
+                                  }
+                                            for profile, records in [('two_state', 25),
+                                                                     ('four_state', 26)]]
+                              }, '/work' if main.name == 'rocky-main' else str(main), False)))
         self.stack.enter_context(
             mock.patch.object(review,
                               'ram_evidence',
                               return_value=({
-                                  'scope': 'fixture_only'
+                                  'assertions': 318,
+                                  'reports': 84,
+                                  'histories': 30,
+                                  'records': 228,
+                                  'wave_sha256': 'a' * 64
                               }, False)))
 
     def bundle(self, name, platform, binary, update_compiler=True):
@@ -179,10 +201,43 @@ class ArtifactsTest(unittest.TestCase):
                 hashlib.sha256(self.compiler['mac']).hexdigest()
             })
 
+    def producer_records(self):
+        result = {}
+        for name, platform in [('mac', 'macos-arm64'), ('rocky', 'rocky8-x86_64')]:
+            main = self.root / (name + '-main')
+            args = SimpleNamespace(expected_head=self.head,
+                                   run_id=123,
+                                   output=main / 'out/producer-core-review.json',
+                                   platform=platform,
+                                   prior_result=self.needs[name],
+                                   producer_root='/work' if name == 'rocky' else str(main))
+            output = self.root / (name + '-github-output')
+            output.write_text('')
+            with mock.patch.object(review, 'ROOT', main), mock.patch.dict(
+                    os.environ,
+                    GITHUB_OUTPUT=str(output)), contextlib.redirect_stdout(io.StringIO()):
+                actual = review.producer(args)
+            result[name] = json.loads(args.output.read_text())
+            self.assertEqual(actual, result[name]['actual_exit'])
+            lines = output.read_text().splitlines()
+            self.assertEqual(len(lines), 1)
+            self.assertEqual(json.loads(lines[0].removeprefix('core_review=')), result[name])
+        return result
+
+    def relay(self, records, expected):
+        environment = {
+            'MACOS_JOB_RESULT': self.needs['mac'],
+            'ROCKY8_JOB_RESULT': self.needs['rocky'],
+            'MACOS_CORE_REVIEW': '' if self.missing_output else json.dumps(records['mac']),
+            'ROCKY8_CORE_REVIEW': json.dumps(records['rocky'])
+        }
+        with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(review.summarize(self.args), expected)
+        return json.loads(self.args.output.read_text())
+
     def execute(self, expected):
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(review.review(self.args), expected)
-        return json.loads(self.args.output.read_text())
+            return self.relay(self.producer_records(), expected)
 
     def test_consistent_synthetic_core(self):
         row = self.execute(0)
@@ -190,11 +245,11 @@ class ArtifactsTest(unittest.TestCase):
         self.assertEqual(row['artifact_zip_transport_digest'], 'NOT_INDEPENDENTLY_VERIFIED')
 
     def test_original_needs_failure_stays_semantic_one(self):
-        self.args.macos_result = 'failure'
+        self.needs['mac'] = 'failure'
         self.assertTrue(self.execute(1)['audit_integrity'])
 
     def test_original_reported_gate_failure_stays_one(self):
-        path = self.root / 'mac-pair/RUN_SUMMARY.json'
+        path = self.root / 'mac-main/pinned-icarus/RUN_SUMMARY.json'
         row = json.loads(path.read_text())
         row['overall_exit'] = 1
         write_json(path, row)
@@ -252,12 +307,12 @@ class ArtifactsTest(unittest.TestCase):
         self.bundle('mac', 'macos-arm64', wrong)
         self.execute(2)
 
-    def test_download_failure_does_not_become_green(self):
-        self.args.downloads_ok = 'false'
+    def test_missing_producer_output_does_not_become_green(self):
+        self.missing_output = True
         self.execute(2)
 
     def test_reported_counts_and_false_complete_are_not_hardcoded(self):
-        path = self.root / 'mac-pair/RUN_SUMMARY.json'
+        path = self.root / 'mac-main/pinned-icarus/RUN_SUMMARY.json'
         record = json.loads(path.read_text())
         record.update(overall_exit=1,
                       pair_status_counts={
@@ -273,11 +328,67 @@ class ArtifactsTest(unittest.TestCase):
         self.assertIs(row['full_suite_complete'], False)
 
     def test_reported_complete_cannot_hide_remaining_unrun(self):
-        path = self.root / 'mac-pair/RUN_SUMMARY.json'
+        path = self.root / 'mac-main/pinned-icarus/RUN_SUMMARY.json'
         record = json.loads(path.read_text())
         record['full_suite_complete'] = True
         write_json(path, record)
         self.assertFalse(self.execute(2)['audit_integrity'])
+
+    def test_relay_rejects_wrong_identity_status_types_and_counts(self):
+        original = self.producer_records()
+        for field, value in [('head', 'b' * 40), ('run_id', 999), ('run_attempt', 999),
+                             ('audit_integrity', 1), ('actual_exit', False)]:
+            with self.subTest(field=field):
+                rows = json.loads(json.dumps(original))
+                rows['mac'][field] = value
+                self.assertFalse(self.relay(rows, 2)['audit_integrity'])
+        rows = json.loads(json.dumps(original))
+        rows['mac']['core']['selected_drivers'] = False
+        self.relay(rows, 2)
+        rows = json.loads(json.dumps(original))
+        rows['rocky']['core']['ram']['assertions'] = 1
+        self.relay(rows, 2)
+        rows = json.loads(json.dumps(original))
+        rows['mac']['core']['other_gates']['fixed128']['full_suite_complete'] = True
+        self.relay(rows, 2)
+
+    def test_late_upload_failure_and_ast_mismatch_remain_visible(self):
+        rows = self.producer_records()
+        self.needs['mac'] = 'failure'
+        self.assertTrue(self.relay(rows, 1)['audit_integrity'])
+        self.needs['mac'] = 'success'
+        rows['mac']['core']['public_ast'][0]['normalized_sha256'] = 'b' * 64
+        self.assertFalse(self.relay(rows, 2)['audit_integrity'])
+
+    def test_relay_whitelists_fields_and_records_before_upload_scope(self):
+        rows = self.producer_records()
+        rows['mac']['raw_log'] = 'DO_NOT_RELAY_UNSCREENED_LOG'
+        rows['mac']['core']['raw_log'] = 'DO_NOT_RELAY_UNSCREENED_LOG'
+        row = self.relay(rows, 0)
+        self.assertNotIn('DO_NOT_RELAY_UNSCREENED_LOG', json.dumps(row))
+        self.assertEqual(row['verification_scope'], 'PRODUCER_FILES_RECOMPUTED_BEFORE_UPLOAD')
+        self.assertIs(row['artifact_bytes_independently_recomputed_after_upload'], False)
+
+    def test_explicit_recorded_root_mapping_is_required(self):
+        rows = self.producer_records()
+        rows['rocky']['file_mapping']['recorded_root'] = '/different'
+        self.relay(rows, 2)
+        with mock.patch.object(review, 'thread_evidence', return_value=({}, '/different', False)):
+            self.execute(2)
+
+    def test_native_output_file_failure_reaches_cli_exit_two(self):
+        main = self.root / 'mac-main'
+        argv = [
+            'review_artifacts.py', 'producer', '--expected-head', self.head, '--run-id', '123',
+            '--output',
+            str(main / 'out/failed-output-review.json'), '--platform', 'macos-arm64',
+            '--producer-root',
+            str(main), '--prior-result', 'success'
+        ]
+        with mock.patch.object(review, 'ROOT', main), mock.patch.object(review.sys, 'argv', argv), \
+                mock.patch.dict(os.environ, GITHUB_OUTPUT=str(self.root)), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(review.main(), 2)
 
 
 class ReceiptTest(unittest.TestCase):
