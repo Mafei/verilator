@@ -3647,11 +3647,15 @@ void AstPin::dump(std::ostream& str) const {
     if (!paramPath().empty()) str << " paramPath=" << paramPath();
     if (svDotName()) str << " [.n]";
     if (svImplicit()) str << " [.SV]";
+    if (resolvedPortSlot()) str << " portSlot=" << resolvedPortSlot();
+    if (repeatedOutputFanout()) str << " [REPEATED_OUTPUT_FANOUT]";
 }
 void AstPin::dumpJson(std::ostream& str) const {
     dumpJsonBoolFuncIf(str, param);
     dumpJsonBoolFuncIf(str, svDotName);
     dumpJsonBoolFuncIf(str, svImplicit);
+    if (resolvedPortSlot()) dumpJsonNumFunc(str, resolvedPortSlot);
+    dumpJsonBoolFuncIf(str, repeatedOutputFanout);
     if (!paramPath().empty()) dumpJsonStr(str, "paramPath", paramPath());
     dumpJsonGen(str);
 }

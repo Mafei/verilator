@@ -1780,11 +1780,13 @@ class AstPin final : public AstNode {
     // @astgen ptr := m_modVarp : Optional[AstVar]  // Input/output connects to on submodule
     // @astgen ptr := m_modPTypep : Optional[AstParamTypeDType]  // Param type connects to on sub
     int m_pinNum;  // Pin number
+    int m_resolvedPortSlot = 0;  // Source slot of a repeated non-ANSI OUTPUT port
     string m_name;  // Pin name, or "" for number based interconnect
     string m_paramPath;  // Original defparam cell path, if this pin came from a defparam
     bool m_param = false;  // Pin connects to parameter
     bool m_svDotName = false;  // Pin is SystemVerilog .name'ed
     bool m_svImplicit = false;  // Pin is SystemVerilog .name'ed, allow implicit
+    bool m_repeatedOutputFanout = false;  // This pin is one directional OUTPUT fanout
 public:
     AstPin(FileLine* fl, int pinNum, const string& name, AstNode* exprp)
         : ASTGEN_SUPER_Pin(fl)
@@ -1796,11 +1798,20 @@ public:
     void cloneRelink() override {}  // TODO V3Param shouldn't require avoiding cloneRelinkGen
     void dump(std::ostream& str) const override;
     void dumpJson(std::ostream& str) const override;
+    bool sameNode(const AstNode* samep) const override {
+        const AstPin* const sp = VN_DBG_AS(samep, Pin);
+        return resolvedPortSlot() == sp->resolvedPortSlot()
+               && repeatedOutputFanout() == sp->repeatedOutputFanout();
+    }
     string name() const override VL_MT_STABLE { return m_name; }  // * = Pin name, ""=go by number
     void name(const string& name) override { m_name = name; }
     string prettyOperatorName() const override;
     bool dotStar() const { return name() == ".*"; }  // Fake name for .* connections until linked
     int pinNum() const { return m_pinNum; }
+    int resolvedPortSlot() const { return m_resolvedPortSlot; }
+    void resolvedPortSlot(int slot) { m_resolvedPortSlot = slot; }
+    bool repeatedOutputFanout() const { return m_repeatedOutputFanout; }
+    void repeatedOutputFanout(bool flag) { m_repeatedOutputFanout = flag; }
     AstVar* modVarp() const { return m_modVarp; }  // [After Link] Pointer to variable
     void modVarp(AstVar* nodep) { m_modVarp = nodep; }
     // [After Link] Pointer to variable

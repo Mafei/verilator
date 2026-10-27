@@ -210,6 +210,7 @@ private:
     std::multimap<std::string, VSymEnt*>
         m_nameScopeSymMap;  // Map of scope referenced by non-pretty textual name
     std::map<AstNodeModule*, std::vector<VSymEnt*>> m_primaryContexts;  // Actual instance entries
+    std::map<const AstVar*, unsigned> m_portSlots;  // Source header slots for each port variable
     std::set<std::pair<AstNodeModule*, std::string>>
         m_implicitNameSet;  // For [module][signalname] if we can implicitly create it
     std::array<ScopeAliasMap, SAMN__MAX> m_scopeAliasMap;  // Map of <lhs,rhs> aliases
@@ -219,6 +220,15 @@ private:
 
 public:
     // METHODS
+
+    void recordPortSlot(const AstVar* varp) { ++m_portSlots[varp]; }
+    bool repeatedPort(const AstVar* varp) const {
+        const auto it = m_portSlots.find(varp);
+        return it != m_portSlots.end() && it->second > 1 && !varp->isAnsi();
+    }
+    bool repeatedOutputPort(const AstVar* varp) const {
+        return repeatedPort(varp) && varp->direction().isOutput();
+    }
 
     void dumpSelf(const string& nameComment, bool force = false) {
         if (debug() >= 6 || dumpLevel() >= 6 || force) {
@@ -2648,23 +2658,46 @@ class LinkDotParamVisitor final : public VNVisitor {
         } else if (!refp || (!refp->isIO() && !refp->isIfaceRef())) {
             nodep->v3error("Pin is not an in/out/inout/interface: " << nodep->prettyNameQ());
         } else {
-            if (refp->user4()) {
+            const bool repeated = refp->user4();
+            if (repeated && refp->isAnsi()) {
                 nodep->v3error("Duplicate declaration of port: "
                                << nodep->prettyNameQ() << '\n'
                                << nodep->warnContextPrimary() << '\n'
                                << refp->warnOther() << "... Location of original declaration\n"
                                << refp->warnContextSecondary());
+            } else if (repeated) {
+                const AstNodeDType* const dtypep
+                    = refp->dtypep() ? refp->dtypep() : refp->childDTypep();
+                const AstBasicDType* const basicp = VN_CAST(dtypep, BasicDType);
+                if (!refp->direction().isOutput() || refp->varType() != VVarType::WIRE
+                    || !basicp || !basicp->isIntegralOrPacked() || !basicp->isFourstate()
+                    || refp->isTristate() || refp->isPullup() || refp->isPulldown()
+                    || refp->delayp()) {
+                    nodep->v3warn(E_UNSUPPORTED,
+                                  "Unsupported: Repeated non-ANSI ports require plain packed "
+                                  "OUTPUT wires.");
+                } else if (!v3Global.opt.fourstate() || m_modp->isTop()
+                           || v3Global.opt.serializeOnly() || v3Global.opt.hierarchical()
+                           || v3Global.opt.hierChild() || v3Global.opt.hierTop()
+                           || v3Global.opt.systemC() || v3Global.opt.savable()
+                           || !v3Global.opt.libCreate().empty() || v3Global.opt.vpi()) {
+                    nodep->v3warn(E_UNSUPPORTED,
+                                  "Unsupported: Repeated OUTPUT ports require internal modules "
+                                  "with --fourstate and native output.");
+                }
             }
+            m_statep->recordPortSlot(refp);
             refp->user4(true);
             VSymEnt* const symp = m_statep->insertSym(m_statep->getNodeSym(m_modp),
                                                       "__pinNumber" + cvtToStr(nodep->pinNum()),
                                                       refp, nullptr /*classOrPackagep*/);
             symp->exported(false);
-            refp->pinNum(nodep->pinNum());
-            // Put the variable where the port is, so that variables stay
-            // in pin number sorted order. Otherwise hierarchical or JSON
-            // may botch by-position instances.
-            nodep->addHereThisAsNext(refp->unlinkFrBack());
+            if (!repeated) {
+                refp->pinNum(nodep->pinNum());
+                // A repeated source slot has no second variable declaration to move.
+                // Keep the first slot's order for the remaining variable-based APIs.
+                nodep->addHereThisAsNext(refp->unlinkFrBack());
+            }
         }
         // Ports not needed any more
         VL_DO_DANGLING(nodep->unlinkFrBack()->deleteTree(), nodep);
@@ -3347,7 +3380,8 @@ class LinkDotResolveVisitor final : public VNVisitor {
                                          // They are added to the set only in linkDotPrimary.
     bool m_insideClassExtParam = false;  // Inside a class from m_extendsParam
     AstNew* m_explicitSuperNewp = nullptr;  // Hit a "super.new" call inside a "new" function
-    std::map<AstNode*, AstPin*> m_usedPins;  // Pin used in this cell, map to duplicate
+    std::map<std::pair<AstNode*, int>, AstPin*>
+        m_usedPins;  // Resolved variable and source slot used in this cell
     std::map<AstNode*, std::map<std::string, AstPin*>> m_usedDefParamPins;
     // Defparam pins used for a given formal, by hierarchical path
     std::map<std::string, AstNodeModule*> m_modulesToRevisit;  // Modules to revisit a second time
@@ -3592,7 +3626,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
                                     << origp->warnContextSecondary());
     }
     void markAndCheckPinDup(AstPin* nodep, AstNode* refp, const char* whatp) {
-        const auto pair = m_usedPins.emplace(refp, nodep);
+        const auto pair = m_usedPins.emplace(std::make_pair(refp, nodep->resolvedPortSlot()), nodep);
         if (pair.second) {
             if (!nodep->paramPath().empty())
                 m_usedDefParamPins[refp].emplace(nodep->paramPath(), nodep);
@@ -4280,10 +4314,25 @@ class LinkDotResolveVisitor final : public VNVisitor {
             }
             VVarType refVarType = VVarType::UNKNOWN;
             bool wrongPinType = false;
+            bool unsupportedRepeatedPort = false;
             if (AstVar* const varp = VN_CAST(foundp->nodep(), Var)) {
                 if (varp->isIO() || varp->isParam() || varp->isIfaceRef()) {
                     refVarType = varp->varType();
                     nodep->modVarp(varp);
+                    unsupportedRepeatedPort = !nodep->param() && !nodep->svDotName()
+                                              && !varp->direction().isOutput()
+                                              && m_statep->repeatedPort(varp);
+                    if (!nodep->param() && m_statep->repeatedOutputPort(varp)) {
+                        if (nodep->svDotName()) {
+                            nodep->v3warn(E_UNSUPPORTED,
+                                          "Unsupported: Repeated OUTPUT ports require "
+                                          "positional connections.");
+                        } else {
+                            // Preserve the syntactic name and number on later relinking passes.
+                            nodep->resolvedPortSlot(nodep->pinNum());
+                            nodep->repeatedOutputFanout(true);
+                        }
+                    }
                 } else {
                     wrongPinType = true;
                 }
@@ -4308,7 +4357,9 @@ class LinkDotResolveVisitor final : public VNVisitor {
                 }
                 return;
             }
-            markAndCheckPinDup(nodep, foundp->nodep(), whatp);
+            // Legal repeated INPUT/INOUT slots were rejected above as unsupported.
+            // They are distinct positional connections, not duplicate named connections.
+            if (!unsupportedRepeatedPort) markAndCheckPinDup(nodep, foundp->nodep(), whatp);
         }
         // Early return() above when deleted
     }
