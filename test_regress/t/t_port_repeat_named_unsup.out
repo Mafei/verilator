@@ -1,0 +1,5 @@
+%Error-UNSUPPORTED: t/t_port_repeat_named_unsup.v:14:20: Unsupported: Repeated OUTPUT ports require positional connections.
+   14 |   repeat_output u(.o(q), .d(13'b0));
+      |                    ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

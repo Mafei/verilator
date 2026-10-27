@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_port_repeat_actual_unsup.v:29:22: Unsupported: Repeated OUTPUT ports require whole plain four-state actual wires of matching width.
+                                                        : ... note: In instance 't'
+   29 |   repeat_output u(, q[12:0], 13'b0);
+      |                      ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

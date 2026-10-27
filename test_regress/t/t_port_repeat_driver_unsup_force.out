@@ -1,0 +1,10 @@
+%Error-UNSUPPORTED: t/t_port_repeat_driver_unsup.v:9:15: Unsupported: Repeated OUTPUT ports with delay, drive strength, tristate primitives, force, or external write access.
+                                                       : ... note: In instance 't.u'
+    9 |   output wire o;
+      |               ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error-UNSUPPORTED: t/t_port_repeat_driver_unsup.v:9:15: Unsupported: Multiple-driver net 'o' with --fourstate: nonlocal target.
+                                                       : ... note: In instance 't.u'
+    9 |   output wire o;
+      |               ^
+%Error: Exiting due to
