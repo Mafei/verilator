@@ -23,6 +23,7 @@
 #endif
 // clang-format on
 #include "V3ParseGrammar.h"  // Defines YYTYPE; before including bison header
+#include "V3ImportContext.h"
 
 #define YYERROR_VERBOSE 1  // For prior to Bison 3.6
 #define YYINITDEPTH 10000  // Older bisons ignore YYMAXDEPTH
@@ -1051,16 +1052,20 @@ descriptionList:                // IEEE: part of source_text
         ;
 
 description:                    // ==IEEE: description
-                module_declaration                      { }
+                module_declaration                      { v3Global.importContextp()->capture($1, false); }
         //                      // udp_declaration moved into module_declaration
         //                      // library_declaration and include_statement moved from library_description
         |       library_declaration                     { PARSEP->rootp()->addMiscsp($1); }
         |       include_statement                       { }
-        |       interface_declaration                   { }
-        |       program_declaration                     { }
-        |       package_declaration                     { }
-        |       package_itemTop                         { if ($1) PARSEP->unitPackage($1->fileline())->addStmtsp($1); }
-        |       bind_directive                          { if ($1) PARSEP->unitPackage($1->fileline())->addStmtsp($1); }
+        |       interface_declaration                   { v3Global.importContextp()->capture($1, false); }
+        |       program_declaration                     { v3Global.importContextp()->capture($1, false); }
+        |       package_declaration                     { v3Global.importContextp()->capture($1, false); }
+        |       package_itemTop
+                        { if ($1) { v3Global.importContextp()->capture($1, true);
+                                    PARSEP->unitPackage($1->fileline())->addStmtsp($1); } }
+        |       bind_directive
+                        { if ($1) { v3Global.importContextp()->capture($1, true);
+                                    PARSEP->unitPackage($1->fileline())->addStmtsp($1); } }
         |       config_declaration                      { }
         //                      // Verilator only
         |       yaT_RESETALL                            { }  // Else, under design, and illegal based on IEEE 22.3
@@ -1083,11 +1088,11 @@ timeunits_declaration<nodep>:   // ==IEEE: timeunits_declaration
 //**********************************************************************
 // Packages
 
-package_declaration:            // ==IEEE: package_declaration
+package_declaration<nodeModulep>: // ==IEEE: package_declaration
                 packageFront package_itemListE yENDPACKAGE endLabelE
                         { $1->modTrace(GRAMMARP->allTracingOn($1->fileline()));  // Stash for implicit wires, etc
                           if ($2) $1->addStmtsp($2);
-                          GRAMMARP->endLabel($<fl>4, $1, $4); }
+                          GRAMMARP->endLabel($<fl>4, $1, $4); $$ = $1; }
         ;
 
 packageFront<nodeModulep>:
@@ -1211,7 +1216,7 @@ package_export_item<nodep>:     // ==IEEE: package_export_item
 //**********************************************************************
 // Module headers
 
-module_declaration:             // ==IEEE: module_declaration
+module_declaration<nodeModulep>: // ==IEEE: module_declaration
         //                      // timeunits_declaration instead in module_item
         //                      // IEEE: module_nonansi_header + module_ansi_header
                 modFront importsAndParametersE portsStarE ';'
@@ -1221,17 +1226,17 @@ module_declaration:             // ==IEEE: module_declaration
                           if ($2) $1->addStmtsp($2);
                           if ($3) $1->addStmtsp($3);
                           if ($5) $1->addStmtsp($5);
-                          GRAMMARP->endLabel($<fl>7, $1, $7); }
+                          GRAMMARP->endLabel($<fl>7, $1, $7); $$ = $1; }
         |       udpFront portsStarE ';'
         /*cont*/    module_itemListE yENDPRIMITIVE endLabelE
                         { $1->modTrace(false);  // Stash for implicit wires, etc
                           if ($2) $1->addStmtsp($2);
                           if ($4) $1->addStmtsp($4);
                           GRAMMARP->m_tracingParse = true;
-                          GRAMMARP->endLabel($<fl>6, $1, $6); }
+                          GRAMMARP->endLabel($<fl>6, $1, $6); $$ = $1; }
         //
         |       yEXTERN modFront parameter_port_listE portsStarE ';'
-                        { DEL($2->unlinkFrBack()); }
+                        { DEL($2->unlinkFrBack()); $$ = nullptr; }
                         // We allow modules to be declared after instantiations, so harmless
         ;
 
@@ -1540,16 +1545,16 @@ port_reference<nodep>:  // IEEE: (non-ansi) port-reference
 //**********************************************************************
 // Interface headers
 
-interface_declaration:          // IEEE: interface_declaration + interface_nonansi_header + interface_ansi_header:
+interface_declaration<nodeModulep>: // IEEE: interface_declaration + interface_nonansi_header + interface_ansi_header:
         //                      // timeunits_declarationE is instead in interface_item
                 intFront importsAndParametersE portsStarE ';'
                         interface_itemListE yENDINTERFACE endLabelE
                         { if ($2) $1->addStmtsp($2);
                           if ($3) $1->addStmtsp($3);
                           if ($5) $1->addStmtsp($5);
-                          $1->hasParameterList($<flag>2); }
+                          $1->hasParameterList($<flag>2); $$ = $1; }
         |       yEXTERN intFront parameter_port_listE portsStarE ';'
-                        { DEL($2->unlinkFrBack()); }
+                        { DEL($2->unlinkFrBack()); $$ = nullptr; }
                         // We allow interfaces to be declared after instantiations, so harmless
         ;
 
@@ -1629,7 +1634,7 @@ anonymous_program_item<nodep>:  // ==IEEE: anonymous_program_item
         |       ';'                                     { $$ = nullptr; }
         ;
 
-program_declaration:            // IEEE: program_declaration + program_nonansi_header + program_ansi_header:
+program_declaration<nodeModulep>: // IEEE: program_declaration + program_nonansi_header + program_ansi_header:
         //                      // timeunits_declarationE is instead in program_item
                 pgmFront parameter_port_listE portsStarE ';'
         /*cont*/    program_itemListE yENDPROGRAM endLabelE
@@ -1638,9 +1643,9 @@ program_declaration:            // IEEE: program_declaration + program_nonansi_h
                           if ($2) $1->addStmtsp($2);
                           if ($3) $1->addStmtsp($3);
                           if ($5) $1->addStmtsp($5);
-                          GRAMMARP->endLabel($<fl>7, $1, $7); }
+                          GRAMMARP->endLabel($<fl>7, $1, $7); $$ = $1; }
         |       yEXTERN pgmFront parameter_port_listE portsStarE ';'
-                        { DEL($2->unlinkFrBack()); }
+                        { DEL($2->unlinkFrBack()); $$ = nullptr; }
                         // We allow programs to be declared after instantiations, so harmless
         ;
 
