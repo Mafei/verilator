@@ -1,0 +1,5 @@
+%Error: t/t_port_named_dup_bad.v:12:29: Duplicate declaration of port: 'same'
+   12 | module named_dup(.same(a), .same(b), d);
+      |                             ^~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=latest for more assistance.
+%Error: Exiting due to

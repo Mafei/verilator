@@ -2750,6 +2750,8 @@ class LinkDotParamVisitor final : public VNVisitor {
                     nodep->name(), LinkDotState::PortBinding{refp, nodep->pinNum(), named});
                 if (!inserted.second) {
                     if (named || inserted.first->second.m_named) {
+                        // Explicit external definitions are unique; repeated bare references
+                        // are distinct (IEEE 1364-2005 12.3.2 and 12.3.3).
                         nodep->v3error("Duplicate declaration of port: " << nodep->prettyNameQ());
                     } else {
                         inserted.first->second.m_slot = 0;
