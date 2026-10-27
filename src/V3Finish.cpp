@@ -39,6 +39,7 @@
 #include "V3Stats.h"
 
 #include <queue>
+#include <vector>
 
 VL_DEFINE_DEBUG_FUNCTIONS;
 
@@ -180,6 +181,35 @@ public:
 };
 
 class FinishVisitor final : public VNVisitor {
+    static bool isCompilerBlockCoverage(const AstCoverInc* nodep) {
+        const std::string& page = nodep->declp()->page();
+        return VString::startsWith(page, "v_line/") || VString::startsWith(page, "v_branch/");
+    }
+
+    struct CoverageTailFrame final {
+        const CoverageTailFrame* m_parentp;  // Outer tail, or nullptr at a functional barrier
+        std::vector<AstCoverInc*> m_counterps;  // Pure compiler counter suffix
+
+        CoverageTailFrame(const CoverageTailFrame* parentp, AstNode* nextp)
+            : m_parentp{parentp} {
+            // Trace coverage also appends an assignment. Do not infer that
+            // assignment's ownership or move it across source statements.
+            if (v3Global.opt.traceCoverage()) {
+                m_parentp = nullptr;
+                return;
+            }
+            for (AstNode* tailp = nextp; tailp; tailp = tailp->nextp()) {
+                AstCoverInc* const incp = VN_CAST(tailp, CoverInc);
+                if (!incp || !isCompilerBlockCoverage(incp)) {
+                    m_counterps.clear();
+                    m_parentp = nullptr;
+                    return;
+                }
+                m_counterps.push_back(incp);
+            }
+        }
+    };
+
     // NODE STATE
     //  AstNodeProcedure/AstCFunc::user1p() -> AstJumpBlock*, exit for this source body
     //  AstFinish::user2()         -> bool, processed
@@ -190,20 +220,37 @@ class FinishVisitor final : public VNVisitor {
     AstNode* m_procp = nullptr;  // Current supported source process or task
     const FinishTaskStateVisitor* const m_statep = nullptr;  // Qualified task call graph
     const bool m_finalLocal = false;  // Early, separately qualified final body
+    const CoverageTailFrame* m_coverageTailp = nullptr;  // Entered ancestor tails, inner to outer
     VDouble0 m_statExits;  // Source-body exits added
     VDouble0 m_statCallExits;  // Post-call termination checks added
+    VDouble0 m_statCoverageExits;  // Compiler counters copied onto source exit edges
 
     static AstNode* afterLineCoverage(AstNode* nodep) {
         // A block's compiler counters follow its last source statement. Keep them
         // before the exit, but never cross functional coverage or source code.
         while (AstCoverInc* const incp = VN_CAST(nodep->nextp(), CoverInc)) {
-            const std::string& page = incp->declp()->page();
-            if (!VString::startsWith(page, "v_line/") && !VString::startsWith(page, "v_branch/")) {
-                break;
-            }
+            if (!isCompilerBlockCoverage(incp)) break;
             nodep = incp;
         }
         return nodep;
+    }
+
+    AstNode* newSourceExit(FileLine* flp, AstJumpBlock* blockp, const AstNode* afterp) {
+        AstNode* stmtsp = nullptr;
+        // The local adjacent counters already execute before 'afterp'. A
+        // remaining sibling is a barrier, even when an outer suffix is pure.
+        if (!afterp->nextp()) {
+            for (const CoverageTailFrame* framep = m_coverageTailp; framep;
+                 framep = framep->m_parentp) {
+                for (AstCoverInc* const incp : framep->m_counterps) {
+                    stmtsp = AstNode::addNext(stmtsp, incp->cloneTree(false));
+                    ++m_statCoverageExits;
+                }
+            }
+        }
+        // Leave the original suffix in place for ordinary fallthrough. This
+        // edge exits the source body, so the copied counters cannot run twice.
+        return AstNode::addNext(stmtsp, new AstJumpGo{flp, blockp});
     }
 
     AstJumpBlock* getExitBlock() {
@@ -224,15 +271,40 @@ class FinishVisitor final : public VNVisitor {
 
     void visit(AstNodeProcedure* nodep) override {
         VL_RESTORER(m_procp);
+        VL_RESTORER(m_coverageTailp);
         m_procp = (VN_IS(nodep, Initial) || VN_IS(nodep, Always)) ? nodep : nullptr;
+        m_coverageTailp = nullptr;
         // Sensitivity expressions are not part of the source body.
         iterateAndNextNull(nodep->stmtsp());
     }
     void visit(AstCFunc* nodep) override {
         if (!m_statep || !m_statep->supportsTask(nodep)) return;
         VL_RESTORER(m_procp);
+        VL_RESTORER(m_coverageTailp);
         m_procp = nodep;
+        m_coverageTailp = nullptr;
         iterateAndNextNull(nodep->stmtsp());
+    }
+    void visit(AstIf* nodep) override {
+        iterateAndNextNull(nodep->condp());
+        const CoverageTailFrame frame{m_coverageTailp, nodep->nextp()};
+        VL_RESTORER(m_coverageTailp);
+        m_coverageTailp = frame.m_counterps.empty() ? frame.m_parentp : &frame;
+        iterateAndNextNull(nodep->thensp());
+        iterateAndNextNull(nodep->elsesp());
+    }
+    void visit(AstBegin* nodep) override {
+        const CoverageTailFrame frame{m_coverageTailp, nodep->nextp()};
+        VL_RESTORER(m_coverageTailp);
+        m_coverageTailp = frame.m_counterps.empty() ? frame.m_parentp : &frame;
+        iterateChildren(nodep);
+    }
+    void visit(AstLoop* nodep) override {
+        // This invocation has not completed the loop's later iterations or
+        // continuation. Inner branches can still own pure per-iteration tails.
+        VL_RESTORER(m_coverageTailp);
+        m_coverageTailp = nullptr;
+        iterateChildren(nodep);
     }
     // These boundaries have separate generated functions or return types.
     void visit(AstNodeFTask*) override {}
@@ -251,17 +323,25 @@ class FinishVisitor final : public VNVisitor {
                                                 "VL_UNLIKELY(vlSymsp->_vm_contextp__->gotFinish()"
                                                 " || vlSymsp->_vm_contextp__->finishPending())",
                                                 1};
-        afterLineCoverage(nodep)->addNextHere(
-            new AstIf{flp, condp, new AstJumpGo{flp, getExitBlock()}});
+        AstJumpBlock* const blockp = getExitBlock();
+        AstNode* const afterp = afterLineCoverage(nodep);
+        afterp->addNextHere(new AstIf{flp, condp, newSourceExit(flp, blockp, afterp)});
         ++m_statCallExits;
     }
     void visit(AstFinish* nodep) override {
         if (!m_procp || nodep->user2SetOnce()) return;
         AstJumpBlock* const blockp = getExitBlock();
-        afterLineCoverage(nodep)->addNextHere(new AstJumpGo{nodep->fileline(), blockp});
+        AstNode* const afterp = afterLineCoverage(nodep);
+        afterp->addNextHere(newSourceExit(nodep->fileline(), blockp, afterp));
         ++m_statExits;
     }
-    void visit(AstNode* nodep) override { iterateChildren(nodep); }
+    void visit(AstNode* nodep) override {
+        // Only the explicit If/Begin statement-list visitors prove an outer
+        // pure tail. Other containers may have unvisited functional siblings.
+        VL_RESTORER(m_coverageTailp);
+        m_coverageTailp = nullptr;
+        iterateChildren(nodep);
+    }
 
 public:
     FinishVisitor(AstNetlist* nodep, const FinishTaskStateVisitor* statep)
@@ -277,6 +357,7 @@ public:
         V3Stats::addStat(m_finalLocal ? "Finish, final local exits" : "Finish, source body exits",
                          m_statExits);
         V3Stats::addStat("Finish, task call exits", m_statCallExits);
+        V3Stats::addStat("Finish, exit coverage increments", m_statCoverageExits);
     }
 };
 

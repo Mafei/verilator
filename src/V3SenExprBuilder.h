@@ -267,7 +267,8 @@ private:
         // Change events compare whole signals; edge events inspect the least significant bit.
         switch (senItemp->edgeType()) {
         case VEdgeType::ET_CHANGED:
-        case VEdgeType::ET_HYBRID:  //
+        case VEdgeType::ET_HYBRID: {
+            const bool fireAtInit = senItemp->edgeType() == VEdgeType::ET_HYBRID;
             if (fourstateExpr) {
                 if (VN_IS(senp->dtypep()->skipRefp(), UnpackArrayDType)) {
                     AstCMethodHard* const resultValp
@@ -278,7 +279,7 @@ private:
                     resultXZp->dtypeSetBit();
                     return {wrapExprWithNullCheck(flp, new AstOr{flp, resultValp, resultXZp},
                                                   baseRefp),
-                            true};
+                            fireAtInit};
                 }
                 return {
                     wrapExprWithNullCheck(
@@ -286,7 +287,7 @@ private:
                         new AstRedOr{flp, new AstOr{flp, new AstXor{flp, prevValp(), currValp()},
                                                     new AstXor{flp, prevXZp(), currXZp()}}},
                         baseRefp),
-                    true};
+                    fireAtInit};
             }
             if (VN_IS(senp->dtypep()->skipRefp(), UnpackArrayDType)) {
                 // operand order reversed to avoid calling neq() method on non-VlUnpacked type, see
@@ -294,9 +295,11 @@ private:
                 AstCMethodHard* const resultp
                     = new AstCMethodHard{flp, prevp(), VCMethod::UNPACKED_NEQ, currp()};
                 resultp->dtypeSetBit();
-                return {wrapExprWithNullCheck(flp, resultp, baseRefp), true};
+                return {wrapExprWithNullCheck(flp, resultp, baseRefp), fireAtInit};
             }
-            return {wrapExprWithNullCheck(flp, new AstNeq{flp, currp(), prevp()}, baseRefp), true};
+            return {wrapExprWithNullCheck(flp, new AstNeq{flp, currp(), prevp()}, baseRefp),
+                    fireAtInit};
+        }
         case VEdgeType::ET_BOTHEDGE:  //
             if (fourstateExpr) {
                 return {wrapExprWithNullCheck(

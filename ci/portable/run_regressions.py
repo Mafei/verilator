@@ -39,7 +39,10 @@ GROUPS = {
         "finish_final_local", "finish_process_exit", "fourstate_finish_final",
         "fourstate_finish_process"
     ],
-    "finish_propagation": ["finish_final_multi", "finish_call_propagation"],
+    "finish_propagation": [
+        "finish_final_multi", "finish_call_propagation", "finish_coverage_tails",
+        "finish_coverage_barrier", "while_finish", "fork_cfunc_finish"
+    ],
     "fourstate": [
         "fourstate_api", "fourstate_cond", "fourstate_countones", "fourstate_dynarray",
         "fourstate_format", "fourstate_format_bin", "fourstate_format_hex",
@@ -51,7 +54,8 @@ GROUPS = {
         "port_repeat_scalar", "port_repeat_actual_unsup", "port_repeat_complex_unsup",
         "port_repeat_driver_unsup", "port_repeat_inout_unsup", "port_repeat_input_unsup",
         "port_repeat_mode_unsup", "port_repeat_named_unsup", "port_repeat_same_unsup",
-        "port_repeat_top_unsup", "var_dup_bad", "lint_pindup_bad"
+        "port_repeat_top_unsup", "var_dup_bad", "lint_pindup_bad", "sched_susp_vs_nosusp",
+        "fourstate_sense_init"
     ],
     "nba": [
         "assigndly_deep_ref_array", "assigndly_dynamic", "assigndly_dynamic_delay",
