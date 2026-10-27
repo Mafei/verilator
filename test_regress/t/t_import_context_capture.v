@@ -13,11 +13,11 @@ byte entries[0:0];
 module capture_scope #(parameter int TAG = 0);
   // verilog_format: off
 `define CAP_FUNCTION before_f
-`include "t_import_context_capture.vh"
+`include "t/t_import_context_capture.vh"
 `undef CAP_FUNCTION
   import capture_pkg::entries;
 `define CAP_FUNCTION after_f
-`include "t_import_context_capture.vh"
+`include "t/t_import_context_capture.vh"
 `undef CAP_FUNCTION
   // verilog_format: on
 endmodule
