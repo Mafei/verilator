@@ -2670,7 +2670,8 @@ class LinkDotParamVisitor final : public VNVisitor {
                     = refp->dtypep() ? refp->dtypep() : refp->childDTypep();
                 const AstBasicDType* const basicp = VN_CAST(dtypep, BasicDType);
                 if (!refp->direction().isOutput() || refp->varType() != VVarType::WIRE
-                    || !basicp || !basicp->isIntegralOrPacked() || !basicp->isFourstate()
+                    || !basicp || !(basicp->isIntegralOrPacked() || basicp->implicit())
+                    || !basicp->isFourstate()
                     || refp->isTristate() || refp->isPullup() || refp->isPulldown()
                     || refp->delayp()) {
                     nodep->v3warn(E_UNSUPPORTED,
