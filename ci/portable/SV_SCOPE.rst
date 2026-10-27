@@ -91,8 +91,12 @@ execution controls and reference-only tests are counted separately.
      - fourstate_cons_copy:15; cons_keyed:16; dynarray profiles
    * - Queues and casts
      - partial
-     - Two-state elements, construction/splicing and explicit XZ-to-bit conversion; no general XZ queue storage claim.
-     - fourstate_cons_queue:13; queue regression profiles
+     - Two-state elements, construction/splicing, bounded-assignment truncation and slices, and explicit XZ-to-bit conversion; no general XZ queue storage claim. The official bounded-queue warning/output contract is retained.
+     - fourstate_cons_queue:13; queue_bounded, queue_slice and other queue regression profiles
+   * - Type comparisons
+     - partial
+     - The integrated official implementation covers matching predefined integer/vector types in constant type() comparisons. The public test includes signedness, widths, dimensions and generate-time selection; this row does not certify every class or aggregate type relation.
+     - type_compare; original upstream assertions remain unchanged
    * - Structures
      - partial
      - Packed fields and unpacked bit fields; unpacked XZ fields remain unsupported.
