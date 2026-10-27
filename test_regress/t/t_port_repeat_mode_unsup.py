@@ -14,8 +14,8 @@ test.scenarios('linter')
 base_dir = test.obj_dir
 base_v_flags = test.v_flags.copy()
 profiles = (('two_state', []), ('json', ['--fourstate', '-Wno-FUTURE', '--json-only']),
-            ('hier', ['--fourstate', '-Wno-FUTURE',
-                      '--hierarchical']), ('savable', ['--fourstate', '-Wno-FUTURE', '--savable']))
+            ('hier', ['--fourstate', '-Wno-FUTURE', '--hierarchical'
+                      ]), ('savable', ['--fourstate', '-Wno-FUTURE', '--savable', '--no-timing']))
 for profile, options in profiles:
     test.obj_dir = base_dir + '/' + profile
     test.mkdir_ok(test.obj_dir)
