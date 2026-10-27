@@ -44,8 +44,7 @@ GROUPS = {
         "fourstate_api", "fourstate_cond", "fourstate_countones", "fourstate_dynarray",
         "fourstate_format", "fourstate_format_bin", "fourstate_format_hex",
         "fourstate_format_octal", "fourstate_format_packed", "fourstate_format_real",
-        "fourstate_format_trunc",
-        "fourstate_isunknown", "fourstate_lognot", "fourstate_modport",
+        "fourstate_format_trunc", "fourstate_isunknown", "fourstate_lognot", "fourstate_modport",
         "fourstate_noapi", "fourstate_packed_array", "fourstate_portable",
         "fourstate_sampled_expr", "fourstate_struct", "fourstate_trace_fst", "fourstate_trace_vcd",
         "fourstate_vpi", "vpi_get", "vpi_get_value_array"
@@ -162,7 +161,10 @@ GROUPS = {
         "fourstate_sen_expr", "fourstate_sen_iff", "fourstate_case_equal_known",
         "fourstate_sen_impure_unsup", "fourstate_wildcard", "fourstate_nba_clip_bounds",
         "timing_nba_clip_bounds", "timing_nba_partselect_clip", "timing_nba_repeat_control",
-        "timing_nba_repeat_unsup", "tri_inout_default"
+        "timing_nba_repeat_unsup", "tri_inout_default", "func_ancestor_ctx",
+        "func_ancestor_func_unsup", "func_ancestor_import_unsup", "func_ancestor_missing_bad",
+        "func_ancestor_param_unsup", "func_ancestor_suggest_bad", "func_ancestor_wrongkind_unsup",
+        "func_ancestor_xz"
     ],
     "fourstate_constructors_20261026": [
         "fourstate_cons_copy", "fourstate_cons_keyed", "fourstate_cons_queue",

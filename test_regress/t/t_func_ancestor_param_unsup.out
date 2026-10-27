@@ -1,0 +1,5 @@
+%Error-UNSUPPORTED: t/t_func_ancestor_param_unsup.v:18:8: Unsupported: ancestor task lookup requires an unparameterized static module cone without source package imports/exports, with fixed packed input/output formals.
+   18 |   host h(value);
+      |        ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

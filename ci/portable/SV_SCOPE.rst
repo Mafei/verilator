@@ -111,8 +111,8 @@ execution controls and reference-only tests are counted separately.
      - fourstate_format_real:39 literal checks in each of four two-state/four-state and explicit-width profiles
    * - Ancestor task/function lookup
      - partial
-     - Per-instance ancestor lookup remains an unresolved binding gap. A shared task pointer cannot safely represent different parent-instance definitions; no generic parent fallback is claimed.
-     - Pinned sv_task_call_instance_lookup remains a compile failure in fixed128
+     - Static runtime tasks use instance-specific ancestor bodies and state in unparameterized static module cones, with nearest-task selection and fixed packed integral input/output formals. Parent parameters, generates, arrays of instances, recursion, hierarchy/serialization modes, source package imports/exports in the affected cone, ancestor functions and complex/default/ref/inout formals remain explicit unsupported boundaries. Mixed nearer non-subroutine names are rejected as an implementation boundary, without classifying the source as invalid. Ordinary missing names retain their diagnostics and suggestions. This is a bounded task subset, not complete task/function or SystemVerilog support.
+     - func_ancestor_ctx:15 literal checks per two-state/four-state profile; func_ancestor_xz:30 four-state XZ argument/output/state checks and30 on the exact pinned-Icarus fixture;6 diagnostic gold controls. Historical fixed128 inputs/results are preserved and require a fresh full candidate run.
    * - Resolved nets and supplies
      - partial
      - Public supply/pull/default/inout, multi-driver and procedural-enable profiles. Complex strengths and hierarchical cases retain explicit boundaries.

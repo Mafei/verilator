@@ -3221,6 +3221,7 @@ const char* AstNodeFTaskRef::broken() const {
 }
 void AstNodeFTaskRef::dump(std::ostream& str) const {
     Super::dump(str);
+    if (ancestorLevels()) str << " ancestor=" << ancestorLevels();
     if (classOrPackagep()) str << " pkg=" << nodeAddr(classOrPackagep());
     if (containsGenBlock()) str << " [GENBLK]";
     if (pli()) str << " [PLI]";
@@ -3235,6 +3236,7 @@ void AstNodeFTaskRef::dump(std::ostream& str) const {
     }
 }
 void AstNodeFTaskRef::dumpJson(std::ostream& str) const {
+    if (ancestorLevels()) dumpJsonNumFunc(str, ancestorLevels);
     dumpJsonBoolFuncIf(str, containsGenBlock);
     dumpJsonBoolFuncIf(str, pli);
     dumpJsonBoolFuncIf(str, superReference);
