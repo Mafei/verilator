@@ -105,6 +105,10 @@ execution controls and reference-only tests are counted separately.
      - partial
      - $sformat/$swrite write known character bits and clear X/Z masks of whole packed variables, including task-local buffers, typedef widths29/95/129 and simple packed structs. A destination used as a format input retains its old mask until formatting completes. Two-state bit/string paths have separate controls. Four-state selected, array-element, object-member and concatenation destinations remain unsupported. Separate fourstate_format_trunc C++14/two-state/four-state controls cover packed suffix truncation and partial-byte masking; real default field widths and file-I/O conversion behavior are outside this change.
      - fourstate_format_packed:50 assertions across7 profiles; fourstate_format_trunc:182 checks (146 C++14 runtime,18 default two-state,18 four-state)
+   * - Dynamic real decimal formats
+     - partial
+     - Runtime decimal formatting uses the existing rounded signed-64-bit representation without accessing an integral XZ mask. Finite values in the signed-32-bit range, explicit minimum/eight-column fields, two string-output APIs, a whole packed destination and following real/integer arguments are covered in C++14 without timing. This does not specify a new default field width or certify NaN, infinity or out-of-range conversion.
+     - fourstate_format_real:39 literal checks in each of four two-state/four-state and explicit-width profiles
    * - Ancestor task/function lookup
      - partial
      - Per-instance ancestor lookup remains an unresolved binding gap. A shared task pointer cannot safely represent different parent-instance definitions; no generic parent fallback is claimed.

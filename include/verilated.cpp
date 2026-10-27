@@ -1225,6 +1225,8 @@ void _vl_vsformat(std::string& output, const std::string& format, int argc,
                 VL_SET_WQ(strwidep, ld);
                 lwp = strwidep;
                 lbits = 64;
+                // Decimal formatting consumes the rounded signed value without an XZ mask.
+                if (fmt == 'd') formatAttr = VL_VFORMATATTR_SIGNED;
                 // Not changint fmt == 'p' to fmt = 'g', as need fmts correct
             } else if (formatAttr == VL_VFORMATATTR_STRING) {
                 thingp = va_arg(ap, std::string*);
