@@ -66,6 +66,7 @@
 #include "V3LinkDot.h"
 
 #include "V3Global.h"
+#include "V3ImportLexical.h"
 #include "V3Graph.h"
 #include "V3LinkDotIfaceCapture.h"
 #include "V3MemberMap.h"
@@ -982,6 +983,42 @@ public:
         }
     }
 
+    VSymEnt* findLexical(AstNode* queryp, VSymEnt* lookupSymp, uint32_t viewId,
+                        const string& name) {
+        // Only source-qualified queries enter here. Never consult the final imported
+        // table on a miss: each outer view is fixed at its child definition site.
+        const V3ImportLexical& context = *v3Global.importLexicalp();
+        for (; viewId; viewId = context.view(viewId).outer) {
+            const V3ImportLexical::View& view = context.view(viewId);
+            const V3ImportLexical::Scope& scope = context.scope(view.scope);
+            if (!scope.needsSymbol) continue;  // Empty unnamed source block
+            VSymEnt* scopeSymp = dunitEntp();
+            if (!scope.unit) {
+                scopeSymp = lookupSymp;
+                while (scopeSymp
+                       && V3ImportLexical::scopeId(scopeSymp->nodep()) != view.scope) {
+                    scopeSymp = scopeSymp->fallbackp();
+                }
+            }
+            UASSERT_OBJ(scopeSymp, queryp, "Lexical source scope missing from live symbol chain");
+            VSymEnt* const localp = scopeSymp->findIdFlat(name);
+            if (localp && !localp->imported()
+                && (!scope.unit || context.unitDeclarationVisible(name, view.unitCut))) {
+                return localp;  // Ordinary declarations retain their existing forward visibility
+            }
+            if (const string* const importedp = context.importedPackage(viewId, name)) {
+                VSymEnt* const packagep = packageEntp()->findIdFlat(*importedp);
+                UASSERT_OBJ(packagep, queryp, "Qualified source import package missing");
+                VSymEnt* const memberp = packagep->findIdFlat(name);
+                UASSERT_OBJ(memberp && !memberp->imported() && VN_IS(memberp->nodep(), Var),
+                            queryp, "Qualified source import is not a direct variable");
+                return memberp;
+            }
+            lookupSymp = scopeSymp->fallbackp();
+        }
+        return nullptr;
+    }
+
     VSymEnt* findSymPrefixed(VSymEnt* lookupSymp, const string& dotname, string& baddot,
                              bool fallback) {
         // Find symbol in given point in hierarchy, allowing prefix (post-Inline)
@@ -1515,8 +1552,11 @@ class LinkDotFindVisitor final : public VNVisitor {
             // unnamed#'s would just confuse tracing variables in
             // places such as tasks, where "task ...; begin ... end"
             // are common.
+            const bool needName
+                = nodep->importScopeId()
+                  && v3Global.importLexicalp()->scope(nodep->importScopeId()).needsSymbol;
             for (AstNode* const itemp : nodep->itemspList()) {
-                if (VN_IS(itemp, Var) || VN_IS(itemp, Foreach)) {
+                if (needName || VN_IS(itemp, Var) || VN_IS(itemp, Foreach)) {
                     std::string name;
                     const std::string stepStr = m_statep->forPrimary()
                                                     ? ""
@@ -1558,7 +1598,10 @@ class LinkDotFindVisitor final : public VNVisitor {
                 }
                 return false;
             };
-            bool needName = nodep->declsp() || containsDecl(nodep->stmtsp());
+            bool needName
+                = nodep->declsp() || containsDecl(nodep->stmtsp())
+                  || (nodep->importScopeId()
+                      && v3Global.importLexicalp()->scope(nodep->importScopeId()).needsSymbol);
             if (const AstFork* const forkp = VN_CAST(nodep, Fork)) {
                 needName = needName || containsDecl(forkp->forksp());
             }
@@ -4644,7 +4687,10 @@ class LinkDotResolveVisitor final : public VNVisitor {
                     return;
                 }
             }
-            if (allowScope) {
+            if (nodep->importViewId()) {
+                foundp = m_statep->findLexical(nodep, m_ds.m_dotSymp, nodep->importViewId(),
+                                              nodep->name());
+            } else if (allowScope) {
                 foundp = m_statep->findDotted(nodep->fileline(), m_ds.m_dotSymp, nodep->name(),
                                               baddot, okSymp, first);  // Maybe nullptr
             } else if (first) {
@@ -4775,6 +4821,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
                 } else {
                     taskrefp = new AstFuncRef{nodep->fileline(), nodep->name()};
                 }
+                taskrefp->importViewId(nodep->importViewId());
                 nodep->replaceWith(taskrefp);
                 VL_DO_DANGLING(pushDeletep(nodep), nodep);
                 m_ds = lastStates;
@@ -5004,6 +5051,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
                         // Also SV class methods can be called without parens
                         AstFuncRef* const funcRefp
                             = new AstFuncRef{nodep->fileline(), nodep->name()};
+                        funcRefp->importViewId(nodep->importViewId());
                         nodep->replaceWith(funcRefp);
                         VL_DO_DANGLING(pushDeletep(nodep), nodep);
                     }
@@ -5654,7 +5702,9 @@ class LinkDotResolveVisitor final : public VNVisitor {
                 return;
             }
             VSymEnt* const foundp
-                = m_statep->findSymPrefixed(dotSymp, nodep->name(), baddot, first);
+                = nodep->importViewId()
+                      ? m_statep->findLexical(nodep, dotSymp, nodep->importViewId(), nodep->name())
+                      : m_statep->findSymPrefixed(dotSymp, nodep->name(), baddot, first);
             AstNodeFTask* const taskp = foundp ? VN_CAST(foundp->nodep(), NodeFTask) : nullptr;
             AstNodeModule* const taskModulep = foundp ? foundp->classOrPackagep() : nullptr;
             // Ignore deferring linking of functions inside params of classes extending
@@ -5686,6 +5736,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
                     //                << taskp->prettyNameQ() << endl);
                 }
                 nodep->taskp(taskp);
+                nodep->importViewId(0);  // Bound target and cloneRelink now own the provenance
                 nodep->classOrPackagep(foundp->classOrPackagep());
                 UINFO(7, indent() << "Resolved " << nodep);  // Also prints taskp
             } else {
@@ -5697,6 +5748,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
                         && m_ftaskp->name() == foundp->nodep()->name()) {
                         // This is a recursive reference to the function itself, not to the var
                         nodep->taskp(m_ftaskp);
+                        nodep->importViewId(0);
                         nodep->classOrPackagep(foundp->classOrPackagep());
                         UINFO(7, indent() << "Resolved recursive " << nodep);  // Also prints taskp
                     } else {

@@ -1884,10 +1884,12 @@ string AstGenBlock::dtypeNameInnerScope(const string& outer) const {
 }
 void AstGenBlock::dump(std::ostream& str) const {
     Super::dump(str);
+    if (importScopeId()) str << " importScope=" << importScopeId();
     if (implied()) str << " [IMPLIED]";
     if (unnamed()) str << " [UNNAMED]";
 }
 void AstGenBlock::dumpJson(std::ostream& str) const {
+    dumpJsonNumFunc(str, importScopeId);
     dumpJsonBoolFuncIf(str, implied);
     dumpJsonBoolFuncIf(str, unnamed);
     dumpJsonGen(str);
@@ -2476,9 +2478,11 @@ bool AstNodeBiop::isPure() {
 }
 void AstNodeBlock::dump(std::ostream& str) const {
     Super::dump(str);
+    if (importScopeId()) str << " importScope=" << importScopeId();
     if (unnamed()) str << " [UNNAMED]";
 }
 void AstNodeBlock::dumpJson(std::ostream& str) const {
+    dumpJsonNumFunc(str, importScopeId);
     dumpJsonBoolFuncIf(str, unnamed);
     dumpJsonGen(str);
 }
@@ -3148,6 +3152,7 @@ const char* AstNodeFTask::broken() const {
 }
 void AstNodeFTask::dump(std::ostream& str) const {
     Super::dump(str);
+    if (importScopeId()) str << " importScope=" << importScopeId();
     if (classMethod()) str << " [METHOD]";
     if (dpiExport()) str << " [DPIX]";
     if (dpiImport()) str << " [DPII]";
@@ -3171,6 +3176,7 @@ void AstNodeFTask::dump(std::ostream& str) const {
     if (baseOverride().isAny()) str << " [" << baseOverride().ascii() << "]";
 }
 void AstNodeFTask::dumpJson(std::ostream& str) const {
+    dumpJsonNumFunc(str, importScopeId);
     dumpJsonBoolIf(str, "method", classMethod());
     dumpJsonBoolFuncIf(str, dpiExport);
     dumpJsonBoolFuncIf(str, dpiImport);
@@ -3221,6 +3227,7 @@ const char* AstNodeFTaskRef::broken() const {
 }
 void AstNodeFTaskRef::dump(std::ostream& str) const {
     Super::dump(str);
+    if (importViewId()) str << " importView=" << importViewId();
     if (classOrPackagep()) str << " pkg=" << nodeAddr(classOrPackagep());
     if (containsGenBlock()) str << " [GENBLK]";
     if (pli()) str << " [PLI]";
@@ -3235,6 +3242,7 @@ void AstNodeFTaskRef::dump(std::ostream& str) const {
     }
 }
 void AstNodeFTaskRef::dumpJson(std::ostream& str) const {
+    dumpJsonNumFunc(str, importViewId);
     dumpJsonBoolFuncIf(str, containsGenBlock);
     dumpJsonBoolFuncIf(str, pli);
     dumpJsonBoolFuncIf(str, superReference);
@@ -3271,6 +3279,14 @@ bool AstNodeFTaskRef::isPure() {
 }
 void AstNodeFile::dump(std::ostream& str) const { Super::dump(str); }
 void AstNodeFile::dumpJson(std::ostream& str) const { dumpJsonGen(str); }
+void AstNodeForeach::dump(std::ostream& str) const {
+    Super::dump(str);
+    if (importScopeId()) str << " importScope=" << importScopeId();
+}
+void AstNodeForeach::dumpJson(std::ostream& str) const {
+    dumpJsonNumFunc(str, importScopeId);
+    dumpJsonGen(str);
+}
 void AstNodeFuncCovItem::dump(std::ostream& str) const {
     Super::dump(str);
     if (instCoveragep()) str << " instCoverage=" << nodeAddr(instCoveragep());
@@ -3298,6 +3314,7 @@ string AstNodeModule::dtypeNameInnerScope(const string& outer) const {
 }
 void AstNodeModule::dump(std::ostream& str) const {
     Super::dump(str);
+    if (importScopeId()) str << " importScope=" << importScopeId();
     str << "  L" << level();
     str << " D" << depth();
     if (modPublic()) str << " [P]";
@@ -3317,6 +3334,7 @@ void AstNodeModule::dump(std::ostream& str) const {
     if (libname() != "work") str << " libname=" << libname();
 }
 void AstNodeModule::dumpJson(std::ostream& str) const {
+    dumpJsonNumFunc(str, importScopeId);
     dumpJsonStrFunc(str, origName);
     dumpJsonStrFunc(str, verilogName);
     dumpJsonNumFunc(str, level);
@@ -3551,6 +3569,14 @@ string AstParamTypeDType::prettyDTypeName(bool full) const {
     // Named as the type it stands for, as is a reference to it, or if not yet resolved, by name
     if (!skipRefToEnumOrNullp()) return prettyName();
     return subDTypep()->prettyDTypeName(full);
+}
+void AstParseRef::dump(std::ostream& str) const {
+    Super::dump(str);
+    if (importViewId()) str << " importView=" << importViewId();
+}
+void AstParseRef::dumpJson(std::ostream& str) const {
+    dumpJsonNumFunc(str, importViewId);
+    dumpJsonGen(str);
 }
 void AstParseTypeDType::dump(std::ostream& str) const {
     Super::dump(str);

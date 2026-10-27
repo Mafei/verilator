@@ -291,6 +291,7 @@ class AstNodeFTaskRef VL_NOT_FINAL : public AstNodeExpr {
 private:
     string m_name;  // Name of variable
     string m_dotted;  // Dotted part of scope the name()ed task/func is under or ""
+    uint32_t m_importViewId = 0;  // Immutable definition-site view until name binding
     string m_inlinedDots;  // Dotted hierarchy flattened out
     bool m_containsGenBlock = false;  // Contains gen block reference
     bool m_pli = false;  // Pli system call ($name)
@@ -317,6 +318,8 @@ public:
     void taskp(AstNodeFTask* taskp) { m_taskp = taskp; }
     void name(const string& name) override { m_name = name; }
     void dotted(const string& name) { m_dotted = name; }
+    uint32_t importViewId() const { return m_importViewId; }
+    void importViewId(uint32_t id) { m_importViewId = id; }
     AstNodeModule* classOrPackagep() const { return m_classOrPackagep; }
     void classOrPackagep(AstNodeModule* nodep) { m_classOrPackagep = nodep; }
     bool containsGenBlock() const { return m_containsGenBlock; }
@@ -333,6 +336,7 @@ public:
                && classOrPackagep() == asamep->classOrPackagep()  //
                && name() == asamep->name()  //
                && dotted() == asamep->dotted()  //
+               && importViewId() == asamep->importViewId()  //
                && inlinedDots() == asamep->inlinedDots()  //
                && pli() == asamep->pli()  //
                && containsGenBlock() == asamep->containsGenBlock()
@@ -2022,6 +2026,7 @@ class AstParseRef final : public AstNodeExpr {
     // @astgen op2 := ftaskrefp : Optional[AstNodeFTaskRef]
 
     string m_name;  // Name of the variable/function/task
+    uint32_t m_importViewId = 0;  // Immutable definition-site view until name binding
 
 public:
     AstParseRef(FileLine* fl, const string& name, AstNodeExpr* lhsp = nullptr,
@@ -2032,11 +2037,15 @@ public:
         this->ftaskrefp(ftaskrefp);
     }
     ASTGEN_MEMBERS_AstParseRef;
+    void dump(std::ostream& str) const override;
+    void dumpJson(std::ostream& str) const override;
+    uint32_t importViewId() const { return m_importViewId; }
+    void importViewId(uint32_t id) { m_importViewId = id; }
     string name() const override VL_MT_STABLE { return m_name; }  // * = Var name
     void name(const string& name) override { m_name = name; }
     bool sameNode(const AstNode* samep) const override {
         const AstParseRef* const asamep = VN_DBG_AS(samep, ParseRef);
-        return m_name == asamep->m_name;
+        return m_name == asamep->m_name && importViewId() == asamep->importViewId();
     }
 
     string emitVerilog() override { V3ERROR_NA_RETURN(""); }
