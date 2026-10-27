@@ -239,6 +239,7 @@ private:
     VStringSet m_cppFiles;     // argument: C++ files to link against
     VStringList m_cFlags;      // argument: user CFLAGS
     VStringList m_ldLibs;      // argument: user LDFLAGS
+    VStringList m_ldLibFiles;  // argument: library files, subset of m_ldLibs
     VStringList m_makeFlags;   // argument: user MAKEFLAGS
     VStringSet m_compilerIncludes; // argument: user --compiler-include
     VStringSet m_futures;      // argument: -Wfuture- list
@@ -267,6 +268,7 @@ private:
     bool m_binary = false;          // main switch: --binary
     bool m_build = false;           // main switch: --build
     bool m_context = true;          // main switch: --Wcontext
+    bool m_coverageBranch = false;  // main switch: --coverage-branch
     bool m_coverageExpr = false;    // main switch: --coverage-expr
     bool m_coverageFsm = false;     // main switch: --coverage-fsm
     bool m_coverageLine = false;    // main switch: --coverage-block
@@ -469,6 +471,7 @@ private:
     bool m_fInlineCFuncs;  // main switch: -fno-inline-cfuncs: inline small C functions
     bool m_fInlineFuncs = true;  // main switch: -fno-inline-funcs: function inlining
     bool m_fInlineFuncsEager = true;  // main switch: -fno-inline-funcs-eager: don't inline eagerly
+    bool m_fInlineGetters = true;  // main switch: -fno-inline-getters: read member directly
     bool m_fLife;        // main switch: -fno-life: variable lifetime
     bool m_fLifePost;    // main switch: -fno-life-post: delayed assignment elimination
     bool m_fLocalize;    // main switch: -fno-localize: convert temps to local variables
@@ -503,7 +506,8 @@ private:
     void optimize(int level);
     void showVersion(bool verbose);
     void coverage(bool flag) {
-        m_coverageLine = m_coverageToggle = m_coverageExpr = m_coverageFsm = m_coverageUser = flag;
+        m_coverageLine = m_coverageBranch = m_coverageToggle = m_coverageExpr = m_coverageFsm
+            = m_coverageUser = flag;
     }
     static bool suffixed(const string& sw, const char* arg);
     static string parseFileArg(const string& optdir, const string& relfilename);
@@ -527,6 +531,7 @@ public:
     void addCppFile(const string& filename);
     void addCFlags(const string& filename);
     void addCompilerIncludes(const string& filename);
+    void addLdLibFile(const string& filename);
     void addLdLibs(const string& filename);
     void addMakeFlags(const string& filename);
     void addLibMapFile(const string& filename);
@@ -565,15 +570,17 @@ public:
     bool coverage() const VL_MT_SAFE {
         // Any enabled coverage kind, including FSM coverage. Code generation
         // and runtime support should generally query this accessor.
-        return m_coverageLine || m_coverageToggle || m_coverageExpr || m_coverageUser
-               || m_coverageFsm;
+        return m_coverageLine || m_coverageBranch || m_coverageToggle || m_coverageExpr
+               || m_coverageUser || m_coverageFsm;
     }
     bool coverageNonFsm() const VL_MT_SAFE {
         // The broad line/toggle/expr/user coverage transforms use this
         // accessor. FSM coverage shares the overall coverage umbrella, but its
         // extraction still happens through a separate early-recognition path.
-        return m_coverageLine || m_coverageToggle || m_coverageExpr || m_coverageUser;
+        return m_coverageLine || m_coverageBranch || m_coverageToggle || m_coverageExpr
+               || m_coverageUser;
     }
+    bool coverageBranch() const { return m_coverageBranch; }
     bool coverageExpr() const { return m_coverageExpr; }
     bool coverageFsm() const { return m_coverageFsm; }
     VFsmExpandType coverageFsmExpand() const { return m_coverageFsmExpand; }
@@ -764,6 +771,7 @@ public:
     const VStringSet& cppFiles() const { return m_cppFiles; }
     const VStringList& cFlags() const { return m_cFlags; }
     const VStringSet& compilerIncludes() const { return m_compilerIncludes; }
+    const VStringList& ldLibFiles() const { return m_ldLibFiles; }
     const VStringList& ldLibs() const { return m_ldLibs; }
     const VStringList& makeFlags() const { return m_makeFlags; }
     const VFileLibSet& libraryFiles() const { return m_libraryFiles; }
@@ -818,6 +826,7 @@ public:
     bool fInlineCFuncs() const { return m_fInlineCFuncs; }
     bool fInlineFuncs() const { return m_fInlineFuncs; }
     bool fInlineFuncsEager() const { return m_fInlineFuncsEager; }
+    bool fInlineGetters() const { return m_fInlineGetters; }
     bool fLife() const { return m_fLife; }
     bool fLifePost() const { return m_fLifePost; }
     bool fLocalize() const { return m_fLocalize; }
@@ -876,6 +885,7 @@ public:
     static string getenvSYSTEMC_ARCH();
     static string getenvSYSTEMC_INCLUDE();
     static string getenvSYSTEMC_LIBDIR();
+    static string getenvVERILATOR_RAND_SAMPLER();
     static string getenvVERILATOR_ROOT();
     static string getenvVERILATOR_SOLVER();
     static string getStdPackagePath();

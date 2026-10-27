@@ -44,6 +44,8 @@ class WidthSelVisitor final : public VNVisitor {
     //  on if widthing top-down or just for parameters.
 #define iterateChildren DO_NOT_iterateChildern_IN_V3WidthSel
 
+    bool m_readCoordinate = false;  // Preserve packed element and indexed part-read coordinates
+
     // METHODS
 
     void checkConstantOrReplace(AstNode* nodep, const string& message) {
@@ -71,13 +73,6 @@ class WidthSelVisitor final : public VNVisitor {
         // What is the data type and information for this SEL-ish's from()?
         UINFO(9, "  fromData start ddtypep = " << basefromp);
         VNumRange fromRange;  // constructs to isRanged(false)
-        while (basefromp) {
-            if (VN_IS(basefromp, AttrOf)) {
-                basefromp = VN_AS(basefromp, AttrOf)->fromp();
-                continue;
-            }
-            break;
-        }
         UASSERT_OBJ(basefromp && basefromp->dtypep(), nodep, "Select with no from dtype");
         AstNodeDType* const ddtypep = basefromp->dtypep()->skipRefp();
         AstNodeDType* const errp = ddtypep;
@@ -112,23 +107,101 @@ class WidthSelVisitor final : public VNVisitor {
         return FromData(errp, ddtypep, fromRange);
     }
 
+    static AstNodeExpr* newSignedRangeIndex(AstNodeExpr* const indexp) {
+        // Declaration offsets require at least 32 bits, even for negative constants.
+        if (!indexp->isSigned() || indexp->width() >= VL_IDATASIZE) return indexp;
+        AstNodeExpr* const extendedp = new AstExtendS{indexp->fileline(), indexp, VL_IDATASIZE};
+        extendedp->dtypeChgSigned(true);
+        return extendedp;
+    }
+
     static AstConst* newRangeConst(AstNodeExpr* const indexp, int32_t value) {
         // Preserve a signed source index through range normalization. An
         // unsigned constant would make the arithmetic unsigned, allowing Width
         // to truncate the index before Unknown checks the complete bounds.
-        if (!v3Global.opt.fourstate() && indexp->isSigned()) {
+        if (indexp->isSigned()) {
+            if (indexp->width() > VL_IDATASIZE) return newCoordinateConst(indexp, value);
             return new AstConst{indexp->fileline(), AstConst::Signed32{}, value};
         }
         return new AstConst{indexp->fileline(), AstConst::Unsized32{},
                             static_cast<uint32_t>(value)};
     }
 
-    AstNodeExpr* newSubNeg(AstNodeExpr* lhsp, int32_t rhs) {
+    struct IndexDiagnostic final {
+        // Preserve diagnostic widths from the normalization without carry bits.
+        // These scalar values do not participate in coordinate arithmetic.
+        int m_width;  // Expression width after legacy normalization
+        int m_widthMin;  // Minimum width after legacy normalization
+        const bool m_isConst;  // Original index can use the legacy constant fold
+        explicit IndexDiagnostic(const AstNodeExpr* const indexp)
+            : m_width{indexp->width()}
+            , m_widthMin{indexp->widthMin()}
+            , m_isConst{VN_IS(indexp, Const)} {}
+        void subtract(int32_t constant, bool reversed = false) {
+            if (!reversed && constant == 0) return;
+            if (!reversed && m_isConst) {
+                // The old constant fold constructed a sized V3Number.
+                m_widthMin = m_width;
+            } else {
+                const uint32_t magnitude
+                    = !reversed && constant < 0
+                          ? static_cast<uint32_t>(-static_cast<int64_t>(constant))
+                          : static_cast<uint32_t>(constant);
+                m_width = std::max(VL_IDATASIZE, m_width);
+                m_widthMin = std::max(V3Number::log2b(magnitude) + 1, m_widthMin);
+            }
+        }
+        void fromRange(const VNumRange& range) {
+            if (!range.ranged()) return;
+            subtract(range.ascending() ? range.hi() : range.lo(), range.ascending());
+        }
+        void multiply(uint32_t elwidth) {
+            // The old multiplier always extended/truncated its operand to 32 bits.
+            m_width = VL_IDATASIZE;
+            m_widthMin = std::max(V3Number::log2b(elwidth) + 1, m_widthMin);
+        }
+        void store(AstSel* const nodep, bool carryCoordinate) const {
+            if (!carryCoordinate) return;
+            nodep->declIndexWidth(m_width);
+            nodep->declIndexWidthMin(m_widthMin);
+        }
+    };
+
+    static AstNodeExpr* newRangeCoordinate(AstNodeExpr* const indexp, int scaleBits = 0) {
+        // Unsigned indices need both a sign bit and room for a signed declaration
+        // offset. Extend before arithmetic so neither subtraction nor scaling wraps.
+        const int width = std::max(VL_IDATASIZE, indexp->width()) + 2 + scaleBits;
+        AstNodeExpr* const extendedp
+            = indexp->isSigned()
+                  ? static_cast<AstNodeExpr*>(new AstExtendS{indexp->fileline(), indexp, width})
+                  : static_cast<AstNodeExpr*>(new AstExtend{indexp->fileline(), indexp, width});
+        extendedp->dtypeChgSigned(true);
+        return extendedp;
+    }
+
+    static AstConst* newCoordinateConst(AstNodeExpr* const coordinatep, int32_t value) {
+        // Generated arithmetic operands already have the coordinate's exact type.
+        V3Number source{coordinatep, VL_IDATASIZE, static_cast<uint32_t>(value)};
+        V3Number extended{coordinatep, coordinatep->width()};
+        extended.opExtendS(source, VL_IDATASIZE);
+        extended.isSigned(true);
+        return new AstConst{coordinatep->fileline(), extended};
+    }
+
+    AstNodeExpr* newSubNeg(AstNodeExpr* lhsp, int32_t rhs, bool packedCoordinate = false) {
         // Return lhs-rhs. Preserve signed range arithmetic without negating rhs,
         // which may be INT32_MIN. The legacy path uses an add for negative rhs.
         if (rhs == 0) {
             return lhsp;
-        } else if (!v3Global.opt.fourstate() && lhsp->isSigned()) {
+        } else if (m_readCoordinate && packedCoordinate) {
+            lhsp = newRangeCoordinate(lhsp);
+            AstNodeExpr* const newp
+                = new AstSub{lhsp->fileline(), lhsp, newCoordinateConst(lhsp, rhs)};
+            newp->dtypeFrom(lhsp);
+            return newp;
+        }
+        lhsp = newSignedRangeIndex(lhsp);
+        if (!v3Global.opt.fourstate() && lhsp->isSigned()) {
             AstNodeExpr* const newp = new AstSub{lhsp->fileline(), lhsp, newRangeConst(lhsp, rhs)};
             newp->dtypeFrom(lhsp);
             return newp;
@@ -151,10 +224,14 @@ class WidthSelVisitor final : public VNVisitor {
             return newp;
         }
     }
-    AstNodeExpr* newSubNeg(int32_t lhs, AstNodeExpr* rhsp) {
+    AstNodeExpr* newSubNeg(int32_t lhs, AstNodeExpr* rhsp, bool packedCoordinate = false) {
         // Return lhs-rhs
+        const bool widened = m_readCoordinate && packedCoordinate;
+        rhsp = widened ? newRangeCoordinate(rhsp) : newSignedRangeIndex(rhsp);
+        AstConst* const constantp
+            = widened ? newCoordinateConst(rhsp, lhs) : newRangeConst(rhsp, lhs);
         // We must make sure sub gets sign of original value
-        AstNodeExpr* const newp = new AstSub{rhsp->fileline(), newRangeConst(rhsp, lhs), rhsp};
+        AstNodeExpr* const newp = new AstSub{rhsp->fileline(), constantp, rhsp};
         newp->dtypeFrom(rhsp);  // Important as AstSub default is lhs's sign
         return newp;
     }
@@ -171,14 +248,23 @@ class WidthSelVisitor final : public VNVisitor {
         } else {
             if (fromRange.ascending()) {
                 // reg [1:3] was swapped to [3:1] (lsbEndianedp==3) and needs a SUB(3,under)
-                return newSubNeg(fromRange.hi(), underp);
+                return newSubNeg(fromRange.hi(), underp, true);
             } else {
                 // reg [3:1] needs a SUB(under,1)
-                return newSubNeg(underp, fromRange.lo());
+                return newSubNeg(underp, fromRange.lo(), true);
             }
         }
     }
     AstNodeExpr* newMulConst(FileLine* fl, uint32_t elwidth, AstNodeExpr* indexp) {
+        if (m_readCoordinate) {
+            if (elwidth == 1) return indexp;
+            AstNodeExpr* const coordinatep
+                = newRangeCoordinate(indexp, V3Number::log2b(elwidth) + 1);
+            AstNodeExpr* const mulp = new AstMul{
+                fl, coordinatep, newCoordinateConst(coordinatep, static_cast<int32_t>(elwidth))};
+            mulp->dtypeFrom(coordinatep);
+            return mulp;
+        }
         AstNodeExpr* extendp;
         const int widthMin = std::max(V3Number::log2b(elwidth) + 1, indexp->widthMin());
         if (indexp->width() > 32) {
@@ -241,6 +327,7 @@ class WidthSelVisitor final : public VNVisitor {
         // lhsp/rhsp do not need to be constant
         AstNodeExpr* const fromp = nodep->fromp()->unlinkFrBack();
         AstNodeExpr* const rhsp = nodep->bitp()->unlinkFrBack();  // bit we're extracting
+        IndexDiagnostic diagnostic{rhsp};
         UINFOTREE(9, nodep, "", "SELBT2");
         const FromData fromdata = fromDataForArray(nodep, fromp);
         AstNodeDType* const ddtypep = fromdata.m_dtypep;
@@ -261,9 +348,9 @@ class WidthSelVisitor final : public VNVisitor {
             // SELBIT(array, index) -> SEL(array, index*width-of-subindex, width-of-subindex)
             AstNodeExpr* subp = rhsp;
             if (fromRange.ascending()) {
-                subp = newSubNeg(fromRange.hi(), subp);
+                subp = newSubNeg(fromRange.hi(), subp, true);
             } else {
-                subp = newSubNeg(subp, fromRange.lo());
+                subp = newSubNeg(subp, fromRange.lo(), true);
             }
             UASSERT_OBJ(!(!fromRange.elements() || (adtypep->width() % fromRange.elements()) != 0),
                         adtypep,
@@ -271,9 +358,12 @@ class WidthSelVisitor final : public VNVisitor {
                                                                    << fromRange.elements());
             // cppcheck-suppress zerodivcond
             const int elwidth = adtypep->width() / fromRange.elements();
+            diagnostic.fromRange(fromRange);
+            diagnostic.multiply(elwidth);
             AstSel* const newp = new AstSel{
                 nodep->fileline(), fromp, newMulConst(nodep->fileline(), elwidth, subp), elwidth};
             newp->declRange(fromRange);
+            diagnostic.store(newp, m_readCoordinate);
             newp->declElWidth(elwidth);
             newp->dtypeFrom(adtypep->subDTypep());  // Need to strip off array reference
             if (VN_IS(adtypep->subDTypep(), BasicDType)) {
@@ -352,18 +442,22 @@ class WidthSelVisitor final : public VNVisitor {
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
         } else if (VN_IS(ddtypep, BasicDType)) {
             // SELBIT(range, index) -> SEL(array, index, 1)
+            diagnostic.fromRange(fromRange);
             AstSel* const newp
                 = new AstSel{nodep->fileline(), fromp, newSubLsbOf(rhsp, fromRange), 1};
             newp->declRange(fromRange);
+            diagnostic.store(newp, m_readCoordinate);
             UINFO(6, "   new " << newp);
             UINFOTREE(9, newp, "", "SELBTn");
             nodep->replaceWith(newp);
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
         } else if (VN_IS(ddtypep, NodeUOrStructDType)) {  // A bit from the packed struct
             // SELBIT(range, index) -> SEL(array, index, 1)
+            diagnostic.fromRange(fromRange);
             AstSel* const newp
                 = new AstSel{nodep->fileline(), fromp, newSubLsbOf(rhsp, fromRange), 1};
             newp->declRange(fromRange);
+            diagnostic.store(newp, m_readCoordinate);
             UINFO(6, "   new " << newp);
             UINFOTREE(9, newp, "", "SELBTn");
             nodep->replaceWith(newp);
@@ -431,6 +525,7 @@ class WidthSelVisitor final : public VNVisitor {
                                "Second value of [a:b] isn't a constant, maybe you want +: or -:");
         AstNodeExpr* const msbp = nodep->leftp()->unlinkFrBack();
         AstNodeExpr* const lsbp = nodep->rightp()->unlinkFrBack();
+        IndexDiagnostic diagnostic{lsbp};
         int32_t msb = VN_AS(msbp, Const)->toSInt();
         int32_t lsb = VN_AS(lsbp, Const)->toSInt();
         const int32_t elem = (msb > lsb) ? (msb - lsb + 1) : (lsb - msb + 1);
@@ -469,11 +564,14 @@ class WidthSelVisitor final : public VNVisitor {
                 std::swap(msb, lsb);
             }
             const int elwidth = adtypep->width() / fromRange.elements();
+            diagnostic.fromRange(fromRange);
+            diagnostic.multiply(elwidth);
             AstSel* const newp
                 = new AstSel{nodep->fileline(), fromp,
                              newMulConst(nodep->fileline(), elwidth, newSubLsbOf(lsbp, fromRange)),
                              (msb - lsb + 1) * elwidth};
             newp->declRange(fromRange);
+            diagnostic.store(newp, m_readCoordinate);
             newp->declElWidth(elwidth);
             newp->dtypeFrom(sliceDType(adtypep, msb, lsb));
             // UINFOTREE(9, newp, "", "EXTBTn");
@@ -491,9 +589,11 @@ class WidthSelVisitor final : public VNVisitor {
                         << ":" << msb << "]");
                 std::swap(msb, lsb);
             }
+            diagnostic.fromRange(fromRange);
             AstSel* const newp = new AstSel{nodep->fileline(), fromp, newSubLsbOf(lsbp, fromRange),
                                             msb + 1 - lsb};
             newp->declRange(fromRange);
+            diagnostic.store(newp, m_readCoordinate);
             UINFO(6, "   new " << newp);
             // UINFOTREE(9, newp, "", "SELEXnew");
             nodep->replaceWith(newp);
@@ -508,9 +608,11 @@ class WidthSelVisitor final : public VNVisitor {
                         << ":" << msb << "]");
                 std::swap(msb, lsb);
             }
+            diagnostic.fromRange(fromRange);
             AstSel* const newp = new AstSel{nodep->fileline(), fromp, newSubLsbOf(lsbp, fromRange),
                                             msb + 1 - lsb};
             newp->declRange(fromRange);
+            diagnostic.store(newp, m_readCoordinate);
             UINFO(6, "   new " << newp);
             // UINFOTREE(9, newp, "", "SELEXnew");
             nodep->replaceWith(newp);
@@ -544,6 +646,7 @@ class WidthSelVisitor final : public VNVisitor {
         // Now replace it with an AstSel
         AstNodeExpr* const fromp = nodep->fromp()->unlinkFrBack();
         AstNodeExpr* const rhsp = nodep->rhsp()->unlinkFrBack();
+        IndexDiagnostic diagnostic{rhsp};
         AstNodeExpr* const widthp = nodep->thsp()->unlinkFrBack();
         warnTri(rhsp);
         const int width = VN_AS(widthp, Const)->toSInt();
@@ -596,25 +699,33 @@ class WidthSelVisitor final : public VNVisitor {
             if (VN_IS(nodep, SelPlus)) {
                 if (fromRange.ascending()) {
                     // SELPLUS(from,lsb,width) -> SEL(from, (vector_msb-width+1)-sel, width)
-                    newlsbp = newSubNeg((fromRange.hi() - width + 1), rhsp);
+                    diagnostic.subtract(fromRange.hi() - width + 1, true);
+                    newlsbp = newSubNeg((fromRange.hi() - width + 1), rhsp, true);
                 } else {
                     // SELPLUS(from,lsb,width) -> SEL(from, lsb-vector_lsb, width)
-                    newlsbp = newSubNeg(rhsp, fromRange.lo());
+                    diagnostic.subtract(fromRange.lo());
+                    newlsbp = newSubNeg(rhsp, fromRange.lo(), true);
                 }
             } else if (VN_IS(nodep, SelMinus)) {
                 if (fromRange.ascending()) {
                     // SELMINUS(from,msb,width) -> SEL(from, msb-[bit])
-                    newlsbp = newSubNeg(fromRange.hi(), rhsp);
+                    diagnostic.subtract(fromRange.hi(), true);
+                    newlsbp = newSubNeg(fromRange.hi(), rhsp, true);
                 } else {
                     // SELMINUS(from,msb,width) -> SEL(from, msb-(width-1)-lsb#)
-                    newlsbp = newSubNeg(rhsp, fromRange.lo() + (width - 1));
+                    diagnostic.subtract(fromRange.lo() + (width - 1));
+                    newlsbp = newSubNeg(rhsp, fromRange.lo() + (width - 1), true);
                 }
             } else {
                 nodep->v3fatalSrc("Bad Case");
             }
-            if (elwidth != 1) newlsbp = newMulConst(nodep->fileline(), elwidth, newlsbp);
+            if (elwidth != 1) {
+                diagnostic.multiply(elwidth);
+                newlsbp = newMulConst(nodep->fileline(), elwidth, newlsbp);
+            }
             AstSel* const newp = new AstSel{nodep->fileline(), fromp, newlsbp, newwidth};
             newp->declRange(fromRange);
+            diagnostic.store(newp, m_readCoordinate);
             newp->declElWidth(elwidth);
             UINFO(6, "   new " << newp);
             UINFOTREE(9, newp, "", "SELNEW");
@@ -647,7 +758,14 @@ public:
     // CONSTRUCTORS
     WidthSelVisitor() = default;
     ~WidthSelVisitor() override = default;
-    AstNode* mainAcceptEdit(AstNode* nodep) { return iterateSubtreeReturnEdits(nodep); }
+    AstNode* mainAcceptEdit(AstNode* nodep) {
+        const AstNodePreSel* const selp = VN_AS(nodep, NodePreSel);
+        const bool packedElement
+            = VN_IS(nodep, SelBit) && VN_IS(selp->fromp()->dtypep()->skipRefp(), PackArrayDType);
+        m_readCoordinate = v3Global.opt.fourstate() && !selp->fromp()->isLValue()
+                           && (VN_IS(nodep, SelPlus) || VN_IS(nodep, SelMinus) || packedElement);
+        return iterateSubtreeReturnEdits(nodep);
+    }
 };
 
 //######################################################################

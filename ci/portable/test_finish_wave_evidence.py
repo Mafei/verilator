@@ -198,5 +198,86 @@ class ControlsWaveEvidenceTest(unittest.TestCase):
                     self.emit()
 
 
+class SVSemanticsWaveEvidenceTest(unittest.TestCase):
+    """Require every new public semantic profile without trimming any wave bytes."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        fixtures = ("t_fourstate_inout_default", "t_fourstate_nba_partselect_clip",
+                    "t_fourstate_nba_repeat_control", "t_fourstate_sen_expr",
+                    "t_fourstate_sen_iff", "t_timing_nba_partselect_clip",
+                    "t_timing_nba_repeat_control", "t_tri_inout_default",
+                    "t_fourstate_slice_index_domain", "t_fourstate_slice_packed_domain",
+                    "t_fourstate_nested_select")
+        self.paths = [
+            self.root / "test_regress/obj_vlt" / fixture / "simx.vcd" for fixture in fixtures
+        ]
+        self.raw = (b"$timescale 1ps $end\n$scope module t $end\n"
+                    b"$var wire 1 ! q $end\n$upscope $end\n"
+                    b"$enddefinitions $end\n#0\n0!\n#1\n1!\n")
+        for path in self.paths:
+            path.parent.mkdir(parents=True)
+            path.write_bytes(self.raw)
+
+    def emit(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            log_evidence.sv_semantics_wave_evidence(self.root)
+        return output.getvalue()
+
+    def test_all_eleven_profiles_preserve_complete_bytes(self):
+        console = self.emit()
+        result = json.loads((self.root / "out/sv-semantics-wave-evidence.json").read_text())
+        self.assertEqual(len(result["records"]), 11)
+        self.assertEqual(result["total_bytes"], sum(path.stat().st_size for path in self.paths))
+        self.assertEqual(json.loads(console.removeprefix("SV_SEMANTICS_WAVE_BYTES ")), result)
+        for record, path in zip(result["records"], self.paths):
+            self.assertEqual(record["path"], str(path.relative_to(self.root)))
+            self.assertEqual(record["contents_utf8"].encode(), path.read_bytes())
+            self.assertEqual(record["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def test_missing_profile_rejects_partial_collection(self):
+        self.paths[-1].unlink()
+        with self.assertRaisesRegex(ValueError, "Missing or unexpected SV semantic VCD"):
+            self.emit()
+
+    def test_extra_nested_wave_rejects_ambiguous_collection(self):
+        path = self.paths[0].parent / "stale/extra.vcd"
+        path.parent.mkdir()
+        path.write_bytes(self.raw)
+        with self.assertRaisesRegex(ValueError, "Missing or unexpected SV semantic VCD"):
+            self.emit()
+
+    def test_symlinked_parent_rejects_redirected_collection(self):
+        base = self.root / "test_regress/obj_vlt"
+        moved = base.with_name("redirected")
+        base.rename(moved)
+        base.symlink_to(moved, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "Symlinked SV semantic fixture"):
+            self.emit()
+
+    def test_symlinked_wave_rejects_indirect_bytes(self):
+        path = self.paths[0]
+        target = path.with_name("indirect.txt")
+        path.rename(target)
+        path.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "Nonregular semantic VCD"):
+            self.emit()
+
+    def test_budget_rejects_oversize_collection(self):
+        self.paths[-1].write_bytes(self.raw + b"\n" * log_evidence.SV_SEMANTICS_WAVE_BUDGET)
+        with self.assertRaisesRegex(ValueError, "Empty or oversized semantic VCD collection"):
+            self.emit()
+
+    def test_incomplete_wave_rejects_header_time_or_newline_truncation(self):
+        for raw in (b"#0\n0!\n", self.raw.split(b"#0")[0], self.raw.rstrip(b"\n")):
+            with self.subTest(raw=raw):
+                self.paths[-1].write_bytes(raw)
+                with self.assertRaisesRegex(ValueError, "Incomplete control VCD"):
+                    self.emit()
+
+
 if __name__ == "__main__":
     unittest.main()

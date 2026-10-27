@@ -63,8 +63,7 @@ class EmitCLazyDecls final : public VNVisitorConst {
 
     void lazyDeclareConstPoolVar(AstVar* varp) {
         if (!declaredOnce(varp)) return;  // Already declared
-        const string nameProtect
-            = EmitCUtil::topClassName() + "__ConstPool__" + varp->nameProtect();
+        const string nameProtect = EmitCUtil::constPoolName(varp);
         m_emitter.putns(varp, "extern const ");
         m_emitter.puts(varp->dtypep()->cType(nameProtect, false, false));
         m_emitter.puts(";\n");
@@ -120,7 +119,7 @@ public:
 //  Emit statements and expressions
 
 class EmitCFunc VL_NOT_FINAL : public EmitCConstInit {
-    VMemberMap m_memberMap;
+    VMemberMap m_memberMap;  // Map to find members of classes
     AstVarRef* m_wideTempRefp = nullptr;  // Variable that _WW macros should be setting
     std::unordered_map<AstJumpBlock*, size_t> m_labelNumbers;  // Label numbers for AstJumpBlocks
     bool m_createdScopeHash = false;  // Already created a scope hash
@@ -133,7 +132,7 @@ protected:
     bool m_usevlSelfRef = false;  // Use vlSelfRef reference instead of vlSelf pointer
     const AstNodeModule* m_modp = nullptr;  // Current module being emitted
     const AstCFunc* m_cfuncp = nullptr;  // Current function being emitted
-    bool m_instantiatesOwnProcess = false;
+    bool m_instantiatesOwnProcess = false;  // Statement that instantiates its own process
     const AstClassPackage* m_classOrPackage = nullptr;  // Pointer to current class or package
     string m_classOrPackageHash;  // Hash of class or package name
 
@@ -259,7 +258,6 @@ public:
     void emitCvtPackStr(AstNode* nodep);
     void emitConstant(AstConst* nodep);
     void emitConstantString(const AstConst* nodep);
-    void emitSetVarConstant(const string& assignString, AstConst* constp);
     void emitVarReset(const string& prefix, AstVar* varp, bool constructing);
     string emitVarResetRecurse(const AstVar* varp, bool constructing,
                                const string& varNameProtected, AstNodeDType* dtypep, int depth,
@@ -376,8 +374,7 @@ public:
 
     void putConstructorSubinit(const AstClass* classp, AstCFunc* cfuncp) {
         // Direct non-virtual bases in declaration order
-        for (const AstClassExtends* extp = classp->extendsp(); extp;
-             extp = VN_AS(extp->nextp(), ClassExtends)) {
+        for (const AstClassExtends* const extp : classp->extendspList()) {
             if (extp->classp()->isInterfaceClass()) continue;
             if (extp->classp()->useVirtualPublic()) continue;
             puts(EmitCUtil::prefixNameProtect(extp->classp()));
@@ -471,7 +468,7 @@ public:
             nodep->prependStmtsp(setProcessp);
         }
 
-        for (AstNode* subnodep = nodep->argsp(); subnodep; subnodep = subnodep->nextp()) {
+        for (AstNode* const subnodep : nodep->argspList()) {
             if (AstVar* const varp = VN_CAST(subnodep, Var)) {
                 if (varp->isFuncReturn()) emitVarDecl(varp);
             }
@@ -554,9 +551,51 @@ public:
         }
     }
 
-    void visit(AstCvtUnpackedToQueue* nodep) override {
+    void visit(AstCvtUnpackToQueue* nodep) override {
         AstNodeDType* const elemDTypep = nodep->fromp()->dtypep()->subDTypep();
         emitOpName(nodep, nodep->emitC(), nodep->fromp(), elemDTypep, nullptr);
+    }
+    void visit(AstCvtQueueToUnpack* nodep) override {
+        // Whether each unpacked dimension is reversed, the first for the outermost
+        std::vector<bool> reverses;
+        const AstNodeDType* toDtp = nodep->dtypep()->skipRefp();
+        const AstNodeDType* fromDtp = nodep->fromp()->dtypep()->skipRefp();
+        while (const AstUnpackArrayDType* const toArrayp = VN_CAST(toDtp, UnpackArrayDType)) {
+            // A dynamic array or queue is indexed from the left, as is a source unpacked array
+            const AstUnpackArrayDType* const fromArrayp = VN_CAST(fromDtp, UnpackArrayDType);
+            reverses.push_back(!fromArrayp ? !toArrayp->declRange().ascending()
+                                           : toArrayp->declRange().ascending()
+                                                 != fromArrayp->declRange().ascending());
+            toDtp = toArrayp->subDTypep()->skipRefp();
+            fromDtp = fromDtp->subDTypep()->skipRefp();
+        }
+        putns(nodep, "VL_CVT_Q_TO_UNPACK<");
+        puts(nodep->dtypep()->cType("", false, false));
+        for (const bool reverse : reverses) puts(reverse ? ", 1" : ", 0");
+        puts(">(");
+        iterateAndNextConstNull(nodep->fromp());
+        puts(")");
+    }
+    void visit(AstCvtUnpackToUnpack* nodep) override {
+        // Whether each dimension is reversed, the first for the outermost, up to the last that is
+        std::vector<bool> reverses;
+        const AstUnpackArrayDType* top = VN_AS(nodep->dtypep()->skipRefp(), UnpackArrayDType);
+        const AstUnpackArrayDType* fromp
+            = VN_AS(nodep->fromp()->dtypep()->skipRefp(), UnpackArrayDType);
+        while (top) {
+            reverses.push_back(top->declRange().ascending() != fromp->declRange().ascending());
+            top = VN_CAST(top->subDTypep()->skipRefp(), UnpackArrayDType);
+            fromp = VN_CAST(fromp->subDTypep()->skipRefp(), UnpackArrayDType);
+        }
+        while (!reverses.back()) reverses.pop_back();
+        putns(nodep, "VL_CVT_UNPACK_TO_UNPACK<");
+        for (size_t i = 0; i < reverses.size(); ++i) {
+            if (i) puts(", ");
+            puts(reverses[i] ? "1" : "0");
+        }
+        puts(">(");
+        iterateAndNextConstNull(nodep->fromp());
+        puts(")");
     }
 
     void visit(AstNodeAssign* nodep) override {
@@ -692,7 +731,7 @@ public:
                    // and means using '=' and bypasses using emitConstantW.
                    // Whuch we don't want to do as slows compiler down.
                    && !VN_IS(nodep->rhsp(), VarRef)  //
-                   && !VN_IS(nodep->rhsp(), InitArray)  //
+                   && !VN_IS(nodep->rhsp(), ConsArray)  //
                    && !VN_IS(nodep->rhsp(), AssocSel)  //
                    && !VN_IS(nodep->rhsp(), MemberSel)  //
                    && !VN_IS(nodep->rhsp(), StructSel)  //
@@ -723,10 +762,6 @@ public:
             decind = true;
             if (!VN_IS(nodep->rhsp(), Const)) ofp()->putBreak();
             putns(nodep, "= ");
-            if (unpackDtp && VN_IS(nodep->rhsp(), InitArray)) {
-                // Emit "VlUnpacked<type, depth>{{...InitArray...}}"
-                puts(unpackDtp->cType("", false, false, false));
-            }
         }
         if (rhs) iterateAndNextConstNull(nodep->rhsp());
         if (paren) puts(")");
@@ -840,7 +875,7 @@ public:
         puts("(");
         bool comma = false;
         int argNum = 0;
-        for (AstNode* subnodep = nodep->pinsp(); subnodep; subnodep = subnodep->nextp()) {
+        for (AstNode* const subnodep : nodep->pinspList()) {
             if (comma) puts(", ");
             if (nodep->method() == VCMethod::RANDOMIZER_HARD && argNum == 1) {
                 // For RANDOMIZER_HARD's filename argument (2nd arg after constraint),
@@ -848,8 +883,7 @@ public:
                 if (const AstCExpr* const cexprp = VN_CAST(subnodep, CExpr)) {
                     // Extract filename from the CExpr (which contains "filename")
                     std::string filename;
-                    for (const AstNode* textnodep = cexprp->nodesp(); textnodep;
-                         textnodep = textnodep->nextp()) {
+                    for (const AstNode* const textnodep : cexprp->nodespList()) {
                         if (const AstText* const textp = VN_CAST(textnodep, Text)) {
                             filename = textp->text();
                             break;
@@ -1168,14 +1202,17 @@ public:
         puts(nodep->isHex() ? "true" : "false");
         putbs(", ");
         // Need real storage width
-        puts(cvtToStr(nodep->memp()->dtypep()->subDTypep()->widthMin()));
+        puts(cvtToStr(nodep->memp()->dtypep()->skipRefp()->subDTypep()->widthMin()));
         uint32_t array_lo = 0;
+        bool memUsePtr = true;
         {
             const AstVarRef* const varrefp = VN_CAST(nodep->memp(), VarRef);
             if (!varrefp) {
                 nodep->v3error(nodep->verilogKwd() << " loading non-variable");
-            } else if (VN_IS(varrefp->varp()->dtypeSkipRefp(), AssocArrayDType)) {
+            } else if (VN_IS(varrefp->varp()->dtypeSkipRefp(), AssocArrayDType)
+                       || VN_IS(varrefp->varp()->dtypeSkipRefp(), DynArrayDType)) {
                 // nodep->memp() below will when verilated code is compiled create a C++ template
+                memUsePtr = false;
             } else if (const AstUnpackArrayDType* const adtypep
                        = VN_CAST(varrefp->varp()->dtypeSkipRefp(), UnpackArrayDType)) {
                 putbs(", ");
@@ -1184,18 +1221,18 @@ public:
                 putbs(", ");
                 puts(cvtToStr(array_lo));
             } else {
-                nodep->v3error(nodep->verilogKwd()
-                               << " loading other than unpacked/associative-array variable");
+                nodep->v3error(
+                    nodep->verilogKwd()
+                    << " loading other than unpacked/dynamic/associative-array variable");
             }
         }
         putbs(", ");
         iterateConst(nodep->filenamep());
         putbs(", ");
         {
-            const bool need_ptr = !VN_IS(nodep->memp()->dtypep(), AssocArrayDType);
-            if (need_ptr) puts(" &(");
+            if (memUsePtr) puts(" &(");
             iterateAndNextConstNull(nodep->memp());
-            if (need_ptr) puts(")");
+            if (memUsePtr) puts(")");
         }
         putbs(", ");
         if (nodep->lsbp()) {
@@ -1759,9 +1796,17 @@ public:
         //an error
         bool backpIsParent = (nodep->backp()->op1p() == nodep || nodep->backp()->op2p() == nodep);
         UASSERT(backpIsParent, "can not find return type for streamR");
-        if ((VN_IS(nodep->backp()->dtypep()->skipRefp(), QueueDType))) {
-            emitOpName(nodep, "VL_STREAMR_%nq%lq%rq(%lw, %P, %li, %ri)", nodep->lhsp(),
-                       nodep->rhsp(), nullptr);
+        if (const AstQueueDType* const qdtp
+            = VN_CAST(nodep->backp()->dtypep()->skipRefp(), QueueDType)) {
+            if (nodep->lhsp()->isWide()) {
+                emitOpName(nodep,
+                           "VL_STREAMR_%nq%lq%rq(%lw," + std::to_string(qdtp->subDTypep()->width())
+                               + ", %P, %li, %ri)",
+                           nodep->lhsp(), nodep->rhsp(), nullptr);
+            } else {
+                emitOpName(nodep, "VL_STREAMR_%nq%lq%rq(%lw, %P, %li, %ri)", nodep->lhsp(),
+                           nodep->rhsp(), nullptr);
+            }
         } else if (VN_IS(nodep->lhsp()->dtypep()->skipRefp(), QueueDType)) {
             if (!((nodep->backp()->op1p() && nodep->backp()->op1p()->isWide())
                   || (nodep->backp()->op2p() && nodep->backp()->op2p()->isWide()))) {
@@ -1869,18 +1914,21 @@ public:
         }
         puts(") != 0ULL)");
     }
-    void visit(AstInitItem* nodep) override { iterateChildrenConst(nodep); }
     // Terminals
     void visit(AstVarRef* nodep) override {
         const AstVar* const varp = nodep->varp();
+
+        // Reference to constant pool variable is special
+        if (varp->constPoolEntry()) {
+            putns(nodep, EmitCUtil::constPoolName(varp));
+            return;
+        }
+
         const AstNodeModule* const varModp = EmitCParentModule::get(varp);
         const bool dereferenceCovergroupRef
             = varp->covergroupRefMember() && nodep->access().isReadOrRW();
         if (dereferenceCovergroupRef) putns(nodep, "(*");
-        if (varModp->isConstPool()) {
-            // Reference to constant pool variable
-            putns(nodep, EmitCUtil::topClassName() + "__ConstPool__");
-        } else if (VN_IS(varModp, Class) && varModp != m_modp) {
+        if (VN_IS(varModp, Class) && varModp != m_modp) {
             // Superclass member reference
             putns(nodep, EmitCUtil::prefixNameProtect(varModp) + "::");
         } else if (varp->isIfaceRef()) {
@@ -1908,6 +1956,7 @@ public:
             emitConstant(nodep);
         }
     }
+    void visit(AstNodeCons* nodep) override { emitValCons(nodep); }
     void visit(AstThisRef* nodep) override {
         putnbs(nodep, nodep->dtypep()->cType("", false, false));
         puts("{");
@@ -1932,94 +1981,6 @@ public:
     }
 
     //
-    void visit(AstConsAssoc* nodep) override {
-        putnbs(nodep, nodep->dtypep()->cType("", false, false));
-        puts("()");
-        if (nodep->defaultp()) {
-            putbs(".setDefault(");
-            iterateAndNextConstNull(nodep->defaultp());
-            puts(")");
-        }
-    }
-    void visit(AstSetAssoc* nodep) override {
-        iterateAndNextConstNull(nodep->lhsp());
-        putnbs(nodep, ".set(");
-        iterateAndNextConstNull(nodep->keyp());
-        puts(", ");
-        putbs("");
-        iterateAndNextConstNull(nodep->valuep());
-        puts(")");
-    }
-    void visit(AstConsWildcard* nodep) override {
-        putnbs(nodep, nodep->dtypep()->cType("", false, false));
-        puts("()");
-        if (nodep->defaultp()) {
-            putbs(".setDefault(");
-            iterateAndNextConstNull(nodep->defaultp());
-            puts(")");
-        }
-    }
-    void visit(AstSetWildcard* nodep) override {
-        iterateAndNextConstNull(nodep->lhsp());
-        putnbs(nodep, ".set(");
-        iterateAndNextConstNull(nodep->keyp());
-        puts(", ");
-        putbs("");
-        iterateAndNextConstNull(nodep->valuep());
-        puts(")");
-    }
-    void visit(AstConsDynArray* nodep) override {
-        putnbs(nodep, nodep->dtypep()->cType("", false, false));
-        if (!nodep->lhsp()) {
-            putns(nodep, "{}");
-        } else {
-            puts("::cons");
-            puts(nodep->lhsIsValue() ? "V" : "C");
-            if (nodep->rhsp()) puts(nodep->rhsIsValue() ? "V" : "C");
-            puts("(");
-            iterateAndNextConstNull(nodep->lhsp());
-            if (nodep->rhsp()) {
-                puts(", ");
-                putbs("");
-            }
-            iterateAndNextConstNull(nodep->rhsp());
-            puts(")");
-        }
-    }
-    void visit(AstConsPackUOrStruct* nodep) override {
-        putnbs(nodep, nodep->dtypep()->cType("", false, false));
-        puts("{");
-        for (AstNode* memberp = nodep->membersp(); memberp; memberp = memberp->nextp()) {
-            iterateConst(memberp);
-            if (memberp->nextp()) puts(", ");
-        }
-        puts("}");
-    }
-    void visit(AstConsPackMember* nodep) override {
-        auto* const vdtypep = VN_AS(nodep->dtypep(), MemberDType);
-        putnbs(nodep, ".");
-        puts(vdtypep->name());
-        puts(" = ");
-        iterateConst(nodep->rhsp());
-    }
-    void visit(AstConsQueue* nodep) override {
-        putnbs(nodep, nodep->dtypep()->cType("", false, false));
-        if (!nodep->lhsp()) {
-            puts("{}");
-        } else {
-            puts("::cons");
-            puts(nodep->lhsIsValue() ? "V" : "C");
-            if (nodep->rhsp()) puts(nodep->rhsIsValue() ? "V" : "C");
-            puts("(");
-            iterateAndNextConstNull(nodep->lhsp());
-            if (nodep->rhsp()) {
-                puts(", ");
-                putbs("");
-            }
-            iterateAndNextConstNull(nodep->rhsp());
-            puts(")");
-        }
-    }
     void visit(AstExecGraph* nodep) override {
         // The location of the AstExecGraph within the containing AstCFunc is where we want to
         // invoke the graph and wait for it to complete. The run-time library does just that.

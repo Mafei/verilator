@@ -6,10 +6,12 @@
 import hashlib
 import json
 import re
+import runpy
 import sys
 from pathlib import Path
 
 CONTROLS_WAVE_BUDGET = 512 * 1024
+SV_SEMANTICS_WAVE_BUDGET = 512 * 1024
 
 
 def compiler_evidence(root):
@@ -23,33 +25,19 @@ def compiler_evidence(root):
 
 
 def enum_evidence(path, root):
-    """Normalize only enum type hashes, preserving suffixes and alias identity."""
+    """Record enum/counter hashes with the harness's exact normalization rules."""
     raw = path.read_bytes()
-    identities = {}
-
-    def replace(match):
-        original = match.group(1)
-        if original not in identities:
-            identities[original] = len(identities)
-        return b"__Venum_hHASH" + str(identities[original]).encode("ascii")
-
-    normalized = re.sub(rb"\b__Venum_h([0-9a-f]{8})(?=__\d+\b)", replace, raw)
+    normalizer = runpy.run_path(
+        Path(__file__).resolve().parents[2] /
+        'test_regress/vltest_generated_ids.py')['normalize_generated_identifiers']
+    normalized, tokens, identities = normalizer(raw.decode('latin-1'))
     return {
-        "path":
-        str(path.relative_to(root)),
-        "raw_sha256":
-        hashlib.sha256(raw).hexdigest(),
-        "normalized_sha256":
-        hashlib.sha256(normalized).hexdigest(),
-        "raw_tokens":
-        list(
-            dict.fromkeys(
-                token.decode("ascii")
-                for token in re.findall(rb"\b__Venum_h[0-9a-f]{8}__\d+\b", raw))),
-        "identities": {
-            original.decode("ascii"): "HASH" + str(index)
-            for original, index in identities.items()
-        }
+        "path": str(path.relative_to(root)),
+        "raw_sha256": hashlib.sha256(raw).hexdigest(),
+        "normalized_sha256": hashlib.sha256(normalized.encode('latin-1')).hexdigest(),
+        "raw_tokens": tokens,
+        "identities": identities.get('__Venum_h', {}),
+        "generated_identities": identities
     }
 
 
@@ -82,6 +70,29 @@ def semantic_wave_evidence(root):
     collections = [(fixture, base / fixture) for fixture in fixtures]
     wave_evidence(root, collections, "semantic-wave-evidence.json", "SEMANTIC_WAVE_BYTES",
                   128 * 1024)
+
+
+def sv_semantics_wave_evidence(root):
+    """Preserve complete semantic profiles, rejecting partial or extra waves."""
+    base = root / "test_regress/obj_vlt"
+    fixtures = ("t_fourstate_inout_default", "t_fourstate_nba_partselect_clip",
+                "t_fourstate_nba_repeat_control", "t_fourstate_sen_expr", "t_fourstate_sen_iff",
+                "t_timing_nba_partselect_clip", "t_timing_nba_repeat_control",
+                "t_tri_inout_default", "t_fourstate_slice_index_domain",
+                "t_fourstate_slice_packed_domain", "t_fourstate_nested_select")
+    collections = [(fixture, base / fixture) for fixture in fixtures]
+    for fixture, directory in collections:
+        for ancestor in (base.parent, base, directory):
+            if ancestor.is_symlink():
+                raise ValueError("Symlinked SV semantic fixture: " + fixture)
+        if set(directory.rglob("*.vcd")) != {directory / "simx.vcd"}:
+            raise ValueError("Missing or unexpected SV semantic VCD: " + fixture)
+    wave_evidence(root,
+                  collections,
+                  "sv-semantics-wave-evidence.json",
+                  "SV_SEMANTICS_WAVE_BYTES",
+                  SV_SEMANTICS_WAVE_BUDGET,
+                  require_complete=True)
 
 
 def finish_wave_evidence(root):
@@ -213,9 +224,9 @@ def main():
     """Report the compiler after building or the outputs after validation."""
     if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results", "semantic-waves",
                                                  "finish-waves", "controls-waves", "ram-waves",
-                                                 "thread-waves"):
+                                                 "thread-waves", "sv-semantics-waves"):
         raise SystemExit("Usage: log_evidence.py compiler|results|semantic-waves|finish-waves|"
-                         "controls-waves|ram-waves|thread-waves")
+                         "controls-waves|ram-waves|thread-waves|sv-semantics-waves")
     root = Path.cwd()
     if sys.argv[1] == "compiler":
         compiler_evidence(root)
@@ -223,6 +234,8 @@ def main():
         results_evidence(root)
     elif sys.argv[1] == "semantic-waves":
         semantic_wave_evidence(root)
+    elif sys.argv[1] == "sv-semantics-waves":
+        sv_semantics_wave_evidence(root)
     elif sys.argv[1] == "finish-waves":
         finish_wave_evidence(root)
     elif sys.argv[1] == "controls-waves":

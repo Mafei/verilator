@@ -1,4 +1,7 @@
 module Vt_debug_emitv_t;
+    logic [6:0]  __VrepeatCount_ha04b7265__2;
+    bit signed [31:0]  __VrepeatCount_ha04b7265__1;
+    bit signed [31:0]  __VrepeatCount_ha04b7265__0;
     input logic clk;
     input logic in;
     logic debug_buffer;
@@ -7,6 +10,17 @@ module Vt_debug_emitv_t;
     assign debug_buffer = bufif(in,clk);
     assign debug_nmos = bufif(in,clk);
     assign debug_pmos = bufif(in,(~ clk));
+    logic [6:0]  debug_repeat;
+    event debug_repeat_event;
+    initial begin
+        __VrepeatCount_ha04b7265__2 = 7'h25;
+        __VrepeatCount_ha04b7265__0 = 'sh2;
+        __VrepeatCount_ha04b7265__1 = (($isunknown(
+                                                   __VrepeatCount_ha04b7265__0)
+                                         ? 32'h0 : 
+                                        __VrepeatCount_ha04b7265__0));
+        debug_repeat <= __VrepeatCount_ha04b7265__2;
+    end
     typedef enum logic [2:0] {
         ZERO = 3'h0,
         ONE = 3'h1
@@ -318,7 +332,7 @@ module Vt_debug_emitv_t;
                     begin
                         $write("%%Error: %s:%0d:  got=%0d exp=%0d\n", 
                                136'h742f745f64656275675f656d6974762e76, 
-                               'sh110, SUB_B, 2'h1);
+                               'sh114, SUB_B, 2'h1);
                         $stop;
                     end
                 end
@@ -1280,7 +1294,7 @@ package Vt_debug_emitv___024unit;
     endfunction
 endpackage
 package Vt_debug_emitv___Vconstpool;
-    string TABLE_0[1:0];
+    string CONSARRAY_0[1:0];
 endpackage
 package Vt_debug_emitv_std;
     class Vt_debug_emitv_process;
@@ -1415,11 +1429,11 @@ package Vt_debug_emitv_std;
                     end
                 end
                 m_queue.push_back(
-                    ???? // CONSPACKUORSTRUCT
+                    ???? // CONSSTRUCT
 
-                    ???? // CONSPACKMEMBER
+                    ???? // CONSSTRUCTITEM
                     self()
-                    ???? // CONSPACKMEMBER
+                    ???? // CONSSTRUCTITEM
                     keyCount);
                 while ((m_queue.at('sh0).proc != self())) begin
                     begin

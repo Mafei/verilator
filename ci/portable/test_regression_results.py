@@ -342,27 +342,54 @@ class BashGateTest(unittest.TestCase):
         version = subprocess.check_output([shell, "--version"], text=True).splitlines()[0]
         print("Validation gate shell: " + version)
         fixture = """set -euo pipefail
+platform=macos-arm64
+smoke_calls=0
+record_calls=0
+regress_calls=0
+checker_calls=0
+trap 'printf "SMOKE_CALLS=%s RECORD_CALLS=%s REGRESS_CALLS=%s CHECKER_CALLS=%s CAPTURED=%s\\n" "$smoke_calls" "$record_calls" "$regress_calls" "$checker_calls" "${smoke_status:-unset}"' EXIT
 python3() {
     case "$1" in
-        ci/portable/smoke.py) return "$SMOKE_FIXTURE_STATUS" ;;
-        ci/portable/run_regressions.py) return "$REGRESS_FIXTURE_STATUS" ;;
-        ci/portable/check_results.py) return "$CHECKER_FIXTURE_STATUS" ;;
+        ci/portable/smoke.py)
+            smoke_calls=$((smoke_calls + 1))
+            [[ "$#" == 3 && "$2" == /tmp/verilator-relocated/verilator-fourstate/bin/verilator
+               && "$3" == /tmp/portable-smoke ]] || return 99
+            return "$SMOKE_FIXTURE_STATUS" ;;
+        ci/portable/review_artifacts.py)
+            record_calls=$((record_calls + 1))
+            [[ "$#" == 8 && "$2" == record-migration && "$3" == --returned-status
+               && "$4" == "$smoke_status" && "$5" == --package
+               && "$6" == out/verilator-fourstate-macos-arm64.tar.gz
+               && "$7" == --relocated-compiler
+               && "$8" == /tmp/verilator-relocated/verilator-fourstate/bin/verilator_bin ]] || return 99
+            return "$RECORD_FIXTURE_STATUS" ;;
+        ci/portable/run_regressions.py)
+            regress_calls=$((regress_calls + 1)); return "$REGRESS_FIXTURE_STATUS" ;;
+        ci/portable/check_results.py)
+            checker_calls=$((checker_calls + 1)); return "$CHECKER_FIXTURE_STATUS" ;;
         *) return 99 ;;
     esac
 }
 """ + smoke + "\n" + gate + "\necho VALIDATION_PASSED\n"
-        for statuses in ((0, 0, 0), (9, 0, 0), (0, 7, 0), (0, 0, 5), (9, 7, 0)):
+        for statuses in ((0, 0, 0, 0), (9, 0, 0, 0), (0, 0, 7, 0), (0, 0, 0, 5), (9, 0, 7, 0),
+                         (0, 5, 0, 0), (9, 5, 0, 0), (7, 0, 0, 0), (143, 0, 0, 0)):
             with self.subTest(statuses=statuses):
                 environment = dict(os.environ)
-                for key, status in zip(("SMOKE", "REGRESS", "CHECKER"), statuses):
+                for key, status in zip(("SMOKE", "RECORD", "REGRESS", "CHECKER"), statuses):
                     environment[key + "_FIXTURE_STATUS"] = str(status)
-                result = subprocess.run([shell, "-c", fixture],
-                                        check=False,
-                                        env=environment,
-                                        text=True,
-                                        capture_output=True)
-                self.assertEqual(result.returncode == 0, statuses == (0, 0, 0), result.stderr)
-                self.assertEqual("VALIDATION_PASSED" in result.stdout, statuses == (0, 0, 0))
+                with tempfile.TemporaryDirectory() as temporary:
+                    result = subprocess.run([shell, "-c", fixture],
+                                            cwd=temporary,
+                                            check=False,
+                                            env=environment,
+                                            text=True,
+                                            capture_output=True)
+                self.assertEqual(result.returncode == 0, statuses == (0, 0, 0, 0), result.stderr)
+                self.assertEqual("VALIDATION_PASSED" in result.stdout, statuses == (0, 0, 0, 0))
+                self.assertIn(
+                    'SMOKE_CALLS=1 RECORD_CALLS=1 REGRESS_CALLS=1 CHECKER_CALLS=' +
+                    str(int(statuses[:3] == (0, 0, 0))) + ' CAPTURED=' + str(statuses[0]),
+                    result.stdout)
 
 
 class LogEvidenceTest(unittest.TestCase):
@@ -439,7 +466,7 @@ class LogEvidenceTest(unittest.TestCase):
 
 
 class EnumHashTest(unittest.TestCase):
-    """Ensure enum hash normalization preserves identity and structure."""
+    """Ensure generated hash normalization preserves identity and SV payloads."""
 
     @classmethod
     def setUpClass(cls):
@@ -482,6 +509,63 @@ class EnumHashTest(unittest.TestCase):
         self.assertTrue(self.compare(actual, golden))
         self.assertFalse(self.compare(actual.replace("87654321", "123abcde"), golden))
         self.assertFalse(self.compare(actual.replace("123abcde__1", "87654321__1"), golden))
+
+    def test_repeat_counter_hashes_on_both_sides_preserve_values_and_bindings(self):
+        actual = ("logic [6:0] __VrepeatCount_h55eae1c7__2;\n"
+                  "__VrepeatCount_h55eae1c7__2 = 7'h25;\n")
+        golden = actual.replace('55eae1c7', 'a04b7265')
+        self.assertTrue(self.compare(actual, golden))
+        self.assertFalse(self.compare(actual, golden, normalize=False))
+        self.assertFalse(self.compare(actual.replace("7'h25", "7'h24"), golden))
+        self.assertFalse(self.compare(actual.replace('[6:0]', '[7:0]'), golden))
+        self.assertFalse(self.compare(actual.replace('__2 =', '__1 ='), golden))
+        self.assertFalse(self.compare(actual.replace('h55eae1c7__2 =', 'h123abcde__2 ='), golden))
+
+    def test_hash_named_payloads_comments_and_escaped_identifiers_are_unchanged(self):
+        payload = ('"__VrepeatCount_h123abcde__2";\n'
+                   '// __VrepeatCount_h123abcde__2\n'
+                   '/* __VrepeatCount_h123abcde__2\n second line */\n'
+                   '\\__VrepeatCount_h123abcde__2 ;\n'
+                   "32'h123abcde;\n")
+        actual = '__VrepeatCount_h11111111__2;\n' + payload
+        golden = '__VrepeatCount_h22222222__2;\n' + payload
+        self.assertTrue(self.compare(actual, golden))
+        for old, new in (('"__VrepeatCount_h123abcde__2"', '"__VrepeatCount_h87654321__2"'),
+                         ('// __VrepeatCount_h123abcde__2', '// __VrepeatCount_h87654321__2'),
+                         ('/* __VrepeatCount_h123abcde__2', '/* __VrepeatCount_h87654321__2'),
+                         ('\\__VrepeatCount_h123abcde__2 ',
+                          '\\__VrepeatCount_h87654321__2 '), ("32'h123abcde", "32'h87654321")):
+            with self.subTest(payload=old):
+                self.assertFalse(self.compare(actual.replace(old, new), golden))
+
+    def test_mixed_generated_namespaces_preserve_each_identity_graph(self):
+        actual = ('__Venum_h123abcde__0; __Venum_h123abcde__1;\n'
+                  '__VrepeatCount_h123abcde__0; __VrepeatCount_h87654321__1;\n')
+        golden = ('__Venum_hHASH0__0; __Venum_hHASH0__1;\n'
+                  '__VrepeatCount_h11111111__0; __VrepeatCount_h22222222__1;\n')
+        self.assertTrue(self.compare(actual, golden))
+        self.assertFalse(self.compare(actual.replace('h87654321', 'h123abcde'), golden))
+        self.assertFalse(self.compare(actual.replace('__VrepeatCount_', '__Vother_'), golden))
+
+    def test_evidence_and_comparator_use_identical_counter_normalization(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tree = root / 'width.tree.v'
+            raw = ('__VrepeatCount_h123abcde__0; __VrepeatCount_h123abcde__1;\n'
+                   '__VrepeatCount_h87654321__0; "__VrepeatCount_h123abcde__0";\n')
+            tree.write_text(raw)
+            first = log_evidence.enum_evidence(tree, root)
+            changed = raw.replace('h123abcde__0;', 'h11111111__0;').replace(
+                'h123abcde__1;', 'h11111111__1;').replace('h87654321__0;', 'h22222222__0;')
+            tree.write_text(changed)
+            second = log_evidence.enum_evidence(tree, root)
+            self.assertTrue(self.compare(raw, changed))
+            self.assertNotEqual(first['raw_sha256'], second['raw_sha256'])
+            self.assertEqual(first['normalized_sha256'], second['normalized_sha256'])
+            self.assertEqual(first['generated_identities']['__VrepeatCount_h'], {
+                '123abcde': 'HASH0',
+                '87654321': 'HASH1'
+            })
 
 
 if __name__ == "__main__":

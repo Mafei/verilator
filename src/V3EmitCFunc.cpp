@@ -316,13 +316,13 @@ void EmitCFunc::displayNode(AstNode* nodep, AstSFormatF* fmtp,  // fmtp is nullp
         UASSERT_OBJ(scopenamep, nodep, "Display with %m but no AstScopeName");
         ofp()->puts(", '"s + VFormatAttr{VFormatAttr::SCOPE}.ascii() + "'");
         if (scopenamep->selfRelative()) {
-            // vlNamep is catName(name(), instance), so starts with '.' when the model is unnamed
-            const string namep = string{m_useSelfForThis ? "vlSelf" : "this"} + "->vlNamep";
-            ofp()->puts(",(vlSymsp->name()[0] ? " + namep + " : " + namep + " + 1),");
+            ofp()->puts(","s + (m_useSelfForThis ? "vlSelf" : "this") + "->vlNamep,");
             ofp()->putsQuoted(scopenamep->scopeAttr());
         } else {
-            ofp()->puts(",vlSymsp->name(),");
-            ofp()->putsQuoted(scopenamep->scopePrettySymName());
+            const std::pair<size_t, std::string> top
+                = EmitCUtil::splitTopPath(scopenamep->scopePrettySymName());
+            ofp()->puts("," + EmitCUtil::topNameExpr(top.first, false) + ",");
+            ofp()->putsQuoted(top.second);
         }
     }
 
@@ -480,13 +480,6 @@ void EmitCFunc::emitConstantString(const AstConst* nodep) {
     puts("}");
 }
 
-void EmitCFunc::emitSetVarConstant(const string& assignString, AstConst* constp) {
-    puts(assignString);
-    puts(" = ");
-    emitConstant(constp);
-    puts(";\n");
-}
-
 void EmitCFunc::emitVarReset(const string& prefix, AstVar* varp, bool constructing) {
     // 'constructing' indicates that the object was just constructed, so if it is a string or
     // something that starts off clear already, no need to clear it again
@@ -504,47 +497,6 @@ void EmitCFunc::emitVarReset(const string& prefix, AstVar* varp, bool constructi
         // If a simple CONST value we initialize it using an enum
         // If an ARRAYINIT we initialize it using an initial block similar to a signal
         // puts("// parameter "+varp->nameProtect()+" = "+varp->valuep()->name()+"\n");
-    } else if (const AstInitArray* const initarp = VN_CAST(varp->valuep(), InitArray)) {
-        // TODO this code probably better handled as initp argument to emitVarResetRecurse
-        // TODO merge this functionality with V3EmitCConstInit.h visitors
-        if (VN_IS(dtypep, AssocArrayDType)) {
-            if (initarp->defaultp()) {
-                emitSetVarConstant(newPrefix + ".atDefault()", VN_AS(initarp->defaultp(), Const));
-            }
-            if (!constructing) puts(varNameProtected + ".clear();");
-            const auto& mapr = initarp->map();
-            for (const auto& itr : mapr) {
-                AstNode* const valuep = itr.second->valuep();
-                emitSetVarConstant(newPrefix + ".atWrite(" + cvtToStr(itr.first) + ")",
-                                   VN_AS(valuep, Const));
-            }
-        } else if (VN_IS(dtypep, WildcardArrayDType)) {
-            if (initarp->defaultp()) {
-                emitSetVarConstant(newPrefix + ".atDefault()", VN_AS(initarp->defaultp(), Const));
-            }
-            if (!constructing) puts(newPrefix + ".clear();");
-            const auto& mapr = initarp->map();
-            for (const auto& itr : mapr) {
-                AstNode* const valuep = itr.second->valuep();
-                emitSetVarConstant(newPrefix + ".atWrite(" + cvtToStr(itr.first) + ")",
-                                   VN_AS(valuep, Const));
-            }
-        } else if (AstUnpackArrayDType* const adtypep = VN_CAST(dtypep, UnpackArrayDType)) {
-            if (initarp->defaultp()) {
-                puts("for (int __Vi = 0; __Vi < " + cvtToStr(adtypep->elementsConst()));
-                puts("; ++__Vi) {\n");
-                emitSetVarConstant(newPrefix + "[__Vi]", VN_AS(initarp->defaultp(), Const));
-                puts("}\n");
-            }
-            const auto& mapr = initarp->map();
-            for (const auto& itr : mapr) {
-                AstNode* const valuep = itr.second->valuep();
-                emitSetVarConstant(newPrefix + "[" + cvtToStr(itr.first) + "]",
-                                   VN_AS(valuep, Const));
-            }
-        } else {
-            varp->v3fatalSrc("InitArray under non-arrayed var");
-        }
     } else {
         putns(varp,
               emitVarResetRecurse(varp, constructing, newPrefix, dtypep, 0, "", varp->valuep()));
@@ -592,6 +544,17 @@ string EmitCFunc::emitVarResetRecurse(const AstVar* varp, bool constructing,
     } else if (const AstUnpackArrayDType* const adtypep = VN_CAST(dtypep, UnpackArrayDType)) {
         UASSERT_OBJ(adtypep->hi() >= adtypep->lo(), varp,
                     "Should have swapped msb & lsb earlier.");
+        const AstNodeDType* const elementp = adtypep->subDTypep()->skipRefp();
+        if (!varp->isFuncLocal() && elementp->isIntegralOrPacked()) {
+            // Scoped reset has no array-index input or mutable RNG state. Initialize one
+            // element, then fill in the optimized runtime even when this code is cold.
+            const string first
+                = emitVarResetRecurse(varp, constructing, varNameProtected, adtypep->subDTypep(),
+                                      depth + 1, suffix + "[0]", nullptr);
+            const string array = varNameProtected + suffix;
+            return first + "VL_UNPACKED_FILL(" + array + ".data(), sizeof(" + array + "[0]), "
+                   + cvtToStr(adtypep->elementsConst()) + ");\n";
+        }
         const string ivar = "__Vi"s + cvtToStr(depth);
         const string pre = ("for (int " + ivar + " = " + cvtToStr(0) + "; " + ivar + " < "
                             + cvtToStr(adtypep->elementsConst()) + "; ++" + ivar + ") {\n");
@@ -603,8 +566,7 @@ string EmitCFunc::emitVarResetRecurse(const AstVar* varp, bool constructing,
     } else if (VN_IS(dtypep, NodeUOrStructDType) && !VN_AS(dtypep, NodeUOrStructDType)->packed()) {
         const AstNodeUOrStructDType* const sdtypep = VN_AS(dtypep, NodeUOrStructDType);
         string literal;
-        for (const AstMemberDType* itemp = sdtypep->membersp(); itemp;
-             itemp = VN_AS(itemp->nextp(), MemberDType)) {
+        for (const AstMemberDType* const itemp : sdtypep->memberspList()) {
             const std::string line = emitVarResetRecurse(
                 varp, constructing, varNameProtected + suffix + "." + itemp->nameProtect(),
                 itemp->dtypep(), depth + 1, "", itemp->valuep());

@@ -189,6 +189,7 @@ all forms of coverage:
 - :ref:`Covergroup Coverage`
 - :ref:`FSM Coverage`
 - :ref:`Line Coverage`
+- :ref:`Branch Coverage`
 - :ref:`Toggle Coverage`
 
 When a model with coverage is executed, it will create a coverage file for
@@ -222,6 +223,10 @@ With :vlopt:`--coverage` or :vlopt:`--coverage-user`, Verilator will
 translate covergroup coverage points the user has inserted manually in
 SystemVerilog code into the Verilated model. Verilator supports coverpoints
 with value and transition bins, and cross points.
+
+A bin whose ``option.at_least`` is not 1 records it as the bin's threshold,
+which :command:`verilator_coverage` uses to decide whether the bin is
+covered.
 
 
 .. _fsm coverage:
@@ -317,16 +322,24 @@ Line Coverage
 -------------
 
 With :vlopt:`--coverage` or :vlopt:`--coverage-line`, Verilator will
-automatically add coverage analysis at each code flow change point (e.g.,
-at branches). At each such branch, a counter is incremented. At the end of
-a test, the counters, filename, and line number corresponding to each
-counter are written into the coverage file.
+automatically add coverage analysis for each basic block. At each such
+point, a counter is incremented. At the end of a test, the counters,
+filename, and line number corresponding to each counter are written into
+the coverage file.
 
 Verilator may over-count combinatorial (non-clocked) blocks when those
 blocks receive signals which have had the :option:`UNOPTFLAT` warning
 disabled; for the most accurate results, do not disable this warning when
 using coverage.
 
+.. _branch coverage:
+
+Branch Coverage
+---------------
+
+With :vlopt:`--coverage`, or :vlopt:`--coverage-branch`, Verilator will
+automatically add coverage analysis at each code flow change point (e.g.,
+at branches).
 
 .. _toggle coverage:
 

@@ -1,0 +1,13 @@
+%Error-UNSUPPORTED: t/t_timing_nba_repeat_unsup.v:12:9: Unsupported: repeat event control
+   12 |     ->> repeat(2) @first_event second_event;
+      |         ^~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error-UNSUPPORTED: t/t_timing_nba_repeat_unsup.v:13:16: Unsupported: repeat event control
+   13 |     assign q = repeat(2) @first_event 1'b1;
+      |                ^~~~~~
+%Warning-IEEEMAYDEPRECATE: t/t_timing_nba_repeat_unsup.v:13:5: Feature may be deprecated in future IEEE standard
+   13 |     assign q = repeat(2) @first_event 1'b1;
+      |     ^~~~~~
+                           ... For warning description see https://verilator.org/warn/IEEEMAYDEPRECATE?v=latest
+                           ... Use "/* verilator lint_off IEEEMAYDEPRECATE */" and lint_on around source to disable this message.
+%Error: Exiting due to

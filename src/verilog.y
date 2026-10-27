@@ -2006,7 +2006,7 @@ port_declaration<nodep>:        // ==IEEE: port_declaration
                           AstIfaceRefDType* const dtp = new AstIfaceRefDType{$<fl>1, $<fl>3, "", *$1, *$3};
                           VARDTYPE(dtp); }
         /*cont*/    mpInstnameList
-                        { $$ = VARDONEP($5, nullptr, nullptr); DEL($5); }
+                        { $$ = $5; }
         //UNSUP: strengthSpecE for udp_instantiations
         ;
 
@@ -2110,6 +2110,10 @@ data_typeAny<nodeDTypep>:       // ==IEEE: data_type (accepting idAny)
 
 data_typeBasic<nodeDTypep>:             // IEEE: part of data_type
                 integer_vector_type signingE rangeListE { $1->setSignedState($2); $$ = GRAMMARP->addRange($1, $3, true); }
+        //                      // IEEE: packed_dimension: unsized_dimension, legal only in DPI import
+        |       integer_vector_type signingE '[' ']'
+                        { $1->setSignedState($2);
+                          $$ = new AstUnsizedArrayDType{$3, VFlagChildDType{}, $1}; }
         |       integer_atom_type signingE              { $1->setSignedState($2); $$ = $1; }
         |       non_integer_type                        { $$ = $1; }
         ;
@@ -3047,9 +3051,19 @@ assignOne<alwaysp>:
         ;
 
 delay_or_event_controlE<nodep>:  // IEEE: delay_or_event_control plus empty
+                delay_or_event_controlBasicE             { $$ = $1; }
+        |       yREPEAT '(' expr ')' event_control
+                        { $$ = new AstRepeatControl{$1, $3, $5}; }
+        ;
+
+delay_or_event_controlBasicE<nodep>:
                 /* empty */                             { $$ = nullptr; }
         |       delay_control                           { $$ = $1; }
         |       event_control                           { $$ = $1; }
+        ;
+
+delay_or_event_controlUnsupportedRepeatE<nodep>:
+                delay_or_event_controlBasicE             { $$ = $1; }
         |       yREPEAT '(' expr ')' event_control
                         { $$ = $5; BBUNSUP($1, "Unsupported: repeat event control"); }
         ;
@@ -3620,7 +3634,7 @@ statement_item<nodeStmtp>:          // IEEE: statement_item
         |       fexprLvalue yP_LTE cycle_delay expr ';'
                         { $$ = new AstAssignDly{$2, $1, $4, $3}; }
         //UNSUP cycle_delay fexprLvalue yP_LTE ';'      { UNSUP }
-        |       yASSIGN variable_lvalue '=' delay_or_event_controlE expr ';'
+        |       yASSIGN variable_lvalue '=' delay_or_event_controlUnsupportedRepeatE expr ';'
                         { $$ = new AstAssignCont{$1, $2, $5, $4};
                           $1->v3warn(IEEEMAYDEPRECATE, "Feature may be deprecated in future IEEE standard"); v3Global.setHasAssignDeassign(); }
         |       yDEASSIGN variable_lvalue ';'
@@ -3714,7 +3728,7 @@ statement_item<nodeStmtp>:          // IEEE: statement_item
         //                      // IEEE: event_trigger
         |       yP_MINUSGT expr ';'
                         { $$ = new AstFireEvent{$1, $2, false}; }
-        |       yP_MINUSGTGT delay_or_event_controlE expr ';'
+        |       yP_MINUSGTGT delay_or_event_controlUnsupportedRepeatE expr ';'
                         { $$ = new AstFireEvent{$1, $3, true}; }
         //
         // do/for/forever/while loops all modelled as AstLoop
@@ -7197,8 +7211,9 @@ bins_or_options<nodep>:  // ==IEEE: bins_or_options
         |       yBINS idAny/*bin_identifier*/ '[' cgexpr ']' iffE
                         { // Check for automatic bins: bins auto[N]
                           if (*$2 == "auto") {
-                              $$ = new AstCoverBin{$<fl>2, *$2, $4};
-                              DEL($6);
+                              AstCoverBin* const binp = new AstCoverBin{$<fl>2, *$2, $4};
+                              binp->iffp($6);
+                              $$ = binp;
                           } else {
                               $$ = nullptr;
                               BBCOVERIGN($<fl>2, "Unsupported: 'bins' array (non-auto)");

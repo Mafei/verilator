@@ -2273,7 +2273,6 @@ class VlTest:
                     fh.write("    topp->clk(clk);\n")
                 setp = ""
             else:
-                fh.write("    topp->eval();\n")
                 setp = "topp->"
 
             if self.trace:
@@ -2296,10 +2295,14 @@ class VlTest:
                              "  // Finish elaboration before trace and open\n")
                 fh.write("    topp->trace(tfp.get(), 99);\n")
                 fh.write("    tfp->open(\"" + self.trace_filename + "\");\n")
-
-                if self.trace and not self.sc:
-                    fh.write("    if (tfp) tfp->dump(contextp->time());\n")
                 fh.write("#endif\n")
+
+            if not self.sc:
+                fh.write("    topp->eval();\n")
+                if self.trace:
+                    fh.write("#if VM_TRACE\n")
+                    fh.write("    if (tfp) tfp->dump(contextp->time());\n")
+                    fh.write("#endif\n")
 
             if self.savable:
                 fh.write("    const char* save_time_strp"
@@ -2569,17 +2572,13 @@ class VlTest:
         l1s = f1.readlines()
         l2s = f2.readlines() if f2 else []
         if normalize_enum_hash:
-            # Enum type hashes vary with host-dependent dtype hashing. Preserve
-            # distinct hash identities, all references, and the numeric suffix.
-            hashes = {}
-
-            def enum_hash(match):
-                value = match.group(1)
-                if value not in hashes:
-                    hashes[value] = len(hashes)
-                return '__Venum_hHASH' + str(hashes[value])
-
-            l1s = [re.sub(r'\b__Venum_h([0-9a-f]{8})(?=__\d+\b)', enum_hash, line) for line in l1s]
+            # Keep the existing option name while also handling repeat-counter
+            # hashes. Both files retain complete identifier-binding structure.
+            normalizer = runpy.run_path(
+                os.path.join(os.path.dirname(__file__), 'vltest_generated_ids.py'))[
+                    'normalize_generated_identifiers']
+            l1s = normalizer(''.join(l1s))[0].splitlines(keepends=True)
+            l2s = normalizer(''.join(l2s))[0].splitlines(keepends=True)
         # print(" rawGOT="+pformat(l1s)+"\n rawEXP="+pformat(l2s))
         # With VERILATOR_TESTS_OBJ_ROOT, obj_dir is a symlink, and Verilator resolves
         # symlinks when making paths relative to obj_dir. Map those paths back to what
@@ -2690,8 +2689,18 @@ class VlTest:
     def copy_if_golden(self, fn1: str, fn2: str) -> None:
         """Copy a file if updating golden .out files"""
         if 'HARNESS_UPDATE_GOLDEN' in os.environ:  # Update golden files with current
-            print("%Warning: HARNESS_UPDATE_GOLDEN set: cp " + fn1 + " " + fn2, file=sys.stderr)
-            shutil.copy(fn1, fn2)
+            if fn1.endswith('.fst'):
+                # Keep golden traces as text.
+                cmd = [
+                    VtOs.getenv_def('WAVECAT', 'wavecat'), fn1, '--out', fn2, '--out-format',
+                    'vcd', '--no-date'
+                ]
+                print("%Warning: HARNESS_UPDATE_GOLDEN set: " + ' '.join(cmd), file=sys.stderr)
+                self.run(cmd=cmd)
+            else:
+                print("%Warning: HARNESS_UPDATE_GOLDEN set: cp " + fn1 + " " + fn2,
+                      file=sys.stderr)
+                shutil.copy(fn1, fn2)
 
     def vcd_identical(self, fn1: str, fn2: str) -> None:
         """Test if two VCD/FST files have logically-identical contents"""

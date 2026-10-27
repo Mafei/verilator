@@ -43,7 +43,8 @@ GROUPS = {
     "fourstate": [
         "fourstate_api", "fourstate_cond", "fourstate_countones", "fourstate_dynarray",
         "fourstate_format", "fourstate_format_bin", "fourstate_format_hex",
-        "fourstate_format_octal", "fourstate_isunknown", "fourstate_lognot", "fourstate_modport",
+        "fourstate_format_octal", "fourstate_format_packed", "fourstate_format_trunc",
+        "fourstate_isunknown", "fourstate_lognot", "fourstate_modport",
         "fourstate_noapi", "fourstate_packed_array", "fourstate_portable",
         "fourstate_sampled_expr", "fourstate_struct", "fourstate_trace_fst", "fourstate_trace_vcd",
         "fourstate_vpi", "vpi_get", "vpi_get_value_array"
@@ -153,6 +154,58 @@ GROUPS = {
         "opt_const_static_dead", "display_m_combine", "scope_shared",
         "flag_output_groups_max_size", "flag_output_groups_max_size_bad", "class_extends_this",
         "randcase", "covergroup_with_sample_warn", "covergroup_sized_bad"
+    ],
+    "sv_semantics_20261026": [
+        "flag_language_noconfig", "flag_language_noconfig_bad", "fourstate_inout_default",
+        "fourstate_nba_partselect_clip", "fourstate_nba_repeat_control", "fourstate_reduce_scalar",
+        "fourstate_sen_expr", "fourstate_sen_iff", "fourstate_case_equal_known",
+        "fourstate_sen_impure_unsup", "fourstate_wildcard", "fourstate_nba_clip_bounds",
+        "timing_nba_clip_bounds", "timing_nba_partselect_clip", "timing_nba_repeat_control",
+        "timing_nba_repeat_unsup", "tri_inout_default"
+    ],
+    "fourstate_constructors_20261026": [
+        "fourstate_cons_copy", "fourstate_cons_keyed", "fourstate_cons_queue",
+        "fourstate_cons_struct", "fourstate_cons_unpacked_unsup"
+    ],
+    # New official constructor, scheduling, VPI and side-effect regressions through cecfb438.
+    "upstream_sync_20261026": [
+        "stream_unpack_wider",
+        "dynarray_new_pattern",
+        "dynarray_concat",
+        "dynarray_unpacked",
+        "array_pattern_concat",
+        "unpacked_concat",
+        "unpacked_concat_noslice",
+        "queue_concat_type_param",
+        "assoc",
+        "assoc_wildcard",
+        "const_pool",
+        "vpi_param",
+        "nba_noninlined_await",
+        "opt_inline_getters",
+        "opt_inline_getters_off",
+        "expr_shortcircuit",
+        "case_impure",
+        "const_zero_impure",
+        "dynarray_unpacked_size_bad",
+        "pattern_key_bad",
+        "pattern_key_unsup",
+    ],
+    "tri_storage_20261026": [
+        "tri_proc_reassign", "tri_proc_reassign_timing", "tri_various", "tri_inout", "tri_inz",
+        "tri_struct", "tri_top_en_out", "tri_pullvec"
+    ],
+    "optimizer_alias_20261026": ["opt_merge_cond", "opt_merge_cond_member"],
+    # Official fixes throughbe33a0f6; sampler positives need an available solver.
+    "upstream_late_20261026": [
+        "fork_taskarg", "timing_sched_ready", "sys_monitor_changes", "opt_reloop_inlined",
+        "opt_expand_keep_widths", "constraint_rand_sampler_bad", "constraint_rand_sampler_env_bad",
+        "restorer_clear"
+    ],
+    "sv_read_string_20261026": [
+        "fourstate_slice_index_domain", "fourstate_slice_index_width",
+        "fourstate_slice_index_width_bad", "fourstate_slice_packed_domain", "string_byte",
+        "string_unpacked_literal", "fourstate_struct_select", "fourstate_nested_select"
     ]
 }
 

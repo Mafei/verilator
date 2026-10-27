@@ -171,7 +171,7 @@ class CodeMotionAnalysisVisitor final : public VNVisitorConst {
     //                         AstNode list
     // AstNode::user4       -> Used by V3Hasher
 
-    StmtPropertiesAllocator& m_stmtProperties;
+    StmtPropertiesAllocator& m_stmtProperties;  // Properties of each statement
 
     // MEMBERS
     V3Hasher m_hasher;  // Used by V3DupFinder
@@ -247,9 +247,7 @@ class CodeMotionAnalysisVisitor final : public VNVisitorConst {
         }
     }
 
-    void analyzeVarRef(AstVarRef* nodep) {
-        const VAccess access = nodep->access();
-        AstVar* const varp = nodep->varp();
+    void analyzeVarAccess(AstVar* const varp, const VAccess access) {
         // Gather read and written variables
         if (access.isReadOrRW()) m_propsp->m_rdVars.insert(varp);
         if (access.isWriteOrRW()) m_propsp->m_wrVars.insert(varp);
@@ -309,7 +307,12 @@ class CodeMotionAnalysisVisitor final : public VNVisitorConst {
         if (AstNodeStmt* const stmtp = VN_CAST(nodep, NodeStmt)) {
             analyzeStmt(stmtp, /*tryCondMatch:*/ !singletonListStart);
         } else if (AstVarRef* const vrefp = VN_CAST(nodep, VarRef)) {
-            analyzeVarRef(vrefp);
+            analyzeVarAccess(vrefp->varp(), vrefp->access());
+        } else if (AstMemberSel* const memberp = VN_CAST(nodep, MemberSel)) {
+            // Different class handles may refer to the same object. Track the
+            // selected member as well as evaluating its receiver below.
+            analyzeVarAccess(memberp->varp(), memberp->access());
+            analyzeNode(memberp);
         } else {
             analyzeNode(nodep);
         }
@@ -343,7 +346,7 @@ class CodeMotionOptimizeVisitor final : public VNVisitor {
 
     VNUser4InUse m_user4InUse;
 
-    const StmtPropertiesAllocator& m_stmtProperties;
+    const StmtPropertiesAllocator& m_stmtProperties;  // Properties of each statement
 
     // MEMBERS
 
@@ -807,8 +810,15 @@ class MergeCondVisitor final : public VNVisitor {
         if (!m_mgFirstp) {
             UASSERT_OBJ(condp, nodep, "Cannot start new list without condition");
             // Mark variable references in the condition, record if a public variable is involved
-            condp->foreach([&](const AstVarRef* nodep) {
-                AstVar* const varp = nodep->varp();
+            condp->foreach([&](const AstNode* nodep) {
+                AstVar* varp = nullptr;
+                if (const AstVarRef* const refp = VN_CAST(nodep, VarRef)) {
+                    varp = refp->varp();
+                } else if (const AstMemberSel* const memberp = VN_CAST(nodep, MemberSel)) {
+                    varp = memberp->varp();
+                } else {
+                    return;
+                }
                 varp->user1(1);
                 if (varp->isSigPublic() || varp->isWrittenByDpi()) m_mgCondPubWritable = true;
             });

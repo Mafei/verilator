@@ -187,9 +187,9 @@ sys.exit(json.loads(os.environ['GATE_FIXTURE_STATUSES']).get(key,0))
 ''')
         python.chmod(0o755)
         shell = shutil.which("bash")
-        for statuses, expected in [({
+        for statuses, expected in [({}, 0), ({
                 "icarus_full18": 1
-        }, 0), ({
+        }, 1), ({
                 "icarus_full18": 1,
                 "finish_run": 1,
                 "finish_check": 1

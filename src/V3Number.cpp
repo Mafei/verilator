@@ -531,8 +531,10 @@ void V3Number::setBitX0(int bit) {
 
 V3Number& V3Number::setMask(int nbits, int lsb) {
     setZero();
-    UASSERT(lsb >= 0, "Negative destination bit range");
-    fillBits(lsb, std::max(0, std::min(nbits, width() - lsb)), 1);
+    const int destLsb = std::max(0, lsb);
+    const int fillWidth = static_cast<int>(
+        std::max<int64_t>(0, std::min<int64_t>(width(), int64_t{lsb} + nbits) - destLsb));
+    fillBits(destLsb, fillWidth, 1);
     return *this;
 }
 
@@ -656,8 +658,7 @@ string V3Number::displayedEnumName(const AstEnumItem* itemp) {
 string V3Number::displayedEnumName(const AstEnumDType* dtypep) const VL_MT_STABLE {
     V3Number value{this, dtypep->width()};
     value.opAssign(*this);
-    for (const AstEnumItem* itemp = dtypep->itemsp(); itemp;
-         itemp = VN_AS(itemp->nextp(), EnumItem)) {
+    for (const AstEnumItem* const itemp : dtypep->itemspList()) {
         const AstConst* const constp = VN_AS(itemp->valuep(), Const);
         if (!constp->num().isAnyXZ() && value.isCaseEq(constp->num()))
             return displayedEnumName(itemp);
@@ -1283,8 +1284,14 @@ bool V3Number::isAnyZ() const VL_MT_SAFE {
     }
     return false;
 }
+bool V3Number::isLt(const V3Number& rhs) const {
+    V3Number result{this};
+    return result.opLt(*this, rhs).isNeqZero();
+}
 bool V3Number::isLtXZ(const V3Number& rhs) const {
     // Include X/Z in comparisons for sort ordering
+    if (isString()) return toString() < rhs.toString();
+    if (isDouble()) return toDouble() < rhs.toDouble();
     for (int bit = 0; bit < std::max(width(), rhs.width()); ++bit) {
         if (bitIs1(bit) && rhs.bitIs0(bit)) return true;
         if (rhs.bitIs1(bit) && bitIs0(bit)) return false;
@@ -1998,9 +2005,7 @@ V3Number& V3Number::opWildEq(const V3Number& lhs, const V3Number& rhs) {
         if (!rhs.bitIsXZ(bit)) {
             if (lhs.bitIsXZ(bit)) {
                 outc = 'x';
-                goto last;
-            }
-            if (lhs.bitIs(bit) != rhs.bitIs(bit)) {
+            } else if (lhs.bitIs(bit) != rhs.bitIs(bit)) {
                 outc = 0;
                 goto last;
             }
@@ -2018,9 +2023,7 @@ V3Number& V3Number::opWildNeq(const V3Number& lhs, const V3Number& rhs) {
         if (!rhs.bitIsXZ(bit)) {
             if (lhs.bitIsXZ(bit)) {
                 outc = 'x';
-                goto last;
-            }
-            if (lhs.bitIs(bit) != rhs.bitIs(bit)) {
+            } else if (lhs.bitIs(bit) != rhs.bitIs(bit)) {
                 outc = 1;
                 goto last;
             }
@@ -2645,12 +2648,15 @@ V3Number& V3Number::opSelInto(const V3Number& lhs, int lsbval, int width) {
     // this[lsbval+width-1 : lsbval] = lhs;  Other bits of this are not affected
     NUM_ASSERT_OP_ARGS1(lhs);
     NUM_ASSERT_LOGIC_ARGS1(lhs);
-    UASSERT(lsbval >= 0, "Negative destination bit range");
-    const int copyWidth = std::max(0, std::min({width, lhs.width(), this->width() - lsbval}));
-    copyBits(lsbval, lhs, 0, copyWidth);
-    const int fillWidth
-        = std::max(0, std::min(width - copyWidth, this->width() - lsbval - copyWidth));
-    fillBits(lsbval + copyWidth, fillWidth, v3Global.constRemoveXs() ? 0 : 'x');
+    const int destLsb = std::max(0, lsbval);
+    const int selectWidth = static_cast<int>(
+        std::max<int64_t>(0, std::min<int64_t>(this->width(), int64_t{lsbval} + width) - destLsb));
+    if (!selectWidth) return *this;
+    // Clipping a negative destination offset also discards the corresponding source bits.
+    const int sourceLsb = destLsb - lsbval;
+    const int copyWidth = std::max(0, std::min(selectWidth, lhs.width() - sourceLsb));
+    copyBits(destLsb, lhs, sourceLsb, copyWidth);
+    fillBits(destLsb + copyWidth, selectWidth - copyWidth, v3Global.constRemoveXs() ? 0 : 'x');
     return *this;
 }
 
@@ -2897,6 +2903,32 @@ void V3Number::selfTestThis() {
             UASSERT_SELFTEST(result.bitIs(0), bufferTable[enable * 4 + data]);
             result.opBufIf1(ens, if1s, false);
             UASSERT_SELFTEST(result.bitIs(0), mosLegacyTable[enable * 4 + data]);
+        }
+    }
+
+    // Compare clipped bulk writes against an independent per-bit reference.
+    V3Number source{fileline(), 65, 0};
+    for (int bit = 0; bit < source.width(); ++bit) source.setBit(bit, states[bit % 4]);
+    for (const int destWidth : {4, 63, 65, 95}) {
+        for (const int lsb : {std::numeric_limits<int>::min(), -97, -65, -3, -1, 0, 1, 31, 32, 33,
+                              62, 63, 64, 94, 95, 96, std::numeric_limits<int>::max()}) {
+            for (const int selectWidth : {1, 2, 6, 65, 97, std::numeric_limits<int>::max()}) {
+                V3Number mask{fileline(), destWidth, 0};
+                V3Number result{fileline(), destWidth, 0};
+                mask.setMask(selectWidth, lsb);
+                result.setAllBitsZ();
+                result.opSelInto(source, lsb, selectWidth);
+                for (int bit = 0; bit < destWidth; ++bit) {
+                    const int64_t sourceBit = int64_t{bit} - lsb;
+                    const bool selected = sourceBit >= 0 && sourceBit < selectWidth;
+                    UASSERT_SELFTEST(mask.bitIs(bit), selected ? '1' : '0');
+                    const char expected = !selected                    ? 'z'
+                                          : sourceBit < source.width() ? states[sourceBit % 4]
+                                          : v3Global.constRemoveXs()   ? '0'
+                                                                       : 'x';
+                    UASSERT_SELFTEST(result.bitIs(bit), expected);
+                }
+            }
         }
     }
 

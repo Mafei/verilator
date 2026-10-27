@@ -855,6 +855,12 @@ class ExpandVisitor final : public VNVisitor {
         FileLine* const nfl = nodep->fileline();
         FileLine* const lfl = lhsp->fileline();
         const bool destwide = lhsp->fromp()->isWide();
+        if (lhsp->lsbp()->isSigned()) {
+            const AstConst* const indexp = VN_CAST(lhsp->lsbp(), Const);
+            // Runtime insertion clips negative offsets. Shift/mask expansion
+            // cannot use a possibly negative value as a C++ shift count.
+            if (!indexp || indexp->num().isNegative()) return false;
+        }
         const bool ones = nodep->rhsp()->isAllOnesV();
         if (VN_IS(lhsp->lsbp(), Const)) {
             // The code should work without this constant test, but it won't

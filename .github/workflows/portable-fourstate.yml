@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014, fourstate-sync-20261014-followup, fourstate-sync-20261015, fourstate-sync-20261017]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014, fourstate-sync-20261014-followup, fourstate-sync-20261015, fourstate-sync-20261017, fourstate-sv-icarus-20261026, fourstate-sv-icarus-20261026-public]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -11,22 +11,74 @@ concurrency:
   group: portable-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  artifact-review:
+    needs: [macos, rocky8]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          set-safe-directory: false
+      - name: Summarize typed producer checks without downloading artifacts
+        if: ${{ always() && !cancelled() }}
+        env:
+          MACOS_CORE_REVIEW: ${{ needs.macos.outputs.core_review }}
+          ROCKY8_CORE_REVIEW: ${{ needs.rocky8.outputs.core_review }}
+          MACOS_JOB_RESULT: ${{ needs.macos.result }}
+          ROCKY8_JOB_RESULT: ${{ needs.rocky8.result }}
+        run: |
+          python3 ci/portable/review_artifacts.py summarize \
+            --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
+            --output artifact-core-review.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: portable-core-review-${{ github.run_id }}
+          path: artifact-core-review.json
+          if-no-files-found: error
   macos:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 150
+    outputs:
+      core_review: ${{ steps.producer_review.outputs.core_review }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
+          set-safe-directory: false
       - name: Install build tools on the cloud runner
-        run: brew install autoconf automake help2man lz4 make
+        run: brew install autoconf automake bzip2 gperf help2man lz4 make zlib
       - name: Build, check dependencies, relocate, and run regressions
         run: bash ci/portable/build.bash macos-arm64
+      - name: Run pinned Icarus defaults and fixed 128 pair
+        if: ${{ !cancelled() && hashFiles('bin/verilator_bin') != '' }}
+        run: |
+          source .ci-venv/bin/activate
+          export PATH="$PWD/.ci-tools/bin:$PATH"
+          export CPPFLAGS="-I$PWD/.ci-tools/include -I$(brew --prefix zlib)/include"
+          export LDFLAGS="-L$(brew --prefix zlib)/lib"
+          python3 ci/portable/run_icarus_sweep.py --platform macos-arm64 \
+            --verilator-root "$PWD" --expected-verilator-sha "$(git rev-parse HEAD)" \
+            --bzip2-prefix "$(brew --prefix bzip2)" --jobs 2 --output pinned-icarus
       - name: Independently verify recorded results
         if: ${{ !cancelled() && hashFiles('out/regression-results.json') != '' }}
         run: python3 ci/portable/check_results.py
+      - name: Check local producer files before upload without running models
+        id: producer_review
+        if: ${{ always() && !cancelled() }}
+        env:
+          PRODUCER_PRIOR_RESULT: ${{ job.status }}
+        run: |
+          python3 ci/portable/review_artifacts.py producer \
+            --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
+            --platform macos-arm64 --producer-root "$(pwd -P)" \
+            --prior-result "$PRODUCER_PRIOR_RESULT" --output out/producer-core-review.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -35,7 +87,12 @@ jobs:
             out/
             logs/
             test_regress/obj_vlt/*/*.log
+            test_regress/obj_vlt/*/*.status
             test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
+            test_regress/obj_vltmt/t_fourstate_sen_hierarchy/*.log
+            test_regress/obj_vltmt/t_fourstate_sen_hierarchy/*.status
+            test_regress/obj_vltmt/t_fourstate_sen_hierarchy/*.cpp
+            test_regress/obj_vltmt/t_fourstate_sen_hierarchy/*.h
             test_regress/obj_vltmt/t_threads_counter_2/*.log
             test_regress/obj_vltmt/t_threads_counter_2/*.status
             test_regress/obj_vltmt/t_threads_nondeterminism/*.log
@@ -52,6 +109,32 @@ jobs:
             test_regress/obj_vltmt/t_variable_order_writers/*__stats.txt
             test_regress/obj_vltmt/t_variable_order_writers/*.cpp
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
+            test_regress/obj_vlt/t_flag_language_noconfig/*.status
+            test_regress/obj_vlt/t_flag_language_noconfig_bad/*.status
+            test_regress/obj_vlt/t_fourstate_inout_default/*.status
+            test_regress/obj_vlt/t_fourstate_nba_partselect_clip/*.status
+            test_regress/obj_vlt/t_fourstate_nba_repeat_control/*.status
+            test_regress/obj_vlt/t_fourstate_reduce_scalar/*.status
+            test_regress/obj_vlt/t_fourstate_sen_expr/*.status
+            test_regress/obj_vlt/t_fourstate_sen_iff/*.status
+            test_regress/obj_vlt/t_fourstate_sen_impure_unsup/*.status
+            test_regress/obj_vlt/t_timing_nba_partselect_clip/*.status
+            test_regress/obj_vlt/t_timing_nba_repeat_control/*.status
+            test_regress/obj_vlt/t_timing_nba_repeat_unsup/*.status
+            test_regress/obj_vlt/t_tri_inout_default/*.status
+            test_regress/obj_vlt/t_fourstate_inout_default/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_partselect_clip/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_index_domain/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_packed_domain/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nested_select/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_index_width/*_width.tree.json
+            test_regress/obj_vlt/t_fourstate_slice_index_width/*_width.tree
+            test_regress/obj_vlt/t_fourstate_nba_repeat_control/simx.vcd
+            test_regress/obj_vlt/t_fourstate_sen_expr/simx.vcd
+            test_regress/obj_vlt/t_fourstate_sen_iff/simx.vcd
+            test_regress/obj_vlt/t_timing_nba_partselect_clip/simx.vcd
+            test_regress/obj_vlt/t_timing_nba_repeat_control/simx.vcd
+            test_regress/obj_vlt/t_tri_inout_default/simx.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_timing_blocking_event/*.vcd
@@ -150,15 +233,43 @@ jobs:
             test_regress/obj_vlt/t_finish_coverage/**/*.dat
             test_regress/obj_vlt/t_finish_coverage/**/*.info
           if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() && hashFiles('pinned-icarus/RUN_SUMMARY.json') != '' }}
+        with:
+          name: macos-arm64-icarus128-${{ github.run_id }}
+          path: |
+            pinned-icarus/*.json
+            pinned-icarus/stages/
+            pinned-icarus/inventory/
+            pinned-icarus/reference/REFERENCE_AUDIT.json
+            pinned-icarus/reference/ICARUS_COPYING
+            pinned-icarus/reference/ivtest/log/
+            pinned-icarus/reference/ivtest/vpi_log/
+            pinned-icarus/pair/*.json
+            pinned-icarus/pair/*.log
+            pinned-icarus/pair/*.stdout
+            pinned-icarus/pair/*.stderr
+            pinned-icarus/pair/iverilog-version/
+            pinned-icarus/pair/vvp-version/
+            pinned-icarus/pair/cases/*/*/products/
+            pinned-icarus/pair/cases/*/*.json
+            pinned-icarus/pair/cases/*/*/*.json
+            pinned-icarus/pair/cases/*/*/*.log
+            pinned-icarus/pair/cases/*/*/*.stdout
+            pinned-icarus/pair/cases/*/*/*.stderr
+          if-no-files-found: error
   rocky8:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
+    outputs:
+      core_review: ${{ steps.producer_review.outputs.core_review }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
+          set-safe-directory: false
       - name: Build in Rocky Linux 8.10
         run: |
           docker pull rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e
@@ -167,29 +278,12 @@ jobs:
             -e ARTIFACT_UID="$(id -u)" -e ARTIFACT_GID="$(id -g)" \
             -v "$PWD:/work" -w /work rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e bash -c '
               set -e
-              publish_artifact_ownership() {
-                local result=$?
-                trap - EXIT
-                local ownership_result=0
-                local path
-                for path in out logs test_regress/obj_vlt; do
-                  if [[ -e "$path" ]]; then
-                    chown -hR -P -- "$ARTIFACT_UID:$ARTIFACT_GID" "$path" || ownership_result=$?
-                  fi
-                done
-                if (( ownership_result != 0 )); then
-                  printf "Artifact ownership transfer failed: exit %s\n" "$ownership_result" >&2
-                  if (( result == 0 )); then result=$ownership_result; fi
-                fi
-                exit "$result"
-              }
-              trap publish_artifact_ownership EXIT
               dnf -y install dnf-plugins-core
               dnf config-manager --set-enabled powertools
               dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
                 gcc-toolset-13-libasan-devel \
                 autoconf automake make perl git curl tar gzip xz findutils diffutils \
-                python3.11 python3.11-pip zlib-devel lz4-devel help2man
+                python3.11 python3.11-pip zlib-devel lz4-devel help2man util-linux
               ln -s /usr/bin/python3.11 /usr/local/bin/python3
               source /opt/rh/gcc-toolset-13/enable
               asan_probe_directory=$(mktemp -d /tmp/verilator-asan-probe.XXXXXX)
@@ -203,7 +297,13 @@ jobs:
               ldd "$asan_probe_directory/probe"
               sha256sum "$asan_probe_directory/probe"
               printf "ASAN_TOOLSET13_PREFLIGHT_PASSED\n"
-              bash ci/portable/build.bash rocky8-x86_64
+              # Run repository work as the mounted checkout owner.
+              setpriv --reuid "$ARTIFACT_UID" --regid "$ARTIFACT_GID" --clear-groups \
+                bash -c "
+                  set -euo pipefail
+                  portable_owner_home=\$(mktemp -d /tmp/verilator-owner-home.XXXXXX)
+                  exec env HOME=\"\$portable_owner_home\" \"\$@\"
+                " portable-owner bash ci/portable/build.bash rocky8-x86_64
             '
       - name: Verify package in a fresh Rocky 8.10 container
         if: ${{ !cancelled() && hashFiles('out/verilator-fourstate-rocky8-x86_64.tar.gz') != '' }}
@@ -218,9 +318,48 @@ jobs:
             cd /tmp
             python3 /source/ci/portable/smoke.py /tmp/relocated/verilator-fourstate/bin/verilator /tmp/model
           '
+      - name: Run pinned Icarus defaults and fixed 128 pair in Rocky 8.10
+        if: ${{ !cancelled() && hashFiles('bin/verilator_bin') != '' }}
+        run: |
+          icarus_expected_head=$(git rev-parse HEAD)
+          docker run --rm -e GITHUB_ACTIONS=true -e CC=gcc -e CXX=g++ \
+            -e ARTIFACT_UID="$(id -u)" -e ARTIFACT_GID="$(id -g)" \
+            -e ICARUS_EXPECTED_SHA="$icarus_expected_head" \
+            -v "$PWD:/work" -w /work rockylinux/rockylinux:8.10@sha256:f5529992e67440c1a4ae7788244d4381c6909159a88eacd95b7523ae47ced82e bash -c '
+              set -e
+              dnf -y install dnf-plugins-core
+              dnf config-manager --set-enabled powertools
+              dnf -y install gcc-toolset-13-gcc-c++ gcc-toolset-13-binutils gcc-toolset-13-libstdc++-devel \
+                autoconf make perl git gperf python3.11 zlib-devel bzip2-devel util-linux
+              ln -s /usr/bin/python3.11 /usr/local/bin/python3
+              source /opt/rh/gcc-toolset-13/enable
+              source .ci-venv/bin/activate
+              export PATH="/work/.ci-tools/bin:$PATH"
+              export CPPFLAGS="-I/work/.ci-tools/include"
+              # Run Git and the models as the mounted checkout owner.
+              setpriv --reuid "$ARTIFACT_UID" --regid "$ARTIFACT_GID" --clear-groups \
+                bash -c "
+                  set -euo pipefail
+                  portable_owner_home=\$(mktemp -d /tmp/verilator-owner-home.XXXXXX)
+                  exec env HOME=\"\$portable_owner_home\" \"\$@\"
+                " portable-owner \
+                python3 ci/portable/run_icarus_sweep.py --platform rocky8-x86_64 \
+                --verilator-root /work --expected-verilator-sha "$ICARUS_EXPECTED_SHA" \
+                --jobs 2 --output pinned-icarus
+            '
       - name: Independently verify recorded results
         if: ${{ !cancelled() && hashFiles('out/regression-results.json') != '' }}
         run: python3 ci/portable/check_results.py
+      - name: Check local producer files before upload without running models
+        id: producer_review
+        if: ${{ always() && !cancelled() }}
+        env:
+          PRODUCER_PRIOR_RESULT: ${{ job.status }}
+        run: |
+          python3 ci/portable/review_artifacts.py producer \
+            --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
+            --platform rocky8-x86_64 --producer-root /work \
+            --prior-result "$PRODUCER_PRIOR_RESULT" --output out/producer-core-review.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -230,7 +369,12 @@ jobs:
             logs/
             rocky-image.txt
             test_regress/obj_vlt/*/*.log
+            test_regress/obj_vlt/*/*.status
             test_regress/obj_vlt/t_debug_emitv/*_width.tree.v
+            test_regress/obj_vltmt/t_fourstate_sen_hierarchy/*.log
+            test_regress/obj_vltmt/t_fourstate_sen_hierarchy/*.status
+            test_regress/obj_vltmt/t_fourstate_sen_hierarchy/*.cpp
+            test_regress/obj_vltmt/t_fourstate_sen_hierarchy/*.h
             test_regress/obj_vltmt/t_threads_counter_2/*.log
             test_regress/obj_vltmt/t_threads_counter_2/*.status
             test_regress/obj_vltmt/t_threads_nondeterminism/*.log
@@ -247,6 +391,32 @@ jobs:
             test_regress/obj_vltmt/t_variable_order_writers/*__stats.txt
             test_regress/obj_vltmt/t_variable_order_writers/*.cpp
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
+            test_regress/obj_vlt/t_flag_language_noconfig/*.status
+            test_regress/obj_vlt/t_flag_language_noconfig_bad/*.status
+            test_regress/obj_vlt/t_fourstate_inout_default/*.status
+            test_regress/obj_vlt/t_fourstate_nba_partselect_clip/*.status
+            test_regress/obj_vlt/t_fourstate_nba_repeat_control/*.status
+            test_regress/obj_vlt/t_fourstate_reduce_scalar/*.status
+            test_regress/obj_vlt/t_fourstate_sen_expr/*.status
+            test_regress/obj_vlt/t_fourstate_sen_iff/*.status
+            test_regress/obj_vlt/t_fourstate_sen_impure_unsup/*.status
+            test_regress/obj_vlt/t_timing_nba_partselect_clip/*.status
+            test_regress/obj_vlt/t_timing_nba_repeat_control/*.status
+            test_regress/obj_vlt/t_timing_nba_repeat_unsup/*.status
+            test_regress/obj_vlt/t_tri_inout_default/*.status
+            test_regress/obj_vlt/t_fourstate_inout_default/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nba_partselect_clip/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_index_domain/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_packed_domain/simx.vcd
+            test_regress/obj_vlt/t_fourstate_nested_select/simx.vcd
+            test_regress/obj_vlt/t_fourstate_slice_index_width/*_width.tree.json
+            test_regress/obj_vlt/t_fourstate_slice_index_width/*_width.tree
+            test_regress/obj_vlt/t_fourstate_nba_repeat_control/simx.vcd
+            test_regress/obj_vlt/t_fourstate_sen_expr/simx.vcd
+            test_regress/obj_vlt/t_fourstate_sen_iff/simx.vcd
+            test_regress/obj_vlt/t_timing_nba_partselect_clip/simx.vcd
+            test_regress/obj_vlt/t_timing_nba_repeat_control/simx.vcd
+            test_regress/obj_vlt/t_tri_inout_default/simx.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_timing_blocking_event/*.vcd
@@ -344,4 +514,30 @@ jobs:
             test_regress/obj_vlt/t_finish_coverage/**/*.log
             test_regress/obj_vlt/t_finish_coverage/**/*.dat
             test_regress/obj_vlt/t_finish_coverage/**/*.info
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() && hashFiles('pinned-icarus/RUN_SUMMARY.json') != '' }}
+        with:
+          name: rocky8-x86_64-icarus128-${{ github.run_id }}
+          path: |
+            pinned-icarus/*.json
+            pinned-icarus/stages/
+            pinned-icarus/inventory/
+            pinned-icarus/reference/REFERENCE_AUDIT.json
+            pinned-icarus/reference/ICARUS_COPYING
+            pinned-icarus/reference/ivtest/log/
+            pinned-icarus/reference/ivtest/vpi_log/
+            pinned-icarus/pair/*.json
+            pinned-icarus/pair/*.log
+            pinned-icarus/pair/*.stdout
+            pinned-icarus/pair/*.stderr
+            pinned-icarus/pair/iverilog-version/
+            pinned-icarus/pair/vvp-version/
+            pinned-icarus/pair/cases/*/*/products/
+            pinned-icarus/pair/cases/*/*.json
+            pinned-icarus/pair/cases/*/*/*.json
+            pinned-icarus/pair/cases/*/*/*.log
+            pinned-icarus/pair/cases/*/*/*.stdout
+            pinned-icarus/pair/cases/*/*/*.stderr
           if-no-files-found: error

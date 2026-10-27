@@ -156,10 +156,23 @@ class UnknownVisitor final : public VNVisitor {
         // still needs every index bit and its X/Z mask.
         if (!v3Global.opt.fourstate() && indexp->width() > VL_IDATASIZE) {
             AstSel* const selp = new AstSel{indexp->fileline(), indexp, 0, VL_IDATASIZE};
-            selp->dtypeSetBitSized(VL_IDATASIZE, VSigning::UNSIGNED);
+            selp->dtypeSetBitSized(VL_IDATASIZE, VSigning::fromBool(indexp->isSigned()));
             return selp;
         }
         return indexp;
+    }
+
+    static AstNodeExpr* indexForArraySelect(AstNodeExpr* const indexp,
+                                            const AstNodeArrayDType* const dtypep) {
+        // The original index is either statically in range or remains in the
+        // complete bounds guard. Only the actual access uses unsigned address bits.
+        // Four-state lowering still needs every original index and X/Z bit.
+        if (v3Global.opt.fourstate()) return indexp;
+        const int addressWidth = V3Number::log2b(dtypep->declRange().hiMaxSelect()) + 1;
+        const int width = std::min(indexp->width(), addressWidth);
+        AstSel* const selp = new AstSel{indexp->fileline(), indexp, 0, width};
+        selp->dtypeSetBitSized(width, VSigning::UNSIGNED);
+        return selp;
     }
 
     // VISITORS
@@ -390,15 +403,10 @@ class UnknownVisitor final : public VNVisitor {
 
     void visit(AstSel* nodep) override {
         iterateChildren(nodep);
-        const AstNode* const basefromp = nodep->baseFromp(true);
-        const AstNodeVarRef* const varrefp = VN_CAST(basefromp, NodeVarRef);
-        const AstMemberSel* const memberSelp = VN_CAST(basefromp, MemberSel);
-        const bool lvalue = (varrefp && varrefp->access().isWriteOrRW())
-                            || (memberSelp && memberSelp->access().isWriteOrRW());
-        // Four-state reads are checked in V3Fourstate. Its unknown bit-write sentinel
-        // still needs the normal lvalue guard before expansion into destination words.
-        if ((!v3Global.opt.fourstate() || (lvalue && nodep->widthConst() == 1))
-            && !nodep->user1SetOnce()) {
+        const bool lvalue = nodep->fromp()->isLValue();
+        // Four-state reads are checked in V3Fourstate. Writes still need an
+        // overlap guard, including the sentinel used for unknown indices.
+        if ((!v3Global.opt.fourstate() || lvalue) && !nodep->user1SetOnce()) {
             // Guard against reading/writing past end of bit vector array
             // Find range of dtype we are selecting from
             // Similar code in V3Const::warnSelect
@@ -412,24 +420,53 @@ class UnknownVisitor final : public VNVisitor {
             AstConst* const maxmsbConstp
                 = new AstConst{nodep->fileline(), AstConst::WidthedValue{}, compareWidth, maxmsb};
             AstNodeExpr* lsbp = V3Const::constifyEdit(nodep->lsbp()->unlinkFrBack());
-            if ((!v3Global.opt.fourstate() || !lsbp->isSigned())
+            const bool signedLvalue = lvalue && lsbp->isSigned();
+            if (!signedLvalue && (!v3Global.opt.fourstate() || !lsbp->isSigned())
                 && V3Unknown::isStaticlyGte(maxmsbConstp->num(), lsbp)) {
                 // We don't need to add a conditional; we know the existing expression is ok
                 VL_DO_DANGLING(maxmsbConstp->deleteTree(), maxmsbConstp);
                 nodep->lsbp(indexForSelect(lsbp));
                 return;
             }
-            nodep->lsbp(indexForSelect(newExprStmtOrClone(lsbp)));
-            if (lsbp->width() < compareWidth) {
-                lsbp = lsbp->isSigned()
-                           ? static_cast<AstNodeExpr*>(
-                                 new AstExtendS{nodep->fileline(), lsbp, compareWidth})
-                           : static_cast<AstNodeExpr*>(
-                                 new AstExtend{nodep->fileline(), lsbp, compareWidth});
-                lsbp->dtypeSetBitSized(compareWidth, VSigning::UNSIGNED);
+            AstNodeExpr* const selectLsbp = newExprStmtOrClone(lsbp);
+            AstNodeExpr* const lowerLsbp
+                = signedLvalue ? selectLsbp->cloneTreePure(false) : nullptr;
+            nodep->lsbp(indexForSelect(selectLsbp));
+            const auto extendIndex = [nodep, compareWidth](AstNodeExpr* exprp) -> AstNodeExpr* {
+                if (exprp->width() < compareWidth) {
+                    exprp = exprp->isSigned()
+                                ? static_cast<AstNodeExpr*>(
+                                      new AstExtendS{nodep->fileline(), exprp, compareWidth})
+                                : static_cast<AstNodeExpr*>(
+                                      new AstExtend{nodep->fileline(), exprp, compareWidth});
+                    exprp->dtypeSetBitSized(compareWidth, VSigning::UNSIGNED);
+                }
+                return exprp;
+            };
+            lsbp = extendIndex(lsbp);
+            AstNodeExpr* condp;
+            if (signedLvalue) {
+                // A write is valid when any selected bit overlaps the destination.
+                // Compare the LSB with the lower bound instead of adding the select
+                // width to it, which could overflow the original index type.
+                V3Number minLsb{nodep, compareWidth};
+                minLsb.opExtendS(
+                    V3Number{nodep, VL_IDATASIZE, static_cast<uint32_t>(1 - nodep->widthConst())},
+                    VL_IDATASIZE);
+                condp = new AstLogAnd{nodep->fileline(),
+                                      new AstGteS{nodep->fileline(), maxmsbConstp, lsbp},
+                                      new AstGteS{nodep->fileline(), extendIndex(lowerLsbp),
+                                                  new AstConst{nodep->fileline(), minLsb}}};
+            } else {
+                condp = new AstGte{nodep->fileline(), maxmsbConstp, lsbp};
             }
-            AstNodeExpr* condp
-                = V3Const::constifyEdit(new AstGte{nodep->fileline(), maxmsbConstp, lsbp});
+            condp = V3Const::constifyEdit(condp);
+            if (lvalue && condp->isOne()) {
+                // Preserve a simple continuous driver when its write always overlaps.
+                // A procedural guard would hide array drivers from DFG synthesis.
+                VL_DO_DANGLING(condp->deleteTree(), condp);
+                return;
+            }
             if (!lvalue) {
                 // SEL(...) -> COND(LTE(bit<=maxmsb), ARRAYSEL(...), {width{1'bx}})
                 VNRelinker replaceHandle;
@@ -464,15 +501,7 @@ class UnknownVisitor final : public VNVisitor {
         if (!nodep->user1SetOnce()) {
             UINFOTREE(9, nodep, "", "in");
             // Guard against reading/writing past end of arrays
-            AstNode* const basefromp = nodep->fromp()->baseFromp(true);
-            bool lvalue = false;
-            if (const AstNodeVarRef* const varrefp = VN_CAST(basefromp, NodeVarRef)) {
-                lvalue = varrefp->access().isWriteOrRW();
-            } else if (VN_IS(basefromp, Const)) {
-                // If it's a PARAMETER[bit], then basefromp may be a constant instead of a varrefp
-            } else {
-                // Normally one of above, but might have MEMBERSEL or otherwise
-            }
+            const bool lvalue = nodep->fromp()->isLValue();
             // Find range of dtype we are selecting from
             int declElements = -1;
             AstNodeDType* const dtypep = nodep->fromp()->dtypep()->skipRefp();
@@ -503,10 +532,10 @@ class UnknownVisitor final : public VNVisitor {
             if (V3Unknown::isStaticlyGte(declElementsp->num(), bitp)) {
                 // We don't need to add a conditional; we know the existing expression is ok
                 VL_DO_DANGLING(declElementsp->deleteTree(), declElementsp);
-                nodep->bitp(indexForSelect(bitp));
+                nodep->bitp(indexForArraySelect(bitp, adtypep));
                 return;
             }
-            nodep->bitp(indexForSelect(newExprStmtOrClone(bitp)));
+            nodep->bitp(indexForArraySelect(newExprStmtOrClone(bitp), adtypep));
             AstNodeExpr* condp = new AstGte{nodep->fileline(), declElementsp, bitp};
             // Note below has null backp(); the Edit function knows how to deal with that.
             const AstNodeDType* const nodeDtp = nodep->dtypep()->skipRefp();

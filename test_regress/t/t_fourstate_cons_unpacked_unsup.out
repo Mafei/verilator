@@ -1,0 +1,10 @@
+%Error-UNSUPPORTED: t/t_fourstate_cons_struct.v:40:40: Unsupported: This four-state expression has not been handled
+                                                     : ... note: In instance 't'
+   40 |     packet = '{pair: '{left: next_word(FIRST), right: next_word(SECOND)}, tag: 1'b1};
+      |                                        ^~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error-UNSUPPORTED: t/t_fourstate_cons_struct.v:40:65: Unsupported: This four-state expression has not been handled
+                                                     : ... note: In instance 't'
+   40 |     packet = '{pair: '{left: next_word(FIRST), right: next_word(SECOND)}, tag: 1'b1};
+      |                                                                 ^~~~~~
+%Error: Exiting due to

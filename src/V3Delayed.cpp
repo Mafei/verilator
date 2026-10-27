@@ -604,17 +604,27 @@ class DelayedVisitor final : public VNVisitor {
     AstVarRef* createWidened(FileLine* flp, AstScope* scopep, AstNodeDType* dtypep,
                              AstNodeExpr* sLsbp, int sWidth, const std::string& name,
                              AstNodeExpr* valuep, AstNode* insertp) {
-        // Create temporary variable.
+        // Work at the larger width so low clipping consumes source bits before
+        // narrowing to the destination. LHS selects cannot express that shift.
+        const int shiftWidth = std::max(dtypep->width(), sWidth);
+        UASSERT_OBJ(valuep->width() == sWidth, valuep, "Unexpected partial update value width");
+        if (valuep->width() < shiftWidth) valuep = new AstExtend{flp, valuep, shiftWidth};
+        AstNodeExpr* shiftedp
+            = new AstShiftL{flp, valuep, sLsbp->cloneTreePure(false), shiftWidth};
+        if (sLsbp->isSigned()) {
+            AstNodeExpr* const countp = new AstNegate{flp, sLsbp->cloneTreePure(false)};
+            countp->dtypeSetBitSized(sLsbp->width(), VSigning::UNSIGNED);
+            shiftedp = new AstCond{
+                flp,
+                new AstLtS{flp, sLsbp->cloneTreePure(false),
+                           new AstConst{flp, AstConst::WidthedValue{}, sLsbp->width(), 0}},
+                new AstShiftR{flp, valuep->cloneTreePure(false), countp, shiftWidth}, shiftedp};
+        }
+        if (shiftWidth > dtypep->width()) shiftedp = new AstSel{flp, shiftedp, 0, dtypep->width()};
+        // Create the temporary with the positioned, destination-clipped bits.
         AstVarScope* const tp = m_dlyTmps.make(flp, scopep, dtypep, name);
-        // Zero it
-        AstConst* const zerop = new AstConst{flp, AstConst::DTyped{}, dtypep};
-        zerop->num().setAllBits0();
         insertp->addHereThisAsNext(
-            new AstAssign{flp, new AstVarRef{flp, tp, VAccess::WRITE}, zerop});
-        // Set the selected bits to 'valuep'
-        AstSel* const selp = new AstSel{flp, new AstVarRef{flp, tp, VAccess::WRITE},
-                                        sLsbp->cloneTreePure(true), sWidth};
-        insertp->addHereThisAsNext(new AstAssign{flp, selp, valuep});
+            new AstAssign{flp, new AstVarRef{flp, tp, VAccess::WRITE}, shiftedp});
         // This is the expression to get the value of the temporary
         return new AstVarRef{flp, tp, VAccess::READ};
     }
@@ -1250,7 +1260,11 @@ class DelayedVisitor final : public VNVisitor {
     }
     void visit(AstFork* nodep) override {
         VL_RESTORER(m_inSuspendableOrFork);
+        VL_RESTORER(m_inNonCombLogic);
         m_inSuspendableOrFork = true;
+        // Each branch runs as a process of its own (V3SchedTiming transformForks), so its
+        // blocking assignments are not combinational logic, like a suspendable process
+        m_inNonCombLogic = true;
         iterateChildren(nodep);
     }
     void visit(AstCAwait* nodep) override {
@@ -1453,6 +1467,8 @@ class DelayedVisitor final : public VNVisitor {
         // Check whether it was already visited by visitCalledCFunc()
         if (value.m_state != CFuncCache::UNINITIALIZED) return;
         VL_RESTORER(m_cfuncp);
+        // Its timing domains are those of the processes calling it, see visitCalledCFunc()
+        VL_RESTORER_CLEAR(m_timingDomains);
         m_cfuncp = nodep;
         iterateChildren(nodep);
     }

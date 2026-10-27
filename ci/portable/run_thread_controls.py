@@ -12,11 +12,11 @@ from pathlib import Path
 from run_regressions import parse_summary, passed_counts
 
 NAMES = ("threads_counter_2", "threads_nondeterminism", "fourstate_mt_trace", "trace_basic_cc_vcd",
-         "variable_order_writers")
+         "variable_order_writers", "fourstate_sen_hierarchy")
 
 
 def main():
-    """Require both actual vltmt passes and the original complete summary."""
+    """Require every actual vltmt pass and the original complete summary."""
     root = Path(__file__).resolve().parents[2]
     output = root / "out/thread-controls"
     output.mkdir(parents=True, exist_ok=False)

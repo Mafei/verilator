@@ -284,7 +284,7 @@ public:
 // erase a call boundary or introduce a local with a nontrivial lifetime.
 class FinalLocalBodyVisitor final : public VNVisitorConst {
     bool m_blocked = false;
-    bool m_hasFinish = false;
+    bool m_hasFinish = false;  // Whether the body contains a finish request
 
     void visit(AstFinish*) override { m_hasFinish = true; }
     void visit(AstNodeFTaskRef*) override { m_blocked = true; }
@@ -328,13 +328,13 @@ public:
 };
 
 class FinalLocalScopeVisitor final : public VNVisitorConst {
-    const AstNodeModule* m_modp = nullptr;
-    const AstNode* m_parentp = nullptr;
-    const AstNodeModule* m_finalModp = nullptr;
-    AstFinal* m_finalp = nullptr;
-    bool m_finalDirect = false;
-    unsigned m_topCount = 0;
-    unsigned m_finalCount = 0;
+    const AstNodeModule* m_modp = nullptr;  // Current module
+    const AstNode* m_parentp = nullptr;  // Direct parent of the visited node
+    const AstNodeModule* m_finalModp = nullptr;  // Module containing the selected final block
+    AstFinal* m_finalp = nullptr;  // Selected final block
+    bool m_finalDirect = false;  // Final block is directly under its module
+    unsigned m_topCount = 0;  // Number of top-level modules
+    unsigned m_finalCount = 0;  // Number of final blocks
 
     void visit(AstNodeModule* nodep) override {
         VL_RESTORER(m_modp);
@@ -385,7 +385,7 @@ public:
 };
 
 class FinalLocalRewriteVisitor final : public VNVisitor {
-    const AstFinal* const m_finalp;
+    const AstFinal* const m_finalp;  // Final block whose local exits are rewritten
 
     void visit(AstFinal* nodep) override {
         if (nodep == m_finalp) FinishVisitor{nodep};
