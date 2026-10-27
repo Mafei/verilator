@@ -43,7 +43,8 @@ GROUPS = {
     "fourstate": [
         "fourstate_api", "fourstate_cond", "fourstate_countones", "fourstate_dynarray",
         "fourstate_format", "fourstate_format_bin", "fourstate_format_hex",
-        "fourstate_format_octal", "fourstate_format_packed", "fourstate_format_trunc",
+        "fourstate_format_octal", "fourstate_format_packed", "fourstate_format_real",
+        "fourstate_format_trunc",
         "fourstate_isunknown", "fourstate_lognot", "fourstate_modport",
         "fourstate_noapi", "fourstate_packed_array", "fourstate_portable",
         "fourstate_sampled_expr", "fourstate_struct", "fourstate_trace_fst", "fourstate_trace_vcd",
