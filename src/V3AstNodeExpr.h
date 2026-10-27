@@ -293,6 +293,7 @@ private:
     string m_dotted;  // Dotted part of scope the name()ed task/func is under or ""
     string m_inlinedDots;  // Dotted hierarchy flattened out
     bool m_containsGenBlock = false;  // Contains gen block reference
+    int m_ancestorLevels = 0;  // -1 pending; positive counts enclosing module instances
     bool m_pli = false;  // Pli system call ($name)
     bool m_superReference = false;  // Called with super reference
     VIsCached m_purity;  // Pure state
@@ -319,6 +320,8 @@ public:
     void dotted(const string& name) { m_dotted = name; }
     AstNodeModule* classOrPackagep() const { return m_classOrPackagep; }
     void classOrPackagep(AstNodeModule* nodep) { m_classOrPackagep = nodep; }
+    int ancestorLevels() const { return m_ancestorLevels; }
+    void ancestorLevels(int levels) { m_ancestorLevels = levels; }
     bool containsGenBlock() const { return m_containsGenBlock; }
     void containsGenBlock(const bool flag) { m_containsGenBlock = flag; }
     bool pli() const { return m_pli; }
@@ -335,6 +338,7 @@ public:
                && dotted() == asamep->dotted()  //
                && inlinedDots() == asamep->inlinedDots()  //
                && pli() == asamep->pli()  //
+               && ancestorLevels() == asamep->ancestorLevels()
                && containsGenBlock() == asamep->containsGenBlock()
                && superReference() == asamep->superReference();
     }

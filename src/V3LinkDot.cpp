@@ -77,6 +77,8 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <deque>
+#include <memory>
 #include <vector>
 
 VL_DEFINE_DEBUG_FUNCTIONS;
@@ -206,6 +208,7 @@ private:
     VSymEnt* m_packageEntp = nullptr;  // Root of global package names
     std::multimap<std::string, VSymEnt*>
         m_nameScopeSymMap;  // Map of scope referenced by non-pretty textual name
+    std::map<AstNodeModule*, std::vector<VSymEnt*>> m_primaryContexts;  // Actual instance entries
     std::set<std::pair<AstNodeModule*, std::string>>
         m_implicitNameSet;  // For [module][signalname] if we can implicitly create it
     std::array<ScopeAliasMap, SAMN__MAX> m_scopeAliasMap;  // Map of <lhs,rhs> aliases
@@ -414,6 +417,7 @@ public:
         checkDuplicate(rootEntp(), nodep, nodep->origName());
         rootEntp()->insert(nodep->origName(), symp);
         if (forScopeCreation()) m_nameScopeSymMap.emplace(scopename, symp);
+        if (forPrimary()) m_primaryContexts[nodep].push_back(symp);
         return symp;
     }
     VSymEnt* insertTopIface(AstCell* nodep, const string& scopename) {
@@ -448,7 +452,20 @@ public:
             modSymp->reinsert(nodep->name(), symp);
         }
         if (forScopeCreation()) m_nameScopeSymMap.emplace(scopename, symp);
+        if (forPrimary() && nodep->modp()) m_primaryContexts[nodep->modp()].push_back(symp);
         return symp;
+    }
+    bool hasAncestorCandidate(AstNodeModule* modp, const string& name) const {
+        const auto it = m_primaryContexts.find(modp);
+        if (it == m_primaryContexts.end()) return false;
+        // Discovery only: never bind a shared call to one arbitrary incoming context.
+        for (VSymEnt* const contextp : it->second) {
+            for (VSymEnt* ownerp = contextp->parentp(); ownerp; ownerp = ownerp->parentp()) {
+                const VSymEnt* const foundp = ownerp->findIdFlat(name);
+                if (foundp && VN_IS(foundp->nodep(), NodeFTask)) return true;
+            }
+        }
+        return false;
     }
     void insertMap(VSymEnt* symp, const string& scopename) {
         if (forScopeCreation()) m_nameScopeSymMap.emplace(scopename, symp);
@@ -5589,6 +5606,16 @@ class LinkDotResolveVisitor final : public VNVisitor {
             // Module that is not in hierarchy.  We'll be dead code eliminating it later.
             UINFO(9, indent() << "Dead module for " << nodep);
             nodep->taskp(nullptr);
+        } else if (m_statep->forScopeCreation() && nodep->ancestorLevels() > 0) {
+            // Types and effects were bound before Param. Select the same owner's scoped task.
+            VSymEnt* ownerp = m_modSymp;
+            for (int level = 0; ownerp && level < nodep->ancestorLevels(); ++level) {
+                ownerp = ownerp->parentp();
+            }
+            VSymEnt* const foundp = ownerp ? ownerp->findIdFlat(nodep->name()) : nullptr;
+            AstTask* const taskp = foundp ? VN_CAST(foundp->nodep(), Task) : nullptr;
+            UASSERT_OBJ(taskp, nodep, "Ancestor task missing from its preselected scope");
+            nodep->taskp(taskp);
         } else if (nodep->dotted() == "" && nodep->taskp()) {
             // Earlier should have setup the links
             // Might be under a BEGIN we're not processing, so don't relink it
@@ -5769,6 +5796,11 @@ class LinkDotResolveVisitor final : public VNVisitor {
                                 << nodep->prettyNameQ() << '\n'
                                 << (suggest.empty() ? "" : nodep->warnMore() + suggest));
                         }
+                    } else if (m_statep->forPrimary() && VN_IS(m_modp, Module)
+                               && !nodep->classOrPackagep()
+                               && m_statep->hasAncestorCandidate(m_modp, nodep->name())) {
+                        // Resolve only after every static instance context has been checked.
+                        nodep->ancestorLevels(-1);
                     } else {
                         const string suggest = m_statep->suggestSymFallback(
                             dotSymp, nodep->name(), LinkNodeMatcherFTask{});
@@ -6773,6 +6805,213 @@ public:
 };
 
 //######################################################################
+// Bind ordinary task calls only after the complete static instance cone is known.
+// A separate module clone per affected instance keeps all pre-Scope users of taskp
+// on the actual definition. No representative prototype or global parent fallback.
+
+class LinkDotAncestorContexts final {
+    struct Binding final {
+        AstNodeFTaskRef* m_sourcep;
+        AstTask* m_targetp;
+        size_t m_owner;
+        int m_levels;
+    };
+    struct Context final {
+        AstNodeModule* m_sourcep;
+        AstNodeModule* m_clonep = nullptr;
+        AstCell* m_sourceCellp;
+        size_t m_parent;
+        std::vector<Binding> m_bindings;
+        std::map<AstNode*, AstNode*> m_clones;
+        Context(AstNodeModule* sourcep, AstCell* cellp, size_t parent)
+            : m_sourcep{sourcep}, m_sourceCellp{cellp}, m_parent{parent} {}
+    };
+    AstNetlist* const m_rootp;
+    std::set<AstNodeModule*> m_affected;
+    std::vector<std::unique_ptr<Context>> m_contexts;
+    std::set<string> m_names;
+    unsigned m_nextName = 0;
+
+    static void unsupported(AstNode* nodep) {
+        nodep->v3warn(E_UNSUPPORTED,
+                     "Unsupported: ancestor task lookup requires an unparameterized static "
+                     "module cone without source package imports/exports, with fixed packed "
+                     "input/output formals.");
+    }
+    static bool sourceImportOrExport(const AstNode* nodep) {
+        if (const AstPackageImport* const impp = VN_CAST(nodep, PackageImport)) {
+            const AstPackage* const stdp = v3Global.rootp()->stdPackagep();
+            // V3ParseImp::importIfInStd supplies exactly the package's FileLine pointer.
+            // A source import, even of std, has the user's own FileLine and is excluded.
+            return !(stdp && impp->packagep() == stdp && impp->name() == "*"
+                     && impp->fileline() == stdp->fileline());
+        }
+        return VN_IS(nodep, PackageExport) || VN_IS(nodep, PackageExportStarStar);
+    }
+    static bool supportedTask(AstTask* taskp) {
+        if (taskp->lifetime().isAutomatic() || taskp->dpiImport() || taskp->dpiExport()) {
+            return false;
+        }
+        for (AstNode* const stmtp : taskp->stmtspList()) {
+            const AstVar* const varp = VN_CAST(stmtp, Var);
+            if (!varp || !varp->direction().isAny()) continue;
+            if (varp->isInoutOrRef() || varp->valuep()) return false;
+            const AstBasicDType* const dtypep = VN_CAST(varp->subDTypep(), BasicDType);
+            if (!dtypep || !dtypep->isIntegralOrPacked()) return false;
+            if (const AstRange* const rangep = dtypep->rangep()) {
+                if (!VN_IS(rangep->leftp(), Const) || !VN_IS(rangep->rightp(), Const)) return false;
+            }
+        }
+        return true;
+    }
+    void collect() {
+        std::map<AstNodeModule*, std::vector<AstNodeModule*>> parents;
+        std::deque<AstNodeModule*> pending;
+        for (AstNodeModule* const modp : m_rootp->modulespList()) {
+            m_names.insert(modp->name());
+            if (modp->exists([](const AstNodeFTaskRef* refp) {
+                    return refp->ancestorLevels() < 0;
+                })) {
+                m_affected.insert(modp);
+                pending.push_back(modp);
+            }
+            modp->foreach([&](const AstCell* cellp) { parents[cellp->modp()].push_back(modp); });
+        }
+        while (!pending.empty()) {
+            AstNodeModule* const modp = pending.front();
+            pending.pop_front();
+            for (AstNodeModule* const parentp : parents[modp]) {
+                if (m_affected.insert(parentp).second) pending.push_back(parentp);
+            }
+        }
+    }
+    void preflight(AstNodeModule* modp, AstCell* cellp, size_t parent,
+                   std::vector<size_t>& ancestors) {
+        if (!m_affected.count(modp)) return;
+        for (const size_t ancestor : ancestors) {
+            if (m_contexts[ancestor]->m_sourcep == modp) {
+                unsupported(cellp);
+                return;
+            }
+        }
+        if (!VN_IS(modp, Module) || modp->hasGParam() || modp->hierParams() || modp->hierBlock()
+            || modp->exists([modp](const AstNode* nodep) {
+                   const AstVar* const varp = VN_CAST(nodep, Var);
+                   const AstCell* const cellp = VN_CAST(nodep, Cell);
+                   return VN_IS(nodep, GenBlock) || VN_IS(nodep, GenIf)
+                          || VN_IS(nodep, GenFor) || VN_IS(nodep, GenCase)
+                          || VN_IS(nodep, IfaceRefDType) || VN_IS(nodep, ParamTypeDType)
+                          || (VN_IS(nodep, NodeModule) && nodep != modp)
+                          || sourceImportOrExport(nodep)
+                          || (varp && varp->isParam())
+                          || (cellp && (cellp->rangep() || cellp->paramsp()));
+               })) {
+            unsupported(cellp ? static_cast<AstNode*>(cellp) : modp);
+            return;
+        }
+        const size_t index = m_contexts.size();
+        m_contexts.emplace_back(new Context{modp, cellp, parent});
+        Context& context = *m_contexts.back();
+        modp->foreach([&](AstNodeFTaskRef* refp) {
+            if (refp->ancestorLevels() >= 0) return;
+            AstNode* targetp = nullptr;
+            size_t owner = 0;
+            int levels = 0;
+            for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it) {
+                ++levels;
+                for (AstNode* const stmtp : m_contexts[*it]->m_sourcep->stmtspList()) {
+                    if (stmtp->name() == refp->name()) { targetp = stmtp; break; }
+                }
+                if (targetp) { owner = *it; break; }
+            }
+            if (!targetp) {
+                refp->v3error("Can't find definition of task/function: " << refp->prettyNameQ());
+            } else if (AstTask* const taskp = VN_CAST(targetp, Task)) {
+                if (!VN_IS(refp, TaskRef) || !supportedTask(taskp)) unsupported(refp);
+                else context.m_bindings.push_back(Binding{refp, taskp, owner, levels});
+            } else if (VN_IS(targetp, Func)) {
+                unsupported(refp);
+            } else {
+                // Mixed-name ancestor lookup is outside this bounded implementation.
+                refp->v3warn(E_UNSUPPORTED,
+                             "Unsupported: ancestor task lookup with a nearer non-subroutine "
+                             "declaration.");
+            }
+        });
+        ancestors.push_back(index);
+        for (AstNode* const stmtp : modp->stmtspList()) {
+            if (AstCell* const childp = VN_CAST(stmtp, Cell)) {
+                preflight(childp->modp(), childp, index, ancestors);
+            }
+        }
+        ancestors.pop_back();
+    }
+    void cloneContexts() {
+        for (const std::unique_ptr<Context>& contextp : m_contexts) {
+            Context& context = *contextp;
+            AstNodeModule* const sourcep = context.m_sourcep;
+            if (!context.m_sourceCellp) {
+                context.m_clonep = sourcep;
+                sourcep->foreach([&](AstNode* nodep) { context.m_clones.emplace(nodep, nodep); });
+            } else {
+                AstNodeModule* const clonep = sourcep->cloneTree(false);
+                string name;
+                do { name = sourcep->name() + "__Vanc" + cvtToStr(++m_nextName); }
+                while (!m_names.insert(name).second);
+                clonep->name(name);
+                // Capture mappings now; another sibling clone overwrites clonep scratch links.
+                sourcep->foreach([&](AstNode* nodep) {
+                    if (nodep->clonep()) context.m_clones.emplace(nodep, nodep->clonep());
+                });
+                sourcep->addNextHere(clonep);  // Same level, preserving module level ordering.
+                context.m_clonep = clonep;
+                Context& above = *m_contexts[context.m_parent];
+                AstCell* const cellp = VN_AS(above.m_clones.at(context.m_sourceCellp), Cell);
+                cellp->modp(clonep);
+                cellp->modName(clonep->name());
+                for (AstPin* const pinp : cellp->pinspList()) {
+                    if (pinp->modVarp()) {
+                        pinp->modVarp(VN_AS(context.m_clones.at(pinp->modVarp()), Var));
+                    }
+                }
+            }
+        }
+        for (const std::unique_ptr<Context>& contextp : m_contexts) {
+            for (const Binding& binding : contextp->m_bindings) {
+                AstNodeFTaskRef* const refp
+                    = VN_AS(contextp->m_clones.at(binding.m_sourcep), NodeFTaskRef);
+                AstTask* const targetp
+                    = VN_AS(m_contexts[binding.m_owner]->m_clones.at(binding.m_targetp), Task);
+                refp->taskp(targetp);
+                refp->ancestorLevels(binding.m_levels);
+            }
+        }
+        VIsCached::clearCacheTree();
+    }
+public:
+    explicit LinkDotAncestorContexts(AstNetlist* rootp) : m_rootp{rootp} {
+        // Do not append bounded-feature diagnostics to an existing Primary user error.
+        if (V3Error::errorCount()) return;
+        collect();
+        if (m_affected.empty()) return;
+        const AstPackage* const unitp = rootp->dollarUnitPkgp();
+        if (v3Global.opt.hierarchical() || v3Global.opt.hierChild()
+            || v3Global.opt.serializeOnly()
+            || (unitp && unitp->exists([](const AstNode* nodep) {
+                    return sourceImportOrExport(nodep);
+                }))) {
+            unsupported(rootp);
+            return;
+        }
+        std::vector<size_t> ancestors;
+        for (AstNodeModule* const modp : rootp->modulespList()) {
+            if (modp->isTop()) preflight(modp, nullptr, 0, ancestors);
+        }
+        if (!V3Error::errorCount()) cloneContexts();
+    }
+};
+
+//######################################################################
 // Link class functions
 
 void V3LinkDot::dumpSubstep(const string& name) {
@@ -6817,6 +7056,7 @@ void V3LinkDot::linkDotGuts(AstNetlist* rootp, VLinkDotStep step) {
 void V3LinkDot::linkDotPrimary(AstNetlist* nodep) {
     UINFO(2, __FUNCTION__ << ":");
     linkDotGuts(nodep, LDS_PRIMARY);
+    LinkDotAncestorContexts{nodep};
     V3Global::dumpCheckGlobalTree("linkdot", 0, dumpTreeEitherLevel() >= 6);
 }
 
