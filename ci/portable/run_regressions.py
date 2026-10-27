@@ -39,7 +39,10 @@ GROUPS = {
         "finish_final_local", "finish_process_exit", "fourstate_finish_final",
         "fourstate_finish_process"
     ],
-    "finish_propagation": ["finish_final_multi", "finish_call_propagation"],
+    "finish_propagation": [
+        "finish_final_multi", "finish_call_propagation", "finish_coverage_tails",
+        "finish_coverage_barrier", "while_finish", "fork_cfunc_finish"
+    ],
     "fourstate": [
         "fourstate_api", "fourstate_cond", "fourstate_countones", "fourstate_dynarray",
         "fourstate_format", "fourstate_format_bin", "fourstate_format_hex",

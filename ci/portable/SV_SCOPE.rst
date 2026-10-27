@@ -125,6 +125,10 @@ execution controls and reference-only tests are counted separately.
      - partial
      - Public supply/pull/default/inout, multi-driver and procedural-enable profiles. Complex strengths and hierarchical cases retain explicit boundaries.
      - resolve, pull, supplies, tri_storage_20261026; *_unsup
+   * - Repeated positional output slots
+     - partial
+     - Internal non-ANSI modules can repeat a plain scalar or packed four-state output wire in ordered ports. Each whole-wire receiver has a separate one-way assignment, preserving source ordinals and value/XZ pairing. Input/inout collapse, complex or named connections, strengths, delays, top-level export and other unsupported modes retain explicit boundaries. The original fixed128 repeated-inout case remains unsupported.
+     - port_repeat_output:102 value checks; port_repeat_scalar:20 checks per scalar/one-bit profile;18 negative diagnostic profiles
    * - Force, release, deassign
      - partial
      - Public packed/net/process cases only; no general analog resolution model.
@@ -133,6 +137,10 @@ execution controls and reference-only tests are counted separately.
      - partial
      - Original finish9 outputs and complete histories remain mandatory; legal race/ordering boundaries are not silently rewritten.
      - finish_acceptance.py, finish and process regression groups
+   * - Automatic coverage on finish exits
+     - partial
+     - Source exits retain pure compiler-generated line/branch counter tails for entered If/Begin statement lists. Normal fallthrough retains the original counters. Propagation stops at remaining functional statements, task copyback, unqualified containers and outer loop boundaries. Trace-coverage bundles and general final-block coverage remain outside this fix. Existing grouped source spans are not instruction-by-instruction execution evidence; an executed prefix does not establish completion of a group containing an unexecuted tail.
+     - finish_coverage_tails checks nested counters and normal task return; finish_coverage_barrier preserves delayed-container and unexecuted functional/user-coverage boundaries. Original coverage golds and finish scheduling comparisons remain unchanged.
    * - VPI, tracing and interfaces
      - partial
      - Public packed-member XZ registration, native VPI controls, bounded interface and full-history VCD/FST checks. Not all public VPI entrypoints are implemented.
