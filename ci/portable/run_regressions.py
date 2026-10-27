@@ -164,7 +164,7 @@ GROUPS = {
         "timing_nba_repeat_unsup", "tri_inout_default", "func_ancestor_ctx",
         "func_ancestor_func_unsup", "func_ancestor_import_unsup", "func_ancestor_missing_bad",
         "func_ancestor_param_unsup", "func_ancestor_suggest_bad", "func_ancestor_wrongkind_unsup",
-        "func_ancestor_xz"
+        "func_ancestor_xz", "import_context_capture", "package_import_lexical"
     ],
     "fourstate_constructors_20261026": [
         "fourstate_cons_copy", "fourstate_cons_keyed", "fourstate_cons_queue",
