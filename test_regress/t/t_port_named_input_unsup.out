@@ -1,0 +1,5 @@
+%Error-UNSUPPORTED: t/t_port_named_input_unsup.v:7:21: Unsupported: Named non-ANSI ports require plain packed OUTPUT wires.
+    7 | module named_input(.data(d), q);
+      |                     ^~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

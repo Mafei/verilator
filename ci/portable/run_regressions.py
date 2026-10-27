@@ -55,7 +55,8 @@ GROUPS = {
         "port_repeat_driver_unsup", "port_repeat_inout_unsup", "port_repeat_input_unsup",
         "port_repeat_mode_unsup", "port_repeat_named_unsup", "port_repeat_same_unsup",
         "port_repeat_top_unsup", "var_dup_bad", "lint_pindup_bad", "sched_susp_vs_nosusp",
-        "fourstate_sense_init"
+        "fourstate_sense_init", "port_named_dup_bad", "port_named_expr_unsup",
+        "port_named_input_unsup", "port_named_output", "port_named_unique"
     ],
     "nba": [
         "assigndly_deep_ref_array", "assigndly_dynamic", "assigndly_dynamic_delay",

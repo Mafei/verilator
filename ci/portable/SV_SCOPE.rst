@@ -127,8 +127,30 @@ execution controls and reference-only tests are counted separately.
      - resolve, pull, supplies, tri_storage_20261026; *_unsup
    * - Repeated positional output slots
      - partial
-     - Internal non-ANSI modules can repeat a plain scalar or packed four-state output wire in ordered ports. Each whole-wire receiver has a separate one-way assignment, preserving source ordinals and value/XZ pairing. Input/inout collapse, complex or named connections, strengths, delays, top-level export and other unsupported modes retain explicit boundaries. The original fixed128 repeated-inout case remains unsupported.
-     - port_repeat_output:102 value checks; port_repeat_scalar:20 checks per scalar/one-bit profile;18 negative diagnostic profiles
+     - Internal non-ANSI modules can repeat a plain scalar or packed four-state output wire
+       in ordered ports. Each whole-wire receiver has a separate one-way assignment,
+       preserving source ordinals and value/XZ pairing. Bare repeated names still require
+       positional connections. Input/inout collapse, header expressions, strengths, delays,
+       top-level export and other unsupported modes retain explicit boundaries. The original
+       fixed128 repeated-inout case remains unsupported.
+     - port_repeat_output:102 value checks; port_repeat_scalar:20 checks per scalar/one-bit
+       profile. The original 18 diagnostic profiles remain selected; the complex-header
+       profile has the known candidate mismatch described below.
+   * - Direct named OUTPUT header aliases
+     - experimental; candidate HOLD
+     - Internal non-ANSI modules with plain scalar or packed OUTPUT wires can use distinct
+       external header names with positional, named or implicit-star connections under
+       ``--fourstate`` and native output. External names stay separate from internal symbols.
+       INPUT/INOUT header aliases, header selects/concatenations, strengths, delays and exported
+       or other non-native modes are outside this subset. Duplicate explicit definitions are
+       rejected under IEEE 1364-2005 12.3.2 and the module-port rule quoted by SV-BC in 2012;
+       pinned Icarus acceptance of that negative input is retained separately. This is not a
+       complete IEEE 1800-2023 certification.
+     - port_named_output:30 literal checks; port_named_unique:19 checks at 33/65 bits with
+       nonzero descending ranges and parameter clones. Three new diagnostics cover INPUT
+       aliases, header part-selects and duplicate explicit external names. Ascending ranges
+       and implicit ``.name`` connections have not been independently tested.
+
    * - Force, release, deassign
      - partial
      - Public packed/net/process cases only; no general analog resolution model.
@@ -149,6 +171,11 @@ execution controls and reference-only tests are counted separately.
      - untested
      - Public independent MAC/reset behavior is tested separately. Full vendor DSP48E2/glbl libraries and restricted RFSoC/SS-OCT models are not included or certified.
      - fourstate_mac_model is a behavioral subset, not the vendor model
+
+The original ``port_repeat_complex_unsup`` stays selected with its original three-error
+gold. Direct OUTPUT aliases are now supported, so the candidate emits only the remaining
+unsupported INPUT-alias diagnostic and that original golden comparison fails. The gold is
+unchanged and the failure remains active; candidate acceptance stays on HOLD.
 
 Acceptance accounting
 ---------------------

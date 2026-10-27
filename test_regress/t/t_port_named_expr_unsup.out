@@ -1,0 +1,5 @@
+%Error-UNSUPPORTED: t/t_port_named_expr_unsup.v:9:11: Unsupported: Named non-ANSI ports require direct OUTPUT wires.
+    9 | module t(.part(q[6:0]), q);
+      |           ^~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

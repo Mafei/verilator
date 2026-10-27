@@ -1507,8 +1507,16 @@ port<nodep>:                    // ==IEEE: port
                           if (AstVar* vp = VARDONEP($$, $3, $4)) { addNextNull($$, vp); vp->valuep($6); } }
         //                      //   IEEE: '.' port_identifier '(' [ expression ] ')'
         |       portDirNetE /*implicit*/ '.' portSig '(' expr ')'
-                        { $$ = $3; DEL($5);
-                          BBUNSUP($<fl>2, "Unsupported: complex ports (IEEE 1800-2023 23.2.2.1/2)"); }
+                        { $$ = $3;
+                          if (v3Global.opt.fourstate()
+                              && GRAMMARP->m_varIO == VDirection::NONE
+                              && GRAMMARP->m_varDecl == VVarType::PORT) {
+                              // Keep the external name separate from the internal expression.
+                              VN_AS($$, Port)->exprp($5);
+                          } else {
+                              DEL($5);
+                              BBUNSUP($<fl>2, "Unsupported: complex ports (IEEE 1800-2023 23.2.2.1/2)");
+                          } }
         //                      // IEEE: part of (non-ansi) port_reference
         |       '{' port_expressionList '}'
                         { $$ = $2; }
