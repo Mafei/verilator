@@ -23,6 +23,8 @@
 #include "V3Error.h"
 #include "V3File.h"
 #include "V3HierBlock.h"
+#include "V3ImportContext.h"
+#include "V3ImportLexical.h"
 #include "V3LibMap.h"
 #include "V3LinkCells.h"
 #include "V3Parse.h"
@@ -56,6 +58,8 @@ void V3Global::boot() {
     m_rootp = new AstNetlist;
     m_constPoolp = new V3ConstPool;
     m_libMapp = new V3LibMap;
+    m_importContextp = new V3ImportContext;
+    m_importLexicalp = new V3ImportLexical;
 }
 
 void V3Global::shutdown() {
@@ -64,6 +68,8 @@ void V3Global::shutdown() {
     VL_DO_CLEAR(delete m_threadPoolp, m_threadPoolp = nullptr);  // delete nullptr is safe
     VL_DO_CLEAR(delete m_libMapp, m_libMapp = nullptr);  // delete nullptr is safe
     VL_DO_CLEAR(delete m_constPoolp, m_constPoolp = nullptr);  // delete nullptr is safe
+    VL_DO_CLEAR(delete m_importContextp, m_importContextp = nullptr);
+    VL_DO_CLEAR(delete m_importLexicalp, m_importLexicalp = nullptr);
 #ifdef VL_LEAK_CHECKS
     if (m_rootp) VL_DO_CLEAR(m_rootp->deleteTree(), m_rootp = nullptr);
 #endif
@@ -151,6 +157,8 @@ void V3Global::readFiles() {
         V3LinkCells::link(v3Global.rootp(), &filter);
     }
 
+    m_importContextp->dump();
+    m_importLexicalp->dump();
     V3Global::dumpCheckGlobalTree("cells", false, dumpTreeEitherLevel() >= 9);
 }
 

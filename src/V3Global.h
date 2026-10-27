@@ -40,6 +40,8 @@
 class AstNetlist;
 class V3ConstPool;
 class V3HierGraph;
+class V3ImportContext;
+class V3ImportLexical;
 class V3LibMap;
 class V3ThreadPool;
 
@@ -84,6 +86,8 @@ class V3Global final {
     V3ThreadPool* m_threadPoolp = nullptr;
     // Library Mapping, nullptr unless --libmap is used
     V3LibMap* m_libMapp = nullptr;
+    V3ImportContext* m_importContextp = nullptr;  // Capture-only parser history
+    V3ImportLexical* m_importLexicalp = nullptr;  // Immutable source views for name binding
     VWidthMinUsage m_widthMinUsage
         = VWidthMinUsage::LINT_WIDTH;  // What AstNode::widthMin() is used for
 
@@ -142,6 +146,8 @@ public:
     // Use V3ConstPool:: static methods instead
     V3ConstPool* constPoolp() const VL_PURE { return m_constPoolp; }
     V3LibMap* libMapp() const VL_PURE { return m_libMapp; }
+    V3ImportContext* importContextp() const VL_PURE { return m_importContextp; }
+    V3ImportLexical* importLexicalp() const VL_PURE { return m_importLexicalp; }
     V3ThreadPool* threadPoolp() const VL_PURE { return m_threadPoolp; }
     void threadPoolp(V3ThreadPool* threadPoolp) {
         UASSERT(!m_threadPoolp, "attempted to create multiple threadPool singletons");

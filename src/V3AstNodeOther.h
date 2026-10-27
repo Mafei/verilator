@@ -115,6 +115,7 @@ class AstNodeFTask VL_NOT_FINAL : public AstNode {
     // Scope name
     // @astgen op4 := scopeNamep : Optional[AstScopeName]
     string m_name;  // Name of task
+    uint32_t m_importScopeId = 0;  // Immutable source-scope provenance before name binding
     string m_cname;  // Name of task if DPI import
     // dist-ast-dump-suppress  // Not dumped due to verbosity
     string m_dpiCDecl;  // Custom DPI-C function declaration
@@ -186,6 +187,11 @@ protected:
 
 public:
     ASTGEN_MEMBERS_AstNodeFTask;
+    uint32_t importScopeId() const { return m_importScopeId; }
+    void importScopeId(uint32_t id) { m_importScopeId = id; }
+    bool sameNode(const AstNode* samep) const override {
+        return importScopeId() == VN_DBG_AS(samep, NodeFTask)->importScopeId();
+    }
     virtual AstNodeFTask* cloneType(const string& name) = 0;
     void dump(std::ostream& str = std::cout) const override;
     void dumpJson(std::ostream& str = std::cout) const override;
@@ -333,6 +339,7 @@ class AstNodeModule VL_NOT_FINAL : public AstNode {
     // dist-ast-dump-suppress  // For some user errors messages only, visible where used
     string m_someInstanceName;  // Hierarchical name of some arbitrary instance of this module.
     string m_libname;  // Work library
+    uint32_t m_importScopeId = 0;  // Immutable source-scope provenance before name binding
     int m_depth = 0;  // 1=top module, 2=cell off top, shared things low, for -depth options
     int m_level = 0;  // 1=top module, 2=cell off top, shared things have high number
     VLifetime m_lifetime;  // Lifetime
@@ -377,6 +384,11 @@ protected:
 
 public:
     ASTGEN_MEMBERS_AstNodeModule;
+    uint32_t importScopeId() const { return m_importScopeId; }
+    void importScopeId(uint32_t id) { m_importScopeId = id; }
+    bool sameNode(const AstNode* samep) const override {
+        return importScopeId() == VN_DBG_AS(samep, NodeModule)->importScopeId();
+    }
     void dump(std::ostream& str) const override;
     void dumpJson(std::ostream& str) const override;
     bool maybePointedTo() const override VL_MT_SAFE { return true; }
@@ -3187,6 +3199,7 @@ class AstGenBlock final : public AstNodeGen {
     // @astgen op1 := genforp : Optional[AstNode]
     // @astgen op2 := itemsp : List[AstNode]
     std::string m_name;  // Name of block
+    uint32_t m_importScopeId = 0;  // Immutable source-scope provenance before name binding
     const bool m_unnamed;  // Originally unnamed (name change does not affect this)
     const bool m_implied;  // Not inserted by user
     AstDefaultDisable* m_defaultDisablep = nullptr;  // Default disable iff in this scope
@@ -3200,6 +3213,11 @@ public:
         this->addItemsp(itemsp);
     }
     ASTGEN_MEMBERS_AstGenBlock;
+    uint32_t importScopeId() const { return m_importScopeId; }
+    void importScopeId(uint32_t id) { m_importScopeId = id; }
+    bool sameNode(const AstNode* samep) const override {
+        return importScopeId() == VN_DBG_AS(samep, GenBlock)->importScopeId();
+    }
     void dump(std::ostream& str) const override;
     void dumpJson(std::ostream& str) const override;
     std::string name() const override VL_MT_STABLE { return m_name; }
