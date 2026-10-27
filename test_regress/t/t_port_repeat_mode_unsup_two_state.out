@@ -1,0 +1,14 @@
+%Error: t/t_port_repeat_mode_unsup.v:7:25: Duplicate declaration of port: 'o'
+    7 | module repeat_output(o, o, d);
+      |                         ^
+        t/t_port_repeat_mode_unsup.v:8:22: ... Location of original declaration
+    8 |   output wire [12:0] o;
+      |                      ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=latest for more assistance.
+%Error: t/t_port_repeat_mode_unsup.v:14:25: Duplicate pin connection: '__pinNumber2'
+   14 |   repeat_output u(left, right, 13'b0);
+      |                         ^~~~~
+        t/t_port_repeat_mode_unsup.v:14:19: ... Location of original pin connection
+   14 |   repeat_output u(left, right, 13'b0);
+      |                   ^~~~
+%Error: Exiting due to

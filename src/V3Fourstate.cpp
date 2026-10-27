@@ -934,6 +934,7 @@ private:
     std::vector<AstVar*> m_varOrder;
     std::unordered_set<const AstNodeVarRef*> m_recordedRefs;
     std::unordered_set<const AstVar*> m_formalPinWriters;
+    std::set<AstVar*> m_repeatedOutputPorts;  // Formal wires requiring bounded fanout auditing
     AstNodeModule* m_modp = nullptr;
     AstNodeAssign* m_assignp = nullptr;
     const AstNode* m_contextp = nullptr;
@@ -1056,6 +1057,7 @@ private:
         VL_RESTORER_COPY(m_context);
         m_contextp = nodep;
         if (AstVar* const formalp = nodep->modVarp()) {
+            if (nodep->repeatedOutputFanout()) m_repeatedOutputPorts.insert(formalp);
             // One module declaration describes every instance of its formal input. Its port
             // boundary is one logical writer, rather than one contribution per parent cell.
             if (isNet(formalp) && formalp->direction().isNonOutput()
@@ -1161,6 +1163,30 @@ public:
         return false;
     }
     std::vector<Net> auditedNets() const {
+        // A single delayed or strength-qualified driver would not enter the overlap audit.
+        // Repeated OUTPUT slots deliberately support only the plain, one-way wire path.
+        for (AstVar* const varp : m_varOrder) {
+            if (!m_repeatedOutputPorts.count(varp)) continue;
+            bool unsupported = varp->delayp() || varp->hasStrengthAssignment() || varp->isForced()
+                               || varp->isSigUserRWPublic();
+            const auto it = m_nets.find(varp);
+            if (it != m_nets.end()) {
+                for (const Driver& driver : it->second.drivers) {
+                    if (driver.assignp
+                        && (driver.assignp->timingControlp() || driver.assignp->strengthSpecp()
+                            || driver.assignp->rhsp()->exists([](const AstBufIf1*) {
+                                   return true;
+                               }))) {
+                        unsupported = true;
+                    }
+                }
+            }
+            if (unsupported) {
+                varp->v3warn(E_UNSUPPORTED,
+                             "Unsupported: Repeated OUTPUT ports with delay, drive strength, "
+                             "tristate primitives, force, or external write access.");
+            }
+        }
         std::vector<Net> result;
         for (AstVar* const varp : m_varOrder) {
             const Net& net = m_nets.at(varp);
@@ -4318,6 +4344,22 @@ class FourstateVisitor final : public VNVisitor {
     void visit(AstPin* const nodep) override {
         AstVar* const varp = nodep->modVarp();
         if (!(varp->fourstateComplementp() || varp->isFourstateComplement())) {
+            if (nodep->repeatedOutputFanout() && nodep->exprp()) {
+                const AstVarRef* const refp = VN_CAST(nodep->exprp(), VarRef);
+                const AstVar* const actualp = refp ? refp->varp() : nullptr;
+                const AstBasicDType* const basicp
+                    = actualp ? VN_CAST(actualp->dtypep()->skipRefp(), BasicDType) : nullptr;
+                if (!basicp || !basicp->isIntegralOrPacked() || !basicp->isFourstate()
+                    || actualp->width() != varp->width() || actualp->varType() != VVarType::WIRE
+                    || actualp->isTristate() || actualp->isPullup() || actualp->isPulldown()
+                    || actualp->delayp() || actualp->hasStrengthAssignment() || actualp->isForced()
+                    || actualp->isSigUserRWPublic()) {
+                    nodep->v3warn(E_UNSUPPORTED,
+                                  "Unsupported: Repeated OUTPUT ports require whole plain "
+                                  "four-state actual wires of matching width.");
+                    return;
+                }
+            }
             if (AstNodeExpr* const exprp = VN_CAST(nodep->exprp(), NodeExpr)) {
                 const bool exprFourstate = isFourstate(exprp);
                 if (varp->direction().isOutput() && !VN_IS(exprp, Const)
@@ -4386,6 +4428,8 @@ class FourstateVisitor final : public VNVisitor {
                     AstPin* const newp = new AstPin{
                         nodep->fileline(), nodep->pinNum(),
                         nodep->name().empty() ? "" : nodep->name() + FOURSTATE_XZ_SUFFIX, exprXZp};
+                    newp->resolvedPortSlot(nodep->resolvedPortSlot());
+                    newp->repeatedOutputFanout(nodep->repeatedOutputFanout());
                     nodep->addNextHere(newp);
                     nodep->exprp(exprValuep);
                     splitVar(varp);  // Ensure that variable is splitted
@@ -4415,6 +4459,8 @@ class FourstateVisitor final : public VNVisitor {
                 AstPin* const newp = new AstPin{
                     nodep->fileline(), nodep->pinNum(),
                     nodep->name().empty() ? "" : nodep->name() + FOURSTATE_XZ_SUFFIX, nullptr};
+                newp->resolvedPortSlot(nodep->resolvedPortSlot());
+                newp->repeatedOutputFanout(nodep->repeatedOutputFanout());
                 nodep->addNextHere(newp);
                 splitVar(varp);  // Ensure that variable is splitted
                 nodep->modVarp(getSplittedValue(varp));

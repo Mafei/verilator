@@ -1,0 +1,11 @@
+%Error-UNSUPPORTED: t/t_port_repeat_complex_unsup.v:7:22: Unsupported: complex ports (IEEE 1800-2023 23.2.2.1/2)
+    7 | module repeat_output(.left(o), .right(o), .drive(d));
+      |                      ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error-UNSUPPORTED: t/t_port_repeat_complex_unsup.v:7:32: Unsupported: complex ports (IEEE 1800-2023 23.2.2.1/2)
+    7 | module repeat_output(.left(o), .right(o), .drive(d));
+      |                                ^
+%Error-UNSUPPORTED: t/t_port_repeat_complex_unsup.v:7:43: Unsupported: complex ports (IEEE 1800-2023 23.2.2.1/2)
+    7 | module repeat_output(.left(o), .right(o), .drive(d));
+      |                                           ^
+%Error: Exiting due to

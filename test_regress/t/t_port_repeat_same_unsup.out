@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_port_repeat_same_unsup.v:13:15: Unsupported: Multiple-driver net 'q' with --fourstate: port or pin writer.
+                                                      : ... note: In instance 't'
+   13 |   wire [12:0] q;
+      |               ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

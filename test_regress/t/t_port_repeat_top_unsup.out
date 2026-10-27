@@ -1,0 +1,5 @@
+%Error-UNSUPPORTED: t/t_port_repeat_top_unsup.v:7:13: Unsupported: Repeated OUTPUT ports require internal modules with --fourstate and native output.
+    7 | module t(o, o, d);
+      |             ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

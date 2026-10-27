@@ -87,6 +87,8 @@ class InstVisitor final : public VNVisitor {
     // If appropriate, add an AstAlias to connect the given Cell pin to the given expression.
     // Returns true if an alias was made, in which case there is nothing else to do for this pin.
     bool tryAliasPin(AstPin* nodep, AstNodeExpr* exprp) {
+        // Each repeated output slot is a separate one-way copy, never a storage union.
+        if (nodep->repeatedOutputFanout()) return false;
         AstVar* const modVarp = nodep->modVarp();
         // An interface reference is aliased via AstAliasScope below, not as a variable
         if (modVarp->isIfaceRef()) return false;

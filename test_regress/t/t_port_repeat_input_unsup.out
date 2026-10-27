@@ -1,0 +1,5 @@
+%Error-UNSUPPORTED: t/t_port_repeat_input_unsup.v:7:24: Unsupported: Repeated non-ANSI ports require plain packed OUTPUT wires.
+    7 | module repeat_input(i, i, q);
+      |                        ^
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to
