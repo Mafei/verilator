@@ -2720,10 +2720,11 @@ class LinkDotParamVisitor final : public VNVisitor {
                     || refp->isPulldown() || refp->delayp()) {
                     nodep->v3warn(
                         E_UNSUPPORTED,
-                        named ? "Unsupported: Named non-ANSI ports require plain packed OUTPUT "
-                                "wires."
-                              : "Unsupported: Repeated non-ANSI ports require plain packed OUTPUT "
-                                "wires.");
+                        (named
+                             ? "Unsupported: Named non-ANSI ports require plain packed OUTPUT "
+                               "wires."
+                             : "Unsupported: Repeated non-ANSI ports require plain packed OUTPUT "
+                               "wires."));
                 } else if (!v3Global.opt.fourstate() || m_modp->isTop()
                            || (named && !VN_IS(m_modp, Module)) || v3Global.opt.serializeOnly()
                            || v3Global.opt.hierarchical() || v3Global.opt.hierChild()
@@ -2732,10 +2733,11 @@ class LinkDotParamVisitor final : public VNVisitor {
                            || v3Global.opt.vpi()) {
                     nodep->v3warn(
                         E_UNSUPPORTED,
-                        named ? "Unsupported: Named OUTPUT ports require internal modules with "
-                                "--fourstate and native output."
-                              : "Unsupported: Repeated OUTPUT ports require internal modules with "
-                                "--fourstate and native output.");
+                        (named
+                             ? "Unsupported: Named OUTPUT ports require internal modules with "
+                               "--fourstate and native output."
+                             : "Unsupported: Repeated OUTPUT ports require internal modules with "
+                               "--fourstate and native output."));
                 } else if (named) {
                     ++m_statNamedOutputs;
                 }
