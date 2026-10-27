@@ -74,6 +74,7 @@ class AstNodeBlock VL_NOT_FINAL : public AstNodeStmt {
     // @astgen op1 := declsp : List[AstNode] // Declarations inside block
     // @astgen op2 := stmtsp : List[AstNode] // Sequential statements inside block
     string m_name;  // Name of block
+    uint32_t m_importScopeId = 0;  // Immutable source-scope provenance before name binding
     bool m_unnamed;  // Originally unnamed (name change does not affect this)
 protected:
     AstNodeBlock(VNType t, FileLine* fl, const string& name)
@@ -83,6 +84,11 @@ protected:
 
 public:
     ASTGEN_MEMBERS_AstNodeBlock;
+    uint32_t importScopeId() const { return m_importScopeId; }
+    void importScopeId(uint32_t id) { m_importScopeId = id; }
+    bool sameNode(const AstNode* samep) const override {
+        return importScopeId() == VN_DBG_AS(samep, NodeBlock)->importScopeId();
+    }
     bool maybePointedTo() const override VL_MT_SAFE { return true; }
     void dump(std::ostream& str) const override;
     void dumpJson(std::ostream& str) const override;
@@ -135,6 +141,7 @@ public:
 class AstNodeForeach VL_NOT_FINAL : public AstNodeStmt {
     // @astgen op1 := headerp : AstForeachHeader
     // @astgen op2 := bodyp : List[AstNode]
+    uint32_t m_importScopeId = 0;  // Immutable source-scope provenance before name binding
 public:
     AstNodeForeach(VNType t, FileLine* fl, AstForeachHeader* headerp, AstNode* bodyp)
         : AstNodeStmt(t, fl) {
@@ -142,9 +149,15 @@ public:
         addBodyp(bodyp);
     }
     ASTGEN_MEMBERS_AstNodeForeach;
+    uint32_t importScopeId() const { return m_importScopeId; }
+    void importScopeId(uint32_t id) { m_importScopeId = id; }
+    void dump(std::ostream& str) const override;
+    void dumpJson(std::ostream& str) const override;
     bool isGateOptimizable() const override { return false; }
     int instrCount() const override { return INSTR_COUNT_BRANCH; }
-    bool sameNode(const AstNode* /*samep*/) const override { return true; }
+    bool sameNode(const AstNode* samep) const override {
+        return importScopeId() == VN_DBG_AS(samep, NodeForeach)->importScopeId();
+    }
 };
 class AstNodeIf VL_NOT_FINAL : public AstNodeStmt {
     // @astgen op1 := condp : AstNodeExpr
@@ -1655,7 +1668,8 @@ public:
     ASTGEN_MEMBERS_AstFork;
     bool sameNode(const AstNode* samep) const override {
         const AstFork* const asamep = VN_DBG_AS(samep, Fork);
-        return joinType() == asamep->joinType() && immediateStart() == asamep->immediateStart();
+        return Super::sameNode(samep) && joinType() == asamep->joinType()
+               && immediateStart() == asamep->immediateStart();
     }
     bool isTimingControl() const override { return !joinType().joinNone(); }
     void dump(std::ostream& str) const override;
