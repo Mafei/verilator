@@ -164,16 +164,16 @@ GROUPS = {
         "randcase", "covergroup_with_sample_warn", "covergroup_sized_bad"
     ],
     "sv_semantics_20261026": [
-        "flag_language_noconfig", "flag_language_noconfig_bad", "fourstate_inout_default",
-        "fourstate_nba_partselect_clip", "fourstate_nba_repeat_control", "fourstate_reduce_scalar",
-        "fourstate_sen_expr", "fourstate_sen_iff", "fourstate_case_equal_known",
-        "fourstate_sen_impure_unsup", "fourstate_wildcard", "fourstate_nba_clip_bounds",
-        "timing_nba_clip_bounds", "timing_nba_partselect_clip", "timing_nba_repeat_control",
-        "timing_nba_repeat_unsup", "tri_inout_default", "func_ancestor_ctx",
-        "func_ancestor_func_unsup", "func_ancestor_import_unsup", "func_ancestor_missing_bad",
-        "func_ancestor_param_unsup", "func_ancestor_suggest_bad", "func_ancestor_wrongkind_unsup",
-        "func_ancestor_xz", "import_context_capture", "package_import_lexical", "queue_slice",
-        "type_compare"
+        "flag_language_noconfig", "flag_language_noconfig_bad", "fourstate_gate_init",
+        "fourstate_inout_default", "fourstate_nba_partselect_clip", "fourstate_nba_repeat_control",
+        "fourstate_reduce_scalar", "fourstate_sen_expr", "fourstate_sen_iff",
+        "fourstate_case_equal_known", "fourstate_sen_impure_unsup", "fourstate_wildcard",
+        "fourstate_nba_clip_bounds", "timing_nba_clip_bounds", "timing_nba_partselect_clip",
+        "timing_nba_repeat_control", "timing_nba_repeat_unsup", "tri_inout_default",
+        "func_ancestor_ctx", "func_ancestor_func_unsup", "func_ancestor_import_unsup",
+        "func_ancestor_missing_bad", "func_ancestor_param_unsup", "func_ancestor_suggest_bad",
+        "func_ancestor_wrongkind_unsup", "func_ancestor_xz", "import_context_capture",
+        "package_import_lexical", "queue_slice", "type_compare"
     ],
     "fourstate_constructors_20261026": [
         "fourstate_cons_copy", "fourstate_cons_keyed", "fourstate_cons_queue",

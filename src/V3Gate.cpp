@@ -742,8 +742,8 @@ class GateInline final {
                 const AstVar* const varp = vscp->varp();
                 if (varp->isNet()
                     && (varp->fourstateComplementp() || varp->isFourstateComplement())
-                    && lVtxp->activep() && lVtxp->activep()->hasCombo()
-                    && dstVtxp->activep() && dstVtxp->activep()->hasInitial()) {
+                    && lVtxp->activep() && lVtxp->activep()->hasCombo() && dstVtxp->activep()
+                    && dstVtxp->activep()->hasInitial()) {
                     continue;
                 }
 
