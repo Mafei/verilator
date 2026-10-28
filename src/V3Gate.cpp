@@ -734,6 +734,19 @@ class GateInline final {
             for (V3GraphEdge* const edgep : vVtxp->outEdges().unlinkable()) {
                 GateLogicVertex* const dstVtxp = edgep->top()->as<GateLogicVertex>();
 
+                // Preserve a four-state net read across initialization regions. Its
+                // continuous producer may depend on combinational intermediates that
+                // have not run when the initial block reads the net. Keeping the
+                // complete value/mask storage avoids mixing those stale intermediates
+                // with current source operands. Combinational consumers stay eligible.
+                const AstVar* const varp = vscp->varp();
+                if (varp->isNet()
+                    && (varp->fourstateComplementp() || varp->isFourstateComplement())
+                    && lVtxp->activep() && lVtxp->activep()->hasCombo() && dstVtxp->activep()
+                    && dstVtxp->activep()->hasInitial()) {
+                    continue;
+                }
+
                 // Do not inline anything other than buffers and inverters into
                 // sensitivity lists. If the signal becomes constant, we might
                 // miss an initialization time edge.
