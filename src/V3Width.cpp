@@ -4675,7 +4675,16 @@ class WidthVisitor final : public VNVisitor {
                 newp->didWidth(true);  // Don't replace dtype with basic type
                 UINFO(9, "   MEMBERSEL -> " << newp);
                 UINFO(9, "           dt-> " << newp->dtypep());
-                nodep->replaceWith(newp);
+                AstNodeExpr* resultp = newp;
+                if (v3Global.opt.fourstate() && nodep->access().isReadOnly()
+                    && VN_IS(adtypep, StructDType) && adtypep->isFourstate()
+                    && !newp->dtypep()->isFourstate()) {
+                    // Reading a two-state member converts X/Z without changing the packed vector.
+                    resultp = new AstCastWrap{nodep->fileline(), newp};
+                    resultp->dtypeFrom(newp);
+                    resultp->didWidth(true);
+                }
+                nodep->replaceWith(resultp);
                 VL_DO_DANGLING(pushDeletep(nodep), nodep);
                 // Should be able to treat it as a normal-ish nodesel - maybe.
                 // The lhsp() will be strange until this stage; create the number here?
@@ -11204,6 +11213,9 @@ class WidthVisitor final : public VNVisitor {
         } else if (AstNodeArrayDType* const dtp = VN_CAST(nodep, NodeArrayDType)) {
             return dtypeNot4StateIntegralRecurse(dtp->subDTypep());
         } else if (AstNodeUOrStructDType* const dtp = VN_CAST(nodep, NodeUOrStructDType)) {
+            // A packed struct is a 4-state integral type if any member is 4-state
+            // (IEEE 1800-2012 7.2.1), including when other members are 2-state.
+            if (VN_IS(dtp, StructDType) && dtp->packed() && dtp->isFourstate()) return nullptr;
             for (AstMemberDType* const itemp : dtp->memberspList()) {
                 AstNodeDType* const badDtp = dtypeNot4StateIntegralRecurse(itemp->dtypep());
                 if (badDtp) return badDtp;

@@ -1,0 +1,9 @@
+%Error: t/t_net_dtype_unpacked_bad.v:13:16: Net 'bad_value' data type must be 4-state integral or array/union/struct of such (IEEE 1800-2023 6.7.1)
+                                          : ... note: In instance 't'
+   13 |   wire mixed_t bad_value;
+      |                ^~~~~~~~~
+        t/t_net_dtype_unpacked_bad.v:10:5: ... Location of failing data type 'bit[2:0]'
+   10 |     bit [2:0] two_bits;
+      |     ^~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=latest for more assistance.
+%Error: Exiting due to

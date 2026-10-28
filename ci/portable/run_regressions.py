@@ -174,7 +174,7 @@ GROUPS = {
         "func_ancestor_func_unsup", "func_ancestor_import_unsup", "func_ancestor_missing_bad",
         "func_ancestor_param_unsup", "func_ancestor_suggest_bad", "func_ancestor_wrongkind_unsup",
         "func_ancestor_xz", "import_context_capture", "package_import_lexical", "queue_slice",
-        "type_compare"
+        "net_dtype_bad", "net_dtype_packed", "net_dtype_unpacked_bad", "type_compare"
     ],
     "fourstate_constructors_20261026": [
         "fourstate_cons_copy", "fourstate_cons_keyed", "fourstate_cons_queue",
