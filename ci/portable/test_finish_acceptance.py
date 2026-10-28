@@ -171,7 +171,12 @@ model = '#!/usr/bin/env python3\\nfrom pathlib import Path\\nimport sys\\nPath("
 
     def test_finish_failure_reaches_actual_shell_exit(self):
         source = (acceptance.SOURCE_ROOT / "ci/portable/build.bash").read_text()
-        block = source[source.index("icarus_head=$(git rev-parse HEAD)\n"):]
+        # Include the actual helper and successful gates preceding this isolated tail.
+        block = source[source.index("run_evidence() {\n"):]
+        block = ("smoke_status=0\nsmoke_record_status=0\nregress_status=0\n"
+                 "regression_check_status=0\nevidence_status=0\n" +
+                 block[:block.index("\n}\n") + 3] +
+                 source[source.index("icarus_head=$(git rev-parse HEAD)\n"):])
         fake = self.root / "bin"
         fake.mkdir()
         python = fake / "python3"
