@@ -19,6 +19,7 @@ import tarfile
 
 import check_results
 import log_evidence
+import queue_projection_review as queue_review
 from run_regressions import GROUPS, parse_summary, passed_counts, passed_names
 from run_thread_controls import NAMES
 
@@ -436,6 +437,16 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
     else:
         result['migration'] = {'scope': 'not_recomputed_by_linux_review'}
     result['other_gates'], failed = reported(main, pair, head)
+    case122 = queue_review.collect(main, pair / 'pair', pair / 'source',
+                                   pair / 'inventory/core-inventory.json',
+                                   pair / 'inventory/first128-runtime-structural.json', head)
+    require(read(main / 'out/case122-review.json') == case122, 'case122_saved_report_mismatch')
+    require(
+        case122['raw_pair_status_counts'] == result['other_gates']['fixed128']
+        ['pair_status_counts'], 'case122_raw_counts_mismatch')
+    require(case122['verilator_compiler_sha256'] == result['package']['compiler_sha256'],
+            'case122_package_compiler_mismatch')
+    result['case122_review'] = queue_review.core_fields(case122)
     return result, semantic or failed
 
 
@@ -553,6 +564,14 @@ def core_fields(data, platform):
                                  full18=full,
                                  finish9=finish,
                                  fixed128=paired)
+    result['case122_review'] = queue_review.core_fields(data['case122_review'])
+    require(
+        result['case122_review']['raw_output_difference_count'] ==
+        paired['pair_status_counts'].get('UNREVIEWED_OUTPUT_DIFFERENCE',
+                                         0), 'typed_case122_raw_count_mismatch')
+    require(
+        result['case122_review']['verilator_compiler_sha256'] == result['package']
+        ['compiler_sha256'], 'typed_case122_package_compiler_mismatch')
     return result
 
 
@@ -652,6 +671,8 @@ def summarize(args):
                 == ('/work' if platform == 'rocky8-x86_64' else mapping['reader_root']),
                 'invalid_root_mapping')
             data = core_fields(row['core'], platform)
+            require(data['case122_review']['head'] == args.expected_head,
+                    'typed_case122_head_mismatch')
             result['platforms'][platform] = dict(
                 data,
                 producer_job_result=needs,
