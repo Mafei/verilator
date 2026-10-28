@@ -928,7 +928,7 @@ void AstCFuncHard::dumpJson(std::ostream& str) const {
 bool AstCFuncHard::getPurity() {
     if (!function().isPure()) return false;
     for (AstNodeExpr* const argp : pinspList()) {
-        if (!argp->isPure()) return false;
+        if (argp->exprp() && !argp->exprp()->isPure()) return false;
     }
     return true;
 }
