@@ -87,10 +87,10 @@ module t;
       bit_result = bit_values.max() with (item);
       `checkd(bit_result.size(), 1);
       `checkd(bit_result[0], bit_maximum);
-      bit_result = bit_values.min() with (item + projection_bias);
+      bit_result = bit_values.min() with (int'(item) + projection_bias);
       `checkd(bit_result.size(), 1);
       `checkd(bit_result[0], bit_minimum);
-      bit_result = bit_values.max() with (item + projection_bias);
+      bit_result = bit_values.max() with (int'(item) + projection_bias);
       `checkd(bit_result.size(), 1);
       `checkd(bit_result[0], bit_maximum);
     end
