@@ -39,6 +39,7 @@ class ArtifactsTest(unittest.TestCase):
         self.needs = {'mac': 'success', 'rocky': 'success'}
         self.missing_output = False
         self.compiler = {}
+        self.case122_reports = {}
         for name, platform in [('mac', 'macos-arm64'), ('rocky', 'rocky8-x86_64')]:
             main = self.root / (name + '-main')
             (main / 'out').mkdir(parents=True)
@@ -101,19 +102,55 @@ class ArtifactsTest(unittest.TestCase):
                 main / 'pinned-icarus/RUN_SUMMARY.json', {
                     'verilator_head': self.head,
                     'pin': review.PIN,
-                    'overall_exit': 0,
+                    'overall_exit': 1,
                     'fixed_selected': 128,
                     'default_denominator': 3850,
                     'pair_status_counts': {
-                        'PASS_BOTH': 128
+                        'PASS_BOTH': 127,
+                        'UNREVIEWED_OUTPUT_DIFFERENCE': 1
                     },
                     'unselected_UNRUN': 3722,
                     'full_suite_complete': False
                 })
+            # Synthetic only: case122 retains its original oracle failure.
+            case122 = {
+                'head': self.head,
+                'scenario_id': review.queue_review.SID,
+                'reviewed_classification': 'REFERENCE_STANDARD_CONFLICT',
+                'original_pair_status': 'UNREVIEWED_OUTPUT_DIFFERENCE',
+                'original_source_sha256': review.queue_review.SOURCE_SHA,
+                'original_oracle_sha256': review.queue_review.ORACLE_SHA,
+                'verilator_compiler_sha256': hashlib.sha256(binary).hexdigest(),
+                'raw_pair_status_counts': {
+                    'PASS_BOTH': 127,
+                    'UNREVIEWED_OUTPUT_DIFFERENCE': 1
+                },
+                'raw_output_difference_count': 1,
+                'reviewed_case_count': 1,
+                'standard': {
+                    'status': 'PASS',
+                    'checks_per_profile': 100,
+                    'profiles': ['two', 'four'],
+                    'raw_wait_status': 'NOT_RECORDED',
+                    'scope': 'harness_checked_return_and_assertions',
+                    'source_sha256': 'a' * 64,
+                    'driver_sha256': 'b' * 64,
+                    'logs_sha256': ['c' * 64, 'd' * 64]
+                },
+                'semantic_gate_unchanged': True,
+                'overall_acceptance': False,
+                'review_gate_exit': 0
+            }
+            self.case122_reports[str(main)] = case122
+            write_json(main / 'out/case122-review.json', case122)
         self.migration()
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
         self.stack.enter_context(mock.patch.object(review, 'git_head', return_value=self.head))
+        self.stack.enter_context(
+            mock.patch.object(review.queue_review,
+                              'collect',
+                              side_effect=lambda main, *_args: self.case122_reports[str(main)]))
         self.stack.enter_context(
             mock.patch.object(review.check_results.subprocess,
                               'check_output',
@@ -240,9 +277,54 @@ class ArtifactsTest(unittest.TestCase):
             return self.relay(self.producer_records(), expected)
 
     def test_consistent_synthetic_core(self):
-        row = self.execute(0)
+        row = self.execute(1)
         self.assertTrue(row['audit_integrity'])
         self.assertEqual(row['artifact_zip_transport_digest'], 'NOT_INDEPENDENTLY_VERIFIED')
+
+    def test_case122_standard_pass_keeps_original_failure(self):
+        result = self.execute(1)
+        case122 = result['platforms']['macos-arm64']['case122_review']
+        self.assertEqual(case122['standard']['status'], 'PASS')
+        self.assertEqual(case122['original_pair_status'], 'UNREVIEWED_OUTPUT_DIFFERENCE')
+        self.assertEqual(case122['reviewed_case_count'], 1)
+        self.assertFalse(case122['overall_acceptance'])
+
+    def test_case122_changed_saved_report_is_rejected(self):
+        path = self.root / 'mac-main/out/case122-review.json'
+        data = json.loads(path.read_text())
+        data['standard']['status'] = 'FAIL'
+        write_json(path, data)
+        self.assertFalse(self.execute(2)['audit_integrity'])
+
+    def test_case122_relay_rejects_broadened_or_green_classification(self):
+        original = self.producer_records()
+        for change in [{
+                'scenario_id': 'another-case'
+        }, {
+                'original_pair_status': 'PASS_BOTH'
+        }, {
+                'reviewed_case_count': 2
+        }, {
+                'raw_output_difference_count': 0
+        }, {
+                'standard':
+                dict(original['mac']['core']['case122_review']['standard'], status='FAIL')
+        }]:
+            rows = json.loads(json.dumps(original))
+            rows['mac']['core']['case122_review'].update(change)
+            self.assertFalse(self.relay(rows, 2)['audit_integrity'])
+
+    def test_case122_cannot_mix_same_head_platform_compilers(self):
+        rows = self.producer_records()
+        rows['mac']['core']['case122_review']['verilator_compiler_sha256'] = (
+            rows['rocky']['core']['case122_review']['verilator_compiler_sha256'])
+        self.assertFalse(self.relay(rows, 2)['audit_integrity'])
+
+    def test_case122_producer_compiler_must_match_package(self):
+        case = self.case122_reports[str(self.root / 'mac-main')]
+        case['verilator_compiler_sha256'] = 'e' * 64
+        write_json(self.root / 'mac-main/out/case122-review.json', case)
+        self.assertFalse(self.execute(2)['audit_integrity'])
 
     def test_original_needs_failure_stays_semantic_one(self):
         self.needs['mac'] = 'failure'
@@ -322,6 +404,10 @@ class ArtifactsTest(unittest.TestCase):
                           'VERILATOR_UNSUPPORTED': 12
                       })
         write_json(path, record)
+        case122 = self.case122_reports[str(self.root / 'mac-main')]
+        case122['raw_pair_status_counts'] = record['pair_status_counts']
+        case122['raw_output_difference_count'] = 3
+        write_json(self.root / 'mac-main/out/case122-review.json', case122)
         row = self.execute(1)['platforms']['macos-arm64']['other_gates']['fixed128']
         self.assertEqual(row['pair_status_counts'], record['pair_status_counts'])
         self.assertEqual(row['unselected_UNRUN'], 3722)
@@ -364,7 +450,7 @@ class ArtifactsTest(unittest.TestCase):
         rows = self.producer_records()
         rows['mac']['raw_log'] = 'DO_NOT_RELAY_UNSCREENED_LOG'
         rows['mac']['core']['raw_log'] = 'DO_NOT_RELAY_UNSCREENED_LOG'
-        row = self.relay(rows, 0)
+        row = self.relay(rows, 1)
         self.assertNotIn('DO_NOT_RELAY_UNSCREENED_LOG', json.dumps(row))
         self.assertEqual(row['verification_scope'], 'PRODUCER_FILES_RECOMPUTED_BEFORE_UPLOAD')
         self.assertIs(row['artifact_bytes_independently_recomputed_after_upload'], False)
