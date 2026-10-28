@@ -49,13 +49,13 @@ GROUPS = {
         "fourstate_format_octal", "fourstate_format_packed", "fourstate_format_real",
         "fourstate_format_trunc", "fourstate_isunknown", "fourstate_lognot", "fourstate_modport",
         "fourstate_noapi", "fourstate_packed_array", "fourstate_portable",
-        "fourstate_sampled_expr", "fourstate_struct", "fourstate_trace_fst", "fourstate_trace_vcd",
-        "fourstate_vpi", "vpi_get", "vpi_get_value_array", "port_repeat_output",
-        "port_repeat_scalar", "port_repeat_actual_unsup", "port_repeat_complex_unsup",
-        "port_repeat_driver_unsup", "port_repeat_inout_unsup", "port_repeat_input_unsup",
-        "port_repeat_mode_unsup", "port_repeat_named_unsup", "port_repeat_same_unsup",
-        "port_repeat_top_unsup", "var_dup_bad", "lint_pindup_bad", "sched_susp_vs_nosusp",
-        "fourstate_sense_init"
+        "fourstate_purity_cache", "fourstate_sampled_expr", "fourstate_struct",
+        "fourstate_trace_fst", "fourstate_trace_vcd", "fourstate_vpi", "vpi_get",
+        "vpi_get_value_array", "port_repeat_output", "port_repeat_scalar",
+        "port_repeat_actual_unsup", "port_repeat_complex_unsup", "port_repeat_driver_unsup",
+        "port_repeat_inout_unsup", "port_repeat_input_unsup", "port_repeat_mode_unsup",
+        "port_repeat_named_unsup", "port_repeat_same_unsup", "port_repeat_top_unsup",
+        "var_dup_bad", "lint_pindup_bad", "sched_susp_vs_nosusp", "fourstate_sense_init"
     ],
     "nba": [
         "assigndly_deep_ref_array", "assigndly_dynamic", "assigndly_dynamic_delay",
@@ -209,7 +209,7 @@ GROUPS = {
     ],
     "optimizer_alias_20261026": [
         "opt_merge_cond", "opt_merge_cond_member", "opt_subst", "opt_subst_off",
-        "func_out_short_circuit"
+        "func_out_short_circuit", "func_arg_purity"
     ],
     # Official fixes throughbe33a0f6; sampler positives need an available solver.
     "upstream_late_20261026": [

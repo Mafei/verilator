@@ -331,8 +331,8 @@ class BashGateTest(unittest.TestCase):
     def test_build_gate_propagates_smoke_regression_and_checker_failures(self):
         source = (SOURCE_ROOT / "ci/portable/build.bash").read_text()
         smoke = source[source.index("    smoke_status=0\n"):source.index("\nfi\n# The harness")]
-        gate = source[source.index("regress_status=0\n"):source.
-                      index("\npython3 ci/portable/log_evidence.py results\n")]
+        gate = source[source.index("# The harness uses this checkout's headers and release binary."
+                                   ):]
         command = next(line for line in gate.splitlines()
                        if line.startswith("python3 ci/portable/run_regressions.py "))
         selected = command.split(" || ", 1)[0].split()[2:]
@@ -343,11 +343,18 @@ class BashGateTest(unittest.TestCase):
         print("Validation gate shell: " + version)
         fixture = """set -euo pipefail
 platform=macos-arm64
+root=$PWD
+fixture_head=1111111111111111111111111111111111111111
 smoke_calls=0
 record_calls=0
 regress_calls=0
 checker_calls=0
-trap 'printf "SMOKE_CALLS=%s RECORD_CALLS=%s REGRESS_CALLS=%s CHECKER_CALLS=%s CAPTURED=%s\\n" "$smoke_calls" "$record_calls" "$regress_calls" "$checker_calls" "${smoke_status:-unset}"' EXIT
+post_calls=0
+trap 'printf "SMOKE_CALLS=%s RECORD_CALLS=%s REGRESS_CALLS=%s CHECKER_CALLS=%s CAPTURED=%s POST_CALLS=%s\\n" "$smoke_calls" "$record_calls" "$regress_calls" "$checker_calls" "${smoke_status:-unset}" "$post_calls"' EXIT
+git() {
+    [[ "$#" == 2 && "$1" == rev-parse && "$2" == HEAD ]] || return 99
+    printf '%s\\n' "$fixture_head"
+}
 python3() {
     case "$1" in
         ci/portable/smoke.py)
@@ -367,6 +374,28 @@ python3() {
             regress_calls=$((regress_calls + 1)); return "$REGRESS_FIXTURE_STATUS" ;;
         ci/portable/check_results.py)
             checker_calls=$((checker_calls + 1)); return "$CHECKER_FIXTURE_STATUS" ;;
+        ci/portable/log_evidence.py)
+            [[ "$#" == 2 ]] || return 99
+            case "$2" in
+                semantic-waves|finish-waves|controls-waves|sv-semantics-waves|thread-waves|ram-waves|results) ;;
+                *) return 99 ;;
+            esac
+            post_calls=$((post_calls + 1)); return 0 ;;
+        ci/portable/run_thread_controls.py|ci/portable/ram_acceptance.py)
+            [[ "$#" == 1 ]] || return 99
+            post_calls=$((post_calls + 1)); return 0 ;;
+        ci/portable/icarus_acceptance.py)
+            [[ "$2" == run || "$2" == check ]] || return 99
+            if [[ "$#" == 5 && "$2" == check && "$3" == --full18 ]]; then
+                [[ "$4" == --expected-head && "$5" == "$fixture_head" ]] || return 99
+            else
+                [[ "$#" == 4 && "$3" == --expected-head && "$4" == "$fixture_head" ]] || return 99
+            fi
+            post_calls=$((post_calls + 1)); return 0 ;;
+        ci/portable/finish_acceptance.py)
+            [[ "$#" == 4 && ( "$2" == run || "$2" == check )
+               && "$3" == --expected-head && "$4" == "$fixture_head" ]] || return 99
+            post_calls=$((post_calls + 1)); return 0 ;;
         *) return 99 ;;
     esac
 }
@@ -384,12 +413,12 @@ python3() {
                                             env=environment,
                                             text=True,
                                             capture_output=True)
-                self.assertEqual(result.returncode == 0, statuses == (0, 0, 0, 0), result.stderr)
+                self.assertEqual(result.returncode, 0 if statuses == (0, 0, 0, 0) else 1,
+                                 result.stderr)
                 self.assertEqual("VALIDATION_PASSED" in result.stdout, statuses == (0, 0, 0, 0))
                 self.assertIn(
-                    'SMOKE_CALLS=1 RECORD_CALLS=1 REGRESS_CALLS=1 CHECKER_CALLS=' +
-                    str(int(statuses[:3] == (0, 0, 0))) + ' CAPTURED=' + str(statuses[0]),
-                    result.stdout)
+                    'SMOKE_CALLS=1 RECORD_CALLS=1 REGRESS_CALLS=1 CHECKER_CALLS=1 CAPTURED=' +
+                    str(statuses[0]) + ' POST_CALLS=14', result.stdout)
 
 
 class LogEvidenceTest(unittest.TestCase):
