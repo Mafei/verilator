@@ -2263,6 +2263,9 @@ class FourstateVisitor final : public VNVisitor {
                 newCallp->addArgsp(resultValueArgp);
                 newCallp->addArgsp(resultXZArgp);
             }
+            // The clone can retain cached purity from before its return value became
+            // writable arguments. Invalidate the call and any cached enclosing expressions.
+            VIsCached::clearCacheTree();
             AstStmtExpr* const newStmtExprp = new AstStmtExpr{flp, newCallp};
             addPrecalculation(newStmtExprp);
             AstVarRef* const varRefValuep = new AstVarRef{flp, resultValuep, VAccess::READ};
