@@ -321,7 +321,7 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         m_fourstateInSubtree |= isFourstate(nodep);
     }
     void visit(AstLambdaArgRef* const nodep) override {
-        if (!nodep->index() && needsSplitting(nodep->dtypep())) {
+        if (needsSplitting(nodep->dtypep())) {
             visit(static_cast<AstNodeExpr*>(nodep));
         } else {
             setFourstate(nodep, false, m_fourstateInSubtree);
