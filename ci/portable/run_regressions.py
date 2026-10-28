@@ -207,8 +207,10 @@ GROUPS = {
         "tri_proc_reassign", "tri_proc_reassign_timing", "tri_various", "tri_inout", "tri_inz",
         "tri_struct", "tri_top_en_out", "tri_pullvec"
     ],
-    "optimizer_alias_20261026":
-    ["opt_merge_cond", "opt_merge_cond_member", "opt_subst", "opt_subst_off"],
+    "optimizer_alias_20261026": [
+        "opt_merge_cond", "opt_merge_cond_member", "opt_subst", "opt_subst_off",
+        "func_out_short_circuit"
+    ],
     # Official fixes throughbe33a0f6; sampler positives need an available solver.
     "upstream_late_20261026": [
         "fork_taskarg", "timing_sched_ready", "sys_monitor_changes", "opt_reloop_inlined",

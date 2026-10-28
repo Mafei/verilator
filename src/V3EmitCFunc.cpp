@@ -620,7 +620,7 @@ string EmitCFunc::emitVarResetRecurse(const AstVar* varp, bool constructing,
                     out += "VL_ALLONES_W(";  // This is a temporary solution - interleaved signals
                                              // will change this
                 } else {
-                    out += (slow ? "VL_ZERO_RESET_W(" : "VL_ZERO_W(");
+                    out += "VL_ZERO_W(";
                 }
                 out += cvtToStr(dtypep->widthMin());
                 out += ", " + varNameProtected + suffix;
