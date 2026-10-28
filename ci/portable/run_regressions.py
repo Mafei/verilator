@@ -209,7 +209,7 @@ GROUPS = {
     ],
     "optimizer_alias_20261026": [
         "opt_merge_cond", "opt_merge_cond_member", "opt_subst", "opt_subst_off",
-        "func_out_short_circuit"
+        "func_out_short_circuit", "func_arg_purity"
     ],
     # Official fixes throughbe33a0f6; sampler positives need an available solver.
     "upstream_late_20261026": [
