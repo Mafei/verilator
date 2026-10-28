@@ -36,6 +36,7 @@ class BuildStatusTest(unittest.TestCase):
         self.folder = Path(temporary.name)
         self.bin = self.folder / 'bin'
         self.bin.mkdir()
+        (self.folder / 'lookup').mkdir()
         self.bash = shutil.which('bash')
         self.assertIsNotNone(self.bash)
         self.config = self.folder / 'config.json'
@@ -68,8 +69,9 @@ else:
 with Path(config['trace']).open('a') as stream:
     stream.write(json.dumps({'key': key, 'args': args}) + '\n')
 if key == config.get('missing'):
-    os.execv(config['bash'], [config['bash'], '-c', 'exec "$1"',
-                            'missing-test-tool', config['absent_tool']])
+    # PATH lookup distinguishes a missing command from a nonexecutable file.
+    os.execv(config['bash'], [config['bash'], '-c', 'PATH=$2; command "$1"',
+                            'missing-test-tool', config['tool_name'], config['tool_path']])
 if name == 'git':
     print(config['head'])
 sys.exit(config['exits'].get(key, 2 if key.startswith('unexpected:') else 0))
@@ -79,14 +81,18 @@ sys.exit(config['exits'].get(key, 2 if key.startswith('unexpected:') else 0))
             path.write_text(tool, encoding='utf-8')
             path.chmod(0o700)
 
-    def run_tail(self, exits=None, smoke=0, smoke_record=0, missing=None):
+    def run_tail(self, exits=None, smoke=0, smoke_record=0, missing=None, nonexecutable=False):
+        if nonexecutable:
+            (self.folder / 'lookup' / 'nonexecutable-tool').write_text('#!/bin/sh\nexit 0\n')
+            self.assertFalse(os.access(self.folder / 'lookup' / 'nonexecutable-tool', os.X_OK))
         self.config.write_text(json.dumps({
             'trace': str(self.trace),
             'exits': exits or {},
             'head': HEAD,
             'missing': missing,
             'bash': self.bash,
-            'absent_tool': str(self.folder / 'absent-tool')
+            'tool_name': 'nonexecutable-tool' if nonexecutable else 'absent-tool',
+            'tool_path': str(self.folder / 'lookup')
         }),
                                encoding='utf-8')
         self.trace.write_text('', encoding='utf-8')
@@ -186,9 +192,16 @@ sys.exit(config['exits'].get(key, 2 if key.startswith('unexpected:') else 0))
                 self.assert_failed(**arguments)
 
     def test_missing_tool_preserves_127_and_runs_later_gates(self):
+        self.assertFalse((self.folder / 'lookup' / 'absent-tool').exists())
+        self.assertFalse((self.folder / 'lookup' / 'absent-tool').is_symlink())
         result, _ = self.assert_failed(missing='evidence:semantic-waves')
         self.assertIn('mode=semantic-waves shell_status=127', result.stdout)
         self.assertIn('absent-tool', result.stderr)
+
+    def test_nonexecutable_tool_preserves_126_and_runs_later_gates(self):
+        result, _ = self.assert_failed(missing='evidence:semantic-waves', nonexecutable=True)
+        self.assertIn('mode=semantic-waves shell_status=126', result.stdout)
+        self.assertIn('nonexecutable-tool', result.stderr)
 
     def test_distinct_evidence_statuses_remain_visible(self):
         result, _ = self.assert_failed({
