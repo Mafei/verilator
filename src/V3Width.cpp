@@ -11179,6 +11179,12 @@ class WidthVisitor final : public VNVisitor {
             elemDTypep = adtypep->subDTypep()->skipRefp();
             ++pinDims;
         }
+        if (dynamic && v3Global.opt.fourstate() && elemDTypep->isFourstate()) {
+            // The DPI runtime cannot exchange a dynamic X/Z buffer.
+            pinp->v3warn(E_UNSUPPORTED,
+                         "Unsupported: Four-state DPI dynamic open arrays or queues.");
+            return;
+        }
         int portDims = 0;  // Unpacked dimensions of the formal outside its elements
         const AstNodeDType* portElemp = portp->dtypep()->skipRefp();
         while (VN_IS(portElemp, UnsizedArrayDType) || VN_IS(portElemp, UnpackArrayDType)) {

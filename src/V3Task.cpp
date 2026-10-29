@@ -1512,9 +1512,9 @@ class TaskVisitor final : public VNVisitor {
                             AstVarScope* const complementVscp
                                 = VN_AS(complementp->user2p(), VarScope);
                             openVarp->add("&");
-                            openVarp->add(new AstVarRef{
-                                flp, complementVscp,
-                                portp->isWritable() ? VAccess::READWRITE : VAccess::READ});
+                            openVarp->add(new AstVarRef{flp, complementVscp,
+                                                        portp->isWritable() ? VAccess::READWRITE
+                                                                            : VAccess::READ});
                         } else {
                             openVarp->add("nullptr");
                         }
