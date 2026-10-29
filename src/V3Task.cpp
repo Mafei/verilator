@@ -1156,8 +1156,7 @@ class TaskVisitor final : public VNVisitor {
         funcp->cname(cname);
         // Add DPI Export to top, since it's a global function
         m_topScopep->scopep()->addBlocksp(funcp);
-        // Check the arguments before converting them
-        if (!makePortList(nodep, funcp)) return nullptr;
+        makePortList(nodep, funcp);
 
         // Note this function may dispatch on a different class.
         // Thus we need to be careful not to assume a particular function layout.
@@ -1273,7 +1272,7 @@ class TaskVisitor final : public VNVisitor {
         // Add DPI Import to top, since it's a global function
         m_topScopep->scopep()->addBlocksp(funcp);
         funcp->dpiCDecl(nodep->dpiCDecl());
-        if (!makePortList(nodep, funcp)) return nullptr;
+        makePortList(nodep, funcp);
         return funcp;
     }
 
@@ -1317,8 +1316,7 @@ class TaskVisitor final : public VNVisitor {
         }
     }
 
-    static bool makePortList(AstNodeFTask* nodep, AstCFunc* dpip) {
-        bool allOk = true;
+    static void makePortList(AstNodeFTask* nodep, AstCFunc* dpip) {
         // Copy nodep's list of function I/O to the new dpip c function
         for (AstNode* const stmtp : nodep->stmtspList()) {
             if (AstVar* const portp = VN_CAST(stmtp, Var)) {
@@ -1327,19 +1325,35 @@ class TaskVisitor final : public VNVisitor {
                     AstVar* const newPortp = portp->cloneTree(false);
                     newPortp->funcLocal(true);
                     dpip->addArgsp(newPortp);
-                    // Unpacked structures were checked by checkDpiStruct
-                    if (!portp->basicp() && !portp->dtypep()->containsUnpackedStruct()) {
-                        allOk = false;
-                        portp->v3warn(
-                            E_UNSUPPORTED,
-                            "Unsupported: DPI argument of type "
-                                << portp->dtypep()->prettyTypeName() << '\n'
-                                << portp->warnMore()
-                                << "... For best portability, use bit, byte, int, or longint");
-                        // We don't warn on logic either, although the 4-stateness is lost.
-                        // That's what other simulators do.
-                    }
                 }
+            }
+        }
+    }
+
+    // Check DPI can pass the types of the arguments of 'nodep', else report. Those of an open
+    // array are of the actual argument of the call the task was replicated for.
+    static bool checkDpiArgTypes(const AstNodeFTask* nodep) {
+        bool allOk = true;
+        for (const AstNode* const stmtp : nodep->stmtspList()) {
+            const AstVar* const portp = VN_CAST(stmtp, Var);
+            if (!portp || !portp->isIO()) continue;
+            const AstNodeDType* const dtypep = portp->dtypep()->skipRefp();
+            // Of the elements, if passed a dynamic array or queue as an open array
+            const AstBasicDType* const basicp
+                = portp->isDpiOpenArray()
+                          && (VN_IS(dtypep, DynArrayDType) || VN_IS(dtypep, QueueDType))
+                      ? dtypep->subDTypep()->basicp()
+                      : portp->basicp();
+            // Unpacked structures were checked by checkDpiStruct
+            if (!basicp && !portp->dtypep()->containsUnpackedStruct()) {
+                allOk = false;
+                portp->v3warn(E_UNSUPPORTED,
+                              "Unsupported: DPI argument of type "
+                                  << portp->dtypep()->prettyDTypeNameQ(true) << '\n'
+                                  << portp->warnMore()
+                                  << "... For best portability, use bit, byte, int, or longint");
+                // Don't warn on logic either, although the 4-stateness is lost.
+                // That's what other simulators do.
             }
         }
         return allOk;
@@ -1434,6 +1448,7 @@ class TaskVisitor final : public VNVisitor {
 
         // Convert input/inout arguments to DPI types
         string args;
+        AstNode* copyBacksp = nullptr;  // Statements copying back open array copies
         for (AstNode* const stmtp : cfuncp->argspList()) {
             if (AstVar* const portp = VN_CAST(stmtp, Var)) {
                 AstVarScope* const portvscp
@@ -1445,31 +1460,66 @@ class TaskVisitor final : public VNVisitor {
                     if (args != "") args += ", ";
 
                     if (portp->isDpiOpenArray()) {
-                        AstNodeDType* const dtypep = portp->dtypep()->skipRefp();
-                        UASSERT_OBJ(!VN_IS(dtypep, DynArrayDType) && !VN_IS(dtypep, QueueDType),
-                                    portp,
-                                    "Passing dynamic array or queue as actual argument to DPI "
-                                    "open array is not yet supported");
+                        FileLine* const flp = portp->fileline();
+                        const AstNodeDType* const dtypep = portp->dtypep()->skipRefp();
+                        const bool dynamic
+                            = VN_IS(dtypep, DynArrayDType) || VN_IS(dtypep, QueueDType);
+                        // Pass a copy of a dynamic array or queue, as the elements of a queue are
+                        // not contiguous
+                        const string copyName = portp->name() + "__Vopencopy";
+                        if (dynamic) {
+                            AstCStmt* const copyp = new AstCStmt{
+                                flp, "std::vector<" + dtypep->subDTypep()->cType("", false, false)
+                                         + "> " + copyName + "("};
+                            copyp->add(new AstVarRef{flp, portvscp, VAccess::READ});
+                            copyp->add(".begin(), ");
+                            copyp->add(new AstVarRef{flp, portvscp, VAccess::READ});
+                            copyp->add(".end());");
+                            cfuncp->addStmtsp(copyp);
+                            if (portp->isWritable()) {
+                                AstCStmt* const backp = new AstCStmt{flp};
+                                backp->add(new AstVarRef{flp, portvscp, VAccess::WRITE});
+                                backp->add(".assign(" + copyName + ".begin(), " + copyName
+                                           + ".end());");
+                                copyBacksp = AstNode::addNext(copyBacksp, backp);
+                            }
+                        }
                         // Ideally we'd make a table of variable
                         // characteristics, and reuse it wherever we can
                         // At least put them into the module's CTOR as static?
                         const string propName = portp->name() + "__Vopenprops";
-                        const string propCode = portp->vlPropDecl(propName);
-                        cfuncp->addStmtsp(new AstCStmt{portp->fileline(), propCode});
+                        const string propCode = portp->vlPropDecl(
+                            propName, dynamic ? "static_cast<int>(" + copyName + ".size())" : "");
+                        cfuncp->addStmtsp(new AstCStmt{flp, propCode});
                         //
                         // At runtime we need the svOpenArrayHandle to
                         // point to this task & thread's data, in addition
                         // to static info about the variable
                         const string name = portp->name() + "__Vopenarray";
-                        string varCode
-                            = ("VerilatedDpiOpenVar "
-                               // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
-                               + name + " (&" + propName + ", &" + portp->name());
-                        if (const AstVar* const complementp = portp->fourstateComplementp()) {
-                            varCode += ", &" + complementp->name();
+                        AstCStmt* const openVarp = new AstCStmt{
+                            // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
+                            flp, "VerilatedDpiOpenVar " + name + " (&" + propName + ", "};
+                        if (dynamic) {
+                            openVarp->add(copyName + ".data()");
+                        } else {
+                            openVarp->add("&");
+                            openVarp->add(new AstVarRef{flp, portvscp,
+                                                        portp->isWritable() ? VAccess::READWRITE
+                                                                            : VAccess::READ});
                         }
-                        varCode += ");\n";
-                        cfuncp->addStmtsp(new AstCStmt{portp->fileline(), varCode});
+                        openVarp->add(", ");
+                        if (AstVar* const complementp = portp->fourstateComplementp()) {
+                            AstVarScope* const complementVscp
+                                = VN_AS(complementp->user2p(), VarScope);
+                            openVarp->add("&");
+                            openVarp->add(new AstVarRef{
+                                flp, complementVscp,
+                                portp->isWritable() ? VAccess::READWRITE : VAccess::READ});
+                        } else {
+                            openVarp->add("nullptr");
+                        }
+                        openVarp->add(");");
+                        cfuncp->addStmtsp(openVarp);
                         args += "&" + name;
                     } else {
                         // Unpacked structures are passed by reference from a C array
@@ -1519,6 +1569,7 @@ class TaskVisitor final : public VNVisitor {
                 cfuncp->addStmtsp(callp->makeStmt());
             }
         }
+        if (copyBacksp) cfuncp->addStmtsp(copyBacksp);
 
         // Convert output/inout arguments back to internal type
         for (AstNode* const stmtp : cfuncp->argspList()) {
@@ -1608,7 +1659,9 @@ class TaskVisitor final : public VNVisitor {
         if (nodep->dpiImport() || nodep->dpiExport()) {
             UASSERT_OBJ(!(nodep->dpiOpenParent() && nodep->dpiOpenChild()), nodep,
                         "DPI task should not be both parent and child");
-            dpiFuncp = checkDpiStructArgs(nodep) ? getDpiFunc(nodep, rtnvarp) : nullptr;
+            dpiFuncp = checkDpiStructArgs(nodep) && checkDpiArgTypes(nodep)
+                           ? getDpiFunc(nodep, rtnvarp)
+                           : nullptr;
             if (!dpiFuncp || (nodep->dpiImport() && nodep->dpiOpenParent())) {
                 // No need to make more than just the DPI Import prototype, the children will
                 // create the wrapper implementations.
