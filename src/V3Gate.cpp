@@ -895,7 +895,7 @@ class GateDedupeHash final : public V3DupFinderUserSame {
 
 public:
     GateDedupeHash() = default;
-    ~GateDedupeHash() = default;
+    ~GateDedupeHash() override = default;
 
     const AstNodeAssign* hashAndFindDupe(AstNodeAssign* assignp, AstActive* activep,
                                          AstNodeExpr* condp) {

@@ -222,6 +222,13 @@ GROUPS = {
         "fourstate_slice_index_domain", "fourstate_slice_index_width",
         "fourstate_slice_index_width_bad", "fourstate_slice_packed_domain", "string_byte",
         "string_unpacked_literal", "fourstate_struct_select", "fourstate_nested_select"
+    ],
+    # Official changes through ad839901aebcaecd639f9d71443fc5bf13347638.
+    "upstream_daily_20261029": [
+        "class_param_bits_const", "dpi_argtype_bad", "dpi_open_dyn", "dpi_open_dyn_unsup",
+        "dpi_open_packed", "dpi_open_packed_bad", "dpi_open_query", "dpi_struct_unpacked_unsup",
+        "dpi_unpack_bad", "fourstate_dpi_open_unsup", "iface_typedef_param_bits",
+        "queue_empty_bad", "wire_net_test"
     ]
 }
 
