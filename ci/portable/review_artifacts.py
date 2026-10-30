@@ -25,6 +25,7 @@ from run_thread_controls import NAMES
 
 ROOT = Path(__file__).resolve().parents[2]
 PIN = 'f45ffabed3212a106f01cb362ef42c5d293f4513'
+REGRESSION_COUNTERS = ('passed', 'failed', 'failed-first', 'skipped', 'left', 'running')
 
 
 def require(value, reason):
@@ -368,12 +369,26 @@ def reported(main, pair, head):
     }, any(gates)
 
 
+def regression_summary(rows):
+    """Retain each checked harness counter; failed-first overlaps final outcomes."""
+    return {
+        'scope': 'producer_logs_recomputed_before_upload',
+        'by_group': rows,
+        'totals': {
+            key: sum(row['counts'].get(key, 0) for row in rows.values())
+            for key in REGRESSION_COUNTERS
+        },
+        'failed_groups': [name for name in GROUPS if not rows[name]['success']]
+    }
+
+
 def review_platform(main, pair, source, platform, head, run_id, needs, producer_root=None):
     require(needs in ('success', 'failure'), 'producer_job_not_completed')
     require((main / 'out/provenance.txt').read_text().splitlines()[0] == head,
             'artifact_head_mismatch')
     groups = read(main / 'out/regression-results.json')
     require(set(groups) == set(GROUPS), 'missing_regression_group')
+    regression_rows = {}
     for name, row in groups.items():
         require(
             row['commit'] == head and row['selected'] == GROUPS[name]
@@ -384,11 +399,18 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
         status, counts = parse_summary(text)
         require(status == row['summary_status'] and counts == row['counts'],
                 'regression_count_mismatch')
+        names_match = passed_names(text, GROUPS[name])
         require(
             row['success'] == (row['returncode'] == 0
                                and passed_counts(status, counts, len(GROUPS[name]))
-                               and passed_names(text, GROUPS[name])),
-            'regression_success_mismatch')
+                               and names_match), 'regression_success_mismatch')
+        regression_rows[name] = {
+            'summary_status': status,
+            'counts': counts,
+            'returncode': row['returncode'],
+            'success': row['success'],
+            'passed_names_match': names_match
+        }
     semantic = needs == 'failure'
     try:
         with redirect_stdout(io.StringIO()):
@@ -402,6 +424,7 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
         'producer_job_result': needs,
         'groups': len(GROUPS),
         'selected_drivers': sum(map(len, GROUPS.values())),
+        'regressions': regression_summary(regression_rows),
         'package': package(main, platform, head),
         'public_ast': ast_evidence(main, source)
     }
@@ -479,6 +502,46 @@ def hash_fields(row, keys):
     return {key: row[key] for key in keys}
 
 
+def regression_fields(data):
+    """Recompute bounded regression totals without trusting a green marker."""
+    require(data['scope'] == 'producer_logs_recomputed_before_upload',
+            'typed_regression_scope_mismatch')
+    require(
+        isinstance(data['by_group'], dict) and set(data['by_group']) == set(GROUPS),
+        'typed_regression_groups_mismatch')
+    rows = {}
+    for name, selected in GROUPS.items():
+        row = data['by_group'][name]
+        require(
+            isinstance(row['counts'], dict) and {'passed', 'failed'}.issubset(row['counts'])
+            and set(row['counts']).issubset(REGRESSION_COUNTERS),
+            'typed_regression_counter_invalid')
+        counts = {key: integer(value) for key, value in row['counts'].items()}
+        status = row['summary_status']
+        code = integer(row['returncode'], signed=True)
+        require(
+            status in ('PASSED', 'FAILED', 'PASSED w/SKIPS') and isinstance(row['success'], bool)
+            and isinstance(row['passed_names_match'], bool), 'typed_regression_record_invalid')
+        require(
+            row['success'] == (code == 0 and passed_counts(status, counts, len(selected))
+                               and row['passed_names_match']), 'typed_regression_success_mismatch')
+        rows[name] = {
+            'summary_status': status,
+            'counts': counts,
+            'returncode': code,
+            'success': row['success'],
+            'passed_names_match': row['passed_names_match']
+        }
+    require(
+        isinstance(data['totals'], dict) and set(data['totals']) == set(REGRESSION_COUNTERS),
+        'typed_regression_totals_invalid')
+    totals = {key: integer(value) for key, value in data['totals'].items()}
+    result = regression_summary(rows)
+    require(totals == result['totals'] and data['failed_groups'] == result['failed_groups'],
+            'typed_regression_summary_mismatch')
+    return result
+
+
 def core_fields(data, platform):
     """Whitelist small typed fields; never relay arbitrary text or raw logs."""
     result = integers(data, ('groups', 'selected_drivers'))
@@ -486,6 +549,7 @@ def core_fields(data, platform):
         'groups': len(GROUPS),
         'selected_drivers': sum(map(len, GROUPS.values()))
     }, 'typed_regression_selection_mismatch')
+    result['regressions'] = regression_fields(data['regressions'])
     bundle = data['package']
     architecture = 'Mach-O64 arm64' if platform == 'macos-arm64' else 'ELF64 x86_64'
     require(bundle['header'] == architecture and bundle['producer_program_executed'] is False,
@@ -679,7 +743,8 @@ def summarize(args):
                 file_mapping={key: mapping[key]
                               for key in ('recorded_root', 'reader_root')})
             visible_failure = (
-                any(data['other_gates'][key]
+                bool(data['regressions']['failed_groups']) or any(
+                    data['other_gates'][key]
                     for key in ('full18_gate_exit', 'finish9_gate_exit', 'fixed128_overall_exit'))
                 or data['threads']['native_exit'] != 0
                 or data['threads']['passed_names'] != len(NAMES)

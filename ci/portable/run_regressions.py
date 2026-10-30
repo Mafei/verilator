@@ -229,7 +229,10 @@ GROUPS = {
         "dpi_open_packed", "dpi_open_packed_bad", "dpi_open_query", "dpi_struct_unpacked_unsup",
         "dpi_unpack_bad", "fourstate_dpi_open_unsup", "iface_typedef_param_bits",
         "queue_empty_bad", "wire_net_test"
-    ]
+    ],
+    # Official changes through 453b02a33cf3a569a57f853aad3fc5d1523517ab.
+    "upstream_daily_20261030":
+    ["trace_dumpvars_sparse_fst", "trace_dumpvars_sparse_saif", "trace_dumpvars_sparse_vcd"]
 }
 
 

@@ -281,6 +281,125 @@ class ArtifactsTest(unittest.TestCase):
         self.assertTrue(row['audit_integrity'])
         self.assertEqual(row['artifact_zip_transport_digest'], 'NOT_INDEPENDENTLY_VERIFIED')
 
+    def set_regression(self, group, counts, status, code):
+        """Create a real harness log and matching producer record for one group."""
+        labels = {
+            'passed': 'Passed',
+            'failed': 'Failed',
+            'failed-first': 'Failed-First',
+            'skipped': 'Skipped',
+            'left': 'Left',
+            'running': 'Running'
+        }
+        for name in ('mac', 'rocky'):
+            main = self.root / (name + '-main')
+            path = main / 'out/regression-results.json'
+            rows = json.loads(path.read_text())
+            selected = GROUPS[group]
+            text = ''.join('vlt/t_' + n + ': Self PASSED\n' for n in selected[:counts['passed']])
+            text += '==TESTS DONE, ' + status + ': ' + '  '.join(
+                labels[key] + ' ' + str(value) for key, value in counts.items()) + '  Time 0:01\n'
+            (main / 'logs' / (group + '-regressions.log')).write_text(text)
+            rows[group].update(counts=counts,
+                               summary_status=status,
+                               returncode=code,
+                               success=code == 0
+                               and review.passed_counts(status, counts, len(selected))
+                               and review.passed_names(text, selected))
+            write_json(path, rows)
+
+    def test_regression_counters_cover_all_selected_groups(self):
+        row = self.execute(1)
+        self.assertTrue(row['audit_integrity'])
+        for platform in row['platforms'].values():
+            data = platform['regressions']
+            self.assertEqual(set(data['by_group']), set(GROUPS))
+            self.assertEqual(data['totals']['passed'], sum(map(len, GROUPS.values())))
+            self.assertTrue(
+                all(value == 0 for key, value in data['totals'].items() if key != 'passed'))
+            self.assertEqual(data['failed_groups'], [])
+
+    def test_regression_failure_retains_complete_totals_and_nonzero_gate(self):
+        group = next(iter(GROUPS))
+        self.set_regression(group, {'passed': len(GROUPS[group]) - 1, 'failed': 1}, 'FAILED', 10)
+        row = self.execute(1)
+        self.assertTrue(row['audit_integrity'])
+        for platform in row['platforms'].values():
+            data = platform['regressions']
+            self.assertEqual(data['totals']['passed'], sum(map(len, GROUPS.values())) - 1)
+            self.assertEqual(data['totals']['failed'], 1)
+            self.assertEqual(data['failed_groups'], [group])
+            self.assertEqual(data['by_group'][group]['returncode'], 10)
+            self.assertFalse(data['by_group'][group]['success'])
+
+    def test_regression_pass_counts_do_not_hide_nonzero_return(self):
+        group = next(iter(GROUPS))
+        for code in (7, -9):
+            with self.subTest(code=code):
+                self.set_regression(group, {
+                    'passed': len(GROUPS[group]),
+                    'failed': 0
+                }, 'PASSED', code)
+                row = self.execute(1)
+                self.assertTrue(row['audit_integrity'])
+                data = row['platforms']['macos-arm64']['regressions']
+                self.assertEqual(data['totals']['passed'], sum(map(len, GROUPS.values())))
+                self.assertEqual(data['failed_groups'], [group])
+                self.assertEqual(data['by_group'][group]['returncode'], code)
+                self.assertTrue(data['by_group'][group]['passed_names_match'])
+                self.assertFalse(data['by_group'][group]['success'])
+
+    def test_regression_retry_skip_and_unfinished_counts_stay_separate(self):
+        group = next(iter(GROUPS))
+        for counter in ('failed-first', 'skipped', 'left', 'running'):
+            with self.subTest(counter=counter):
+                passed = len(GROUPS[group]) - int(counter != 'failed-first')
+                counts = {'passed': passed, 'failed': 0, counter: 1}
+                status = 'PASSED w/SKIPS' if counter == 'skipped' else 'PASSED'
+                self.set_regression(group, counts, status, 0)
+                row = self.execute(1)
+                self.assertTrue(row['audit_integrity'])
+                data = row['platforms']['macos-arm64']['regressions']
+                self.assertEqual(data['totals'][counter], 1)
+                self.assertEqual(data['totals']['passed'],
+                                 sum(map(len, GROUPS.values())) - int(counter != 'failed-first'))
+                self.assertEqual(data['failed_groups'], [group])
+                self.assertFalse(data['by_group'][group]['success'])
+
+    def test_regression_relay_rejects_tampered_totals_types_and_groups(self):
+        original = self.producer_records()
+        group = next(iter(GROUPS))
+        changes = [
+            (('totals', 'passed'), True),
+            (('totals', 'passed'), sum(map(len, GROUPS.values())) + 1),
+            (('failed_groups', ), [group]),
+            (('by_group', 'unexpected_group'), {}),
+            (('by_group', group, 'counts', 'failed'), False),
+            (('by_group', group, 'counts', 'passed'), -1),
+            (('by_group', group, 'counts', 'unknown'), 0),
+            (('by_group', group, 'returncode'), True),
+            (('by_group', group, 'returncode'), 7),
+            (('by_group', group, 'passed_names_match'), 1),
+            (('by_group', group, 'summary_status'), 'UNTRUSTED_STATUS'),
+        ]
+        for path, value in changes:
+            with self.subTest(path=path, value=value):
+                rows = json.loads(json.dumps(original))
+                target = rows['mac']['core']['regressions']
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                self.assertFalse(self.relay(rows, 2)['audit_integrity'])
+
+    def test_regression_log_and_record_mismatch_is_not_relayed(self):
+        path = self.root / 'mac-main/out/regression-results.json'
+        rows = json.loads(path.read_text())
+        rows[next(iter(GROUPS))]['counts']['passed'] -= 1
+        write_json(path, rows)
+        row = self.execute(2)
+        self.assertFalse(row['audit_integrity'])
+        self.assertNotIn('regressions', row['platforms']['macos-arm64'])
+
     def test_case122_standard_pass_keeps_original_failure(self):
         result = self.execute(1)
         case122 = result['platforms']['macos-arm64']['case122_review']
