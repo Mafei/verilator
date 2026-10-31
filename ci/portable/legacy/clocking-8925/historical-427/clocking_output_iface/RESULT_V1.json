@@ -1,0 +1,59 @@
+{
+  "name": "clocking_output_iface",
+  "head": "4272ac27fbcb061c2a542c51e0381b598ac23ebe",
+  "compiler_sha256": "984fbf43bde990dd581e10d8930e2e7c894b579373d1266366a23e762ac79bf4",
+  "receipt": {
+    "schema": "native-process-wait4-v1",
+    "observer_pid": 54359,
+    "pid": 54360,
+    "proc_identity": {
+      "pid": 54360,
+      "state": "R",
+      "start_ticks": 132993,
+      "clock_ticks_per_second": 100
+    },
+    "utc_started": "2026-10-31T00:18:59.823783+00:00",
+    "cwd": "/workspace/candidates/recovery-20261031/upstream-sync-v1",
+    "argv": [
+      "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+      "/workspace/candidates/recovery-20261031/upstream-sync-v1/test_regress/t/t_clocking_output_iface.py"
+    ],
+    "log": "/workspace/evidence/daily-sync-20261031-v1/current-failure-group-v1/clocking_output_iface/owner/driver.log",
+    "disk_guard_bytes": 2147483648,
+    "initial_available_bytes": 3921502208,
+    "timeout_seconds": 1800.0,
+    "utc_finished": "2026-10-31T00:19:15.846398+00:00",
+    "elapsed_seconds": 16.022632175999888,
+    "wait4_pid": 54360,
+    "raw_wait_status": 2560,
+    "actual_exit": 10,
+    "exited_normally": true,
+    "exit_status": 10,
+    "signal": null,
+    "termination_reason": null,
+    "kill_sent": false,
+    "minimum_available_bytes": 3762696192,
+    "final_available_bytes": 3762692096,
+    "log_bytes": 28219,
+    "log_sha256": "0f589544ae091e5f5497f44a655ee3d8d975bd4337f37766b9294626a37d9fd8",
+    "rusage": {
+      "user_seconds": 0.16011699999999998,
+      "system_seconds": 0.029706999999999997,
+      "max_rss_raw": 22052,
+      "max_rss_unit": "KiB"
+    }
+  },
+  "harness_status": "FAILED",
+  "harness_counts": {
+    "passed": 0,
+    "failed": 1
+  },
+  "passed": false,
+  "runtime_logs": [
+    {
+      "path": "/workspace/evidence/daily-sync-20261031-v1/current-failure-group-v1/clocking_output_iface/objects/workspace/candidates/recovery-20261031/upstream-sync-v1/test_regress/obj_vlt/t_clocking_output_iface/vlt_sim.log",
+      "sha256": "84048f283dd9c1b7dff6777a0fa45637d992f61404a05f912e496a0ada12b5c6",
+      "bytes": 152
+    }
+  ]
+}
