@@ -159,6 +159,28 @@ class NativeFailureTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'exactly one completed harness summary'):
             self.verify()
 
+    def test_preserved_fingerprint_cannot_hide_an_unrelated_diagnostic(self):
+        for name in legacy.LEGACY_NAMES:
+            folder = ROOT / legacy.ARCHIVE / 'historical-427' / name
+            self.name = name
+            self.started = legacy.read(folder / 'driver.started.json')
+            original = legacy.read(folder / 'driver.finished.json')
+            raw = gzip.decompress((folder / 'driver.log.gz').read_bytes())
+            for diagnostic in (b'%Error: unrelated failure\n',
+                               b'%Error-UNSUPPORTED: unrelated boundary\n',
+                               b'%Warning-BOGUS: an additional failure\n',
+                               b'vlt/t_unrelated: FAILED: another failure\n',
+                               b'g++: error: an unrelated compiler error\n',
+                               b'make: *** [target] Error 1\n',
+                               b'Traceback (most recent call last):\n'):
+                with self.subTest(name=name, diagnostic=diagnostic):
+                    self.raw = raw + diagnostic
+                    self.receipt = dict(original,
+                                        log_sha256=legacy.sha(self.raw),
+                                        log_bytes=len(self.raw))
+                    with self.assertRaisesRegex(ValueError, 'legacy_unknown_diagnostic'):
+                        self.verify()
+
 
 class CoreTest(unittest.TestCase):
     """A green audit cannot become semantic credit in typed core fields."""
@@ -202,6 +224,14 @@ class CoreTest(unittest.TestCase):
         self.assertFalse(result['original_criteria_pass'])
         self.assertFalse(result['semantic_pass'])
         self.assertEqual(result['raw_returncode'], 1)
+
+    def test_case_projection_drops_extra_nested_payload(self):
+        row = self.report['cases'][legacy.LEGACY_NAMES[0]]
+        original = copy.deepcopy(row)
+        row['unbounded_payload'] = {'unexpected': 'x' * 10000}
+        result = legacy.core_fields(self.report)
+        self.assertEqual(result['cases'][legacy.LEGACY_NAMES[0]], original)
+        self.assertIn('unbounded_payload', row)
 
     def test_status_count_identity_and_type_tampering(self):
         original = copy.deepcopy(self.report)

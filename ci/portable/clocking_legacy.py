@@ -196,6 +196,7 @@ def verify_case(name, started, receipt, raw, *, argv=None, cwd=None, log=None): 
         re.search(fingerprint, text, re.MULTILINE) is not None
         and not re.search(r'Internal Error|Segmentation fault', text),
         'legacy_failure_fingerprint_changed')
+    verify_diagnostics(name, text)
     return {
         'summary_status': status,
         'counts': counts,
@@ -205,6 +206,31 @@ def verify_case(name, started, receipt, raw, *, argv=None, cwd=None, log=None): 
         'fingerprint_verified': True,
         'log_sha256': sha(raw)
     }
+
+
+def verify_diagnostics(name, text):
+    """A known fingerprint cannot hide an additional compiler/runtime failure."""
+    scenario = 'vlt/t_' + name
+    allowed = set()
+    if name == LEGACY_NAMES[0]:
+        error = ('%Error: t/t_clocking_output_iface.v:244:  got=0 exp=3 '
+                 '(pattern_i.id !== expected.id)')
+        allowed.update(
+            (error, '%Error: t/t_clocking_output_iface.v:244: Verilog $stop', 'Aborting...'))
+        detail = ('Exec of obj_vlt/t_clocking_output_iface/Vt_clocking_output_iface failed: ' +
+                  error)
+    else:
+        detail = 'Exec of verilator ok, but expected to fail'
+    allowed.update(('%Warning: ' + scenario + ': ' + detail, scenario + ': %Error: ' + detail,
+                    scenario + ': FAILED: ' + detail, '#' + scenario + ': %Error: ' + detail))
+    for line in text.splitlines():
+        # Completed summaries are checked separately; timings and ordinary build
+        # output stay outside this diagnostic whitelist.
+        diagnostic = (re.search(
+            r'%Error|%Warning|: FAILED:|^Aborting|Traceback|'
+            r'Internal Error|Segmentation fault|\berror:|\bfatal:|'
+            r'\*\*\*.*\bError\b|ninja: build stopped', line, re.IGNORECASE) is not None)
+        require(not diagnostic or line in allowed, 'legacy_unknown_diagnostic')
 
 
 def source_inputs(repo):
@@ -354,7 +380,17 @@ def core_fields(report):
             'classification', 'audit_verified', 'semantic_pass', 'original_criteria_pass',
             'raw_returncode', 'raw_returncode_scope', 'counts', 'cases', 'evidence_sha256',
             'global_status')
-    return {key: report[key] for key in keys}
+    result = {key: report[key] for key in keys}
+    case_keys = ('summary_status', 'counts', 'actual_exit', 'raw_wait_status', 'semantic_pass',
+                 'fingerprint_verified', 'log_sha256')
+    result['cases'] = {
+        name: {
+            key: row[key]
+            for key in case_keys
+        }
+        for name, row in report['cases'].items()
+    }
+    return result
 
 
 def exact_counts(counts, failed):
