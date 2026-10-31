@@ -103,6 +103,7 @@ python3 ci/portable/test_clocking_reporting.py
 python3 ci/portable/test_clocking_legacy.py
 python3 ci/portable/test_clocking_wave.py
 python3 ci/portable/test_artifact_upload_result.py
+python3 ci/portable/test_rocky_audit.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
