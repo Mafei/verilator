@@ -1,0 +1,8 @@
+SPDX-FileCopyrightText: 2026 Mafei
+SPDX-License-Identifier: CC0-1.0
+
+clocking_connections.vcd.gz contains the unchanged public waveform generated
+from t_clocking_port_connections.v using the base 4272ac27 compiler.
+Decoded SHA256: 021855ca6c0dc62f6d6e813c747a5c7ca9eec3b808c8a4eeba4c92e72360fe78
+The waveform is an input for evidence-checker failure controls, not an oracle
+for the original upstream clocking fixtures or a final-candidate test result.
