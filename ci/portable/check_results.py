@@ -3,11 +3,28 @@
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 """Require recorded regression selections, counts and provenance to agree."""
 
+import hashlib
 import json
 import subprocess
 from pathlib import Path
 
-from run_regressions import GROUPS, parse_summary, passed_counts, passed_names
+import clocking_legacy
+from run_regressions import GROUPS, parse_summary, passed_counts, passed_names, selection_revision
+
+
+def clocking_evidence(root, head):
+    """Require freshly audited legacy failures bound to this compiler and commit."""
+    report = clocking_legacy.audit(root, root / 'out/clocking-legacy')
+    binary = hashlib.sha256((root / 'bin/verilator_bin').read_bytes()).hexdigest()
+    if (report['head'] != head or report['compiler_checkout_head'] != head
+            or report['compiler_matches_run_head'] is not True
+            or report['compiler_sha256'] != binary):
+        raise ValueError('Legacy compiler or checkout provenance mismatch')
+    return {
+        'schema': 'portable-clocking-legacy-evidence-v1',
+        'selection_revision': selection_revision(),
+        'legacy': clocking_legacy.core_fields(report),
+    }
 
 
 def check_results(root):
@@ -23,6 +40,7 @@ def check_results(root):
     selected_names = [name for names in GROUPS.values() for name in names]
     if len(selected_names) != len(set(selected_names)):
         raise SystemExit("Regression groups select duplicate test names")
+    clocking_evidence(root, head)
     for group, result in results.items():
         selected = GROUPS[group]
         if not isinstance(result, dict):

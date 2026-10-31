@@ -1,0 +1,21 @@
+{
+  "schema": "native-process-wait4-v1",
+  "observer_pid": 54616,
+  "pid": 54617,
+  "proc_identity": {
+    "pid": 54617,
+    "state": "R",
+    "start_ticks": 134606,
+    "clock_ticks_per_second": 100
+  },
+  "utc_started": "2026-10-31T00:19:15.956849+00:00",
+  "cwd": "/workspace/candidates/recovery-20261031/upstream-sync-v1",
+  "argv": [
+    "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+    "/workspace/candidates/recovery-20261031/upstream-sync-v1/test_regress/t/t_clocking_output_unsup.py"
+  ],
+  "log": "/workspace/evidence/daily-sync-20261031-v1/current-failure-group-v1/clocking_output_unsup/owner/driver.log",
+  "disk_guard_bytes": 2147483648,
+  "initial_available_bytes": 3762683904,
+  "timeout_seconds": 1800.0
+}

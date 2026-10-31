@@ -1,0 +1,41 @@
+{
+  "schema": "native-process-wait4-v1",
+  "observer_pid": 54616,
+  "pid": 54617,
+  "proc_identity": {
+    "pid": 54617,
+    "state": "R",
+    "start_ticks": 134606,
+    "clock_ticks_per_second": 100
+  },
+  "utc_started": "2026-10-31T00:19:15.956849+00:00",
+  "cwd": "/workspace/candidates/recovery-20261031/upstream-sync-v1",
+  "argv": [
+    "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+    "/workspace/candidates/recovery-20261031/upstream-sync-v1/test_regress/t/t_clocking_output_unsup.py"
+  ],
+  "log": "/workspace/evidence/daily-sync-20261031-v1/current-failure-group-v1/clocking_output_unsup/owner/driver.log",
+  "disk_guard_bytes": 2147483648,
+  "initial_available_bytes": 3762683904,
+  "timeout_seconds": 1800.0,
+  "utc_finished": "2026-10-31T00:19:28.476499+00:00",
+  "elapsed_seconds": 12.519694141999935,
+  "wait4_pid": 54617,
+  "raw_wait_status": 2560,
+  "actual_exit": 10,
+  "exited_normally": true,
+  "exit_status": 10,
+  "signal": null,
+  "termination_reason": null,
+  "kill_sent": false,
+  "minimum_available_bytes": 3606941696,
+  "final_available_bytes": 3606417408,
+  "log_bytes": 13483,
+  "log_sha256": "364831ff5683c1e6f1800a007ed5957ea39a3b5f78766a12832a607e5d2ce3a7",
+  "rusage": {
+    "user_seconds": 0.173324,
+    "system_seconds": 0.036197,
+    "max_rss_raw": 22052,
+    "max_rss_unit": "KiB"
+  }
+}

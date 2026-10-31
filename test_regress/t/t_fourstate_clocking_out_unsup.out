@@ -1,0 +1,6 @@
+%Error-UNSUPPORTED: t/t_fourstate_clocking_out_unsup.v:11:5: Unsupported: Blocking intra-assignment delay with --fourstate: nonlocal or nonpacked variable.
+                                                           : ... note: In instance 't'
+   11 |     output #1step bus;
+      |     ^~~~~~
+                    ... For error description see https://verilator.org/warn/UNSUPPORTED?v=latest
+%Error: Exiting due to

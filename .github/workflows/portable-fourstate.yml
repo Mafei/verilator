@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014, fourstate-sync-20261014-followup, fourstate-sync-20261015, fourstate-sync-20261017, fourstate-sv-icarus-20261026, fourstate-sv-icarus-20261026-public, fourstate-real-dynamic-format-20261027, fourstate-ancestor-context-20261027-public, fourstate-context-integration-20261027, fourstate-upstream-context-20261027, fourstate-output-port-alias-20261027, fourstate-upstream-output-20261027, fourstate-finish-coverage-20261027-public, fourstate-upstream-subst-20261027, fourstate-upstream-20261028, fourstate-purity-20261028, fourstate-purity-command-20261028, fourstate-select-guard-20261028, fourstate-lambda-int-20261028, fourstate-queue-contract-20261028, fourstate-mixed-packed-net-20261028, fourstate-upstream-20261029, fourstate-upstream-20261030, fourstate-upstream-20261031]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014, fourstate-sync-20261014-followup, fourstate-sync-20261015, fourstate-sync-20261017, fourstate-sv-icarus-20261026, fourstate-sv-icarus-20261026-public, fourstate-real-dynamic-format-20261027, fourstate-ancestor-context-20261027-public, fourstate-context-integration-20261027, fourstate-upstream-context-20261027, fourstate-output-port-alias-20261027, fourstate-upstream-output-20261027, fourstate-finish-coverage-20261027-public, fourstate-upstream-subst-20261027, fourstate-upstream-20261028, fourstate-purity-20261028, fourstate-purity-command-20261028, fourstate-select-guard-20261028, fourstate-lambda-int-20261028, fourstate-queue-contract-20261028, fourstate-mixed-packed-net-20261028, fourstate-upstream-20261029, fourstate-upstream-20261030, fourstate-upstream-20261031, fourstate-clocking-contract-20261031]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -12,6 +12,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   artifact-review:
+    outputs:
+      upload_core: ${{ steps.upload_core_result.outputs.ledger }}
     needs: [macos, rocky8]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-24.04
@@ -34,17 +36,43 @@ jobs:
           python3 ci/portable/review_artifacts.py summarize \
             --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
             --output artifact-core-review.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
+      - name: Upload artifact-review core artifact (primary)
+        id: upload_core_primary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() && !cancelled() }}
+        continue-on-error: true
         with:
-          name: portable-core-review-${{ github.run_id }}
-          path: artifact-core-review.json
+          name: portable-core-review-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: &artifact_review_core_paths artifact-core-review.json
           if-no-files-found: error
+      - name: Wait before the one artifact-review core upload retry
+        id: upload_core_backoff
+        if: ${{ !cancelled() && steps.upload_core_primary.outcome == 'failure' }}
+        run: sleep 15
+      - name: Upload artifact-review core artifact (retry 1)
+        id: upload_core_retry
+        if: ${{ !cancelled() && steps.upload_core_primary.outcome == 'failure' && steps.upload_core_backoff.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: portable-core-review-${{ github.run_id }}-attempt${{ github.run_attempt }}-retry1
+          path: *artifact_review_core_paths
+          if-no-files-found: error
+      - name: Record artifact-review core upload attempts and require publication
+        id: upload_core_result
+        if: ${{ always() && !cancelled() }}
+        env:
+          ARTIFACT_UPLOAD_NAME: portable-core-review-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          ARTIFACT_UPLOAD_PRIMARY: ${{ toJSON(steps.upload_core_primary) }}
+          ARTIFACT_UPLOAD_RETRY: ${{ toJSON(steps.upload_core_retry) }}
+        run: python3 ci/portable/artifact_upload_result.py
   macos:
     runs-on: macos-26
     timeout-minutes: 150
     outputs:
       core_review: ${{ steps.producer_review.outputs.core_review }}
+      upload_main: ${{ steps.upload_main_result.outputs.ledger }}
+      upload_icarus: ${{ steps.upload_icarus_result.outputs.ledger }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -95,11 +123,14 @@ jobs:
             --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
             --platform macos-arm64 --producer-root "$(pwd -P)" \
             --prior-result "$PRODUCER_PRIOR_RESULT" --output out/producer-core-review.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
+      - name: Upload macos main artifact (primary)
+        id: upload_main_primary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() && !cancelled() }}
+        continue-on-error: true
         with:
-          name: macos-arm64-${{ github.run_id }}
-          path: |
+          name: macos-arm64-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: &macos_main_paths |
             out/
             logs/
             test_regress/obj_vlt/*/*.log
@@ -151,6 +182,7 @@ jobs:
             test_regress/obj_vlt/t_timing_nba_partselect_clip/simx.vcd
             test_regress/obj_vlt/t_timing_nba_repeat_control/simx.vcd
             test_regress/obj_vlt/t_tri_inout_default/simx.vcd
+            test_regress/obj_vlt/t_clocking_port_connections/simx.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_timing_blocking_event/*.vcd
@@ -249,11 +281,35 @@ jobs:
             test_regress/obj_vlt/t_finish_coverage/**/*.dat
             test_regress/obj_vlt/t_finish_coverage/**/*.info
           if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: ${{ always() && hashFiles('pinned-icarus/RUN_SUMMARY.json') != '' }}
+      - name: Wait before the one macos main upload retry
+        id: upload_main_backoff
+        if: ${{ !cancelled() && steps.upload_main_primary.outcome == 'failure' }}
+        run: sleep 15
+      - name: Upload macos main artifact (retry 1)
+        id: upload_main_retry
+        if: ${{ !cancelled() && steps.upload_main_primary.outcome == 'failure' && steps.upload_main_backoff.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: macos-arm64-icarus128-${{ github.run_id }}
-          path: |
+          name: macos-arm64-${{ github.run_id }}-attempt${{ github.run_attempt }}-retry1
+          path: *macos_main_paths
+          if-no-files-found: error
+      - name: Record macos main upload attempts and require publication
+        id: upload_main_result
+        if: ${{ always() && !cancelled() }}
+        env:
+          ARTIFACT_UPLOAD_NAME: macos-arm64-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          ARTIFACT_UPLOAD_PRIMARY: ${{ toJSON(steps.upload_main_primary) }}
+          ARTIFACT_UPLOAD_RETRY: ${{ toJSON(steps.upload_main_retry) }}
+        run: python3 ci/portable/artifact_upload_result.py
+      - name: Upload macos icarus artifact (primary)
+        id: upload_icarus_primary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() && !cancelled() && hashFiles('pinned-icarus/RUN_SUMMARY.json') != '' }}
+        continue-on-error: true
+        with:
+          name: macos-arm64-icarus128-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: &macos_icarus_paths |
             pinned-icarus/*.json
             pinned-icarus/stages/
             pinned-icarus/inventory/
@@ -274,11 +330,34 @@ jobs:
             pinned-icarus/pair/cases/*/*/*.stdout
             pinned-icarus/pair/cases/*/*/*.stderr
           if-no-files-found: error
+      - name: Wait before the one macos icarus upload retry
+        id: upload_icarus_backoff
+        if: ${{ !cancelled() && steps.upload_icarus_primary.outcome == 'failure' }}
+        run: sleep 15
+      - name: Upload macos icarus artifact (retry 1)
+        id: upload_icarus_retry
+        if: ${{ !cancelled() && steps.upload_icarus_primary.outcome == 'failure' && steps.upload_icarus_backoff.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: macos-arm64-icarus128-${{ github.run_id }}-attempt${{ github.run_attempt }}-retry1
+          path: *macos_icarus_paths
+          if-no-files-found: error
+      - name: Record macos icarus upload attempts and require publication
+        id: upload_icarus_result
+        if: ${{ always() && !cancelled() && hashFiles('pinned-icarus/RUN_SUMMARY.json') != '' }}
+        env:
+          ARTIFACT_UPLOAD_NAME: macos-arm64-icarus128-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          ARTIFACT_UPLOAD_PRIMARY: ${{ toJSON(steps.upload_icarus_primary) }}
+          ARTIFACT_UPLOAD_RETRY: ${{ toJSON(steps.upload_icarus_retry) }}
+        run: python3 ci/portable/artifact_upload_result.py
   rocky8:
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     outputs:
       core_review: ${{ steps.producer_review.outputs.core_review }}
+      upload_main: ${{ steps.upload_main_result.outputs.ledger }}
+      upload_icarus: ${{ steps.upload_icarus_result.outputs.ledger }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -392,11 +471,14 @@ jobs:
             --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
             --platform rocky8-x86_64 --producer-root /work \
             --prior-result "$PRODUCER_PRIOR_RESULT" --output out/producer-core-review.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
+      - name: Upload rocky8 main artifact (primary)
+        id: upload_main_primary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() && !cancelled() }}
+        continue-on-error: true
         with:
-          name: rocky8-x86_64-${{ github.run_id }}
-          path: |
+          name: rocky8-x86_64-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: &rocky8_main_paths |
             out/
             logs/
             rocky-image.txt
@@ -449,6 +531,7 @@ jobs:
             test_regress/obj_vlt/t_timing_nba_partselect_clip/simx.vcd
             test_regress/obj_vlt/t_timing_nba_repeat_control/simx.vcd
             test_regress/obj_vlt/t_tri_inout_default/simx.vcd
+            test_regress/obj_vlt/t_clocking_port_connections/simx.vcd
             test_regress/obj_vlt/t_fourstate_packed_port_kind/*.vcd
             test_regress/obj_vlt/t_timing_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_timing_blocking_event/*.vcd
@@ -547,12 +630,35 @@ jobs:
             test_regress/obj_vlt/t_finish_coverage/**/*.dat
             test_regress/obj_vlt/t_finish_coverage/**/*.info
           if-no-files-found: error
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: ${{ always() && hashFiles('pinned-icarus/RUN_SUMMARY.json') != '' }}
+      - name: Wait before the one rocky8 main upload retry
+        id: upload_main_backoff
+        if: ${{ !cancelled() && steps.upload_main_primary.outcome == 'failure' }}
+        run: sleep 15
+      - name: Upload rocky8 main artifact (retry 1)
+        id: upload_main_retry
+        if: ${{ !cancelled() && steps.upload_main_primary.outcome == 'failure' && steps.upload_main_backoff.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: rocky8-x86_64-icarus128-${{ github.run_id }}
-          path: |
+          name: rocky8-x86_64-${{ github.run_id }}-attempt${{ github.run_attempt }}-retry1
+          path: *rocky8_main_paths
+          if-no-files-found: error
+      - name: Record rocky8 main upload attempts and require publication
+        id: upload_main_result
+        if: ${{ always() && !cancelled() }}
+        env:
+          ARTIFACT_UPLOAD_NAME: rocky8-x86_64-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          ARTIFACT_UPLOAD_PRIMARY: ${{ toJSON(steps.upload_main_primary) }}
+          ARTIFACT_UPLOAD_RETRY: ${{ toJSON(steps.upload_main_retry) }}
+        run: python3 ci/portable/artifact_upload_result.py
+      - name: Upload rocky8 icarus artifact (primary)
+        id: upload_icarus_primary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ always() && !cancelled() && hashFiles('pinned-icarus/RUN_SUMMARY.json') != '' }}
+        continue-on-error: true
+        with:
+          name: rocky8-x86_64-icarus128-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: &rocky8_icarus_paths |
             pinned-icarus/*.json
             pinned-icarus/stages/
             pinned-icarus/inventory/
@@ -573,3 +679,24 @@ jobs:
             pinned-icarus/pair/cases/*/*/*.stdout
             pinned-icarus/pair/cases/*/*/*.stderr
           if-no-files-found: error
+      - name: Wait before the one rocky8 icarus upload retry
+        id: upload_icarus_backoff
+        if: ${{ !cancelled() && steps.upload_icarus_primary.outcome == 'failure' }}
+        run: sleep 15
+      - name: Upload rocky8 icarus artifact (retry 1)
+        id: upload_icarus_retry
+        if: ${{ !cancelled() && steps.upload_icarus_primary.outcome == 'failure' && steps.upload_icarus_backoff.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rocky8-x86_64-icarus128-${{ github.run_id }}-attempt${{ github.run_attempt }}-retry1
+          path: *rocky8_icarus_paths
+          if-no-files-found: error
+      - name: Record rocky8 icarus upload attempts and require publication
+        id: upload_icarus_result
+        if: ${{ always() && !cancelled() && hashFiles('pinned-icarus/RUN_SUMMARY.json') != '' }}
+        env:
+          ARTIFACT_UPLOAD_NAME: rocky8-x86_64-icarus128-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          ARTIFACT_UPLOAD_PRIMARY: ${{ toJSON(steps.upload_icarus_primary) }}
+          ARTIFACT_UPLOAD_RETRY: ${{ toJSON(steps.upload_icarus_retry) }}
+        run: python3 ci/portable/artifact_upload_result.py

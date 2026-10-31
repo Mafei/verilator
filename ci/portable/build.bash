@@ -99,6 +99,10 @@ python3 ci/portable/test_finish_acceptance.py
 python3 ci/portable/test_finish_wave_evidence.py
 python3 ci/portable/test_review_artifacts.py
 python3 ci/portable/test_build_status.py
+python3 ci/portable/test_clocking_reporting.py
+python3 ci/portable/test_clocking_legacy.py
+python3 ci/portable/test_clocking_wave.py
+python3 ci/portable/test_artifact_upload_result.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
@@ -164,8 +168,16 @@ export VERILATOR_ROOT="$root"
 # Keep the original per-process CPU limits while compiling generated files separately.
 export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
-# Preserve every baseline selection and add the independently checked SV semantic controls.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 upstream_daily_20261029 upstream_daily_20261030 upstream_daily_20261031 || regress_status=$?
+# Revised 440 = 436 unchanged + 4 new drivers; the original 438 has a separate audit.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 upstream_daily_20261029 upstream_daily_20261030 upstream_daily_20261031 clocking_contract_20261031 output_lvalue_20261031 || regress_status=$?
+clocking_wave_status=0
+python3 ci/portable/clocking_wave.py || clocking_wave_status=$?
+legacy_replay_status=0
+legacy_audit_status=0
+python3 ci/portable/clocking_legacy.py run --repo "$root" --compiler "$root/bin/verilator_bin" \
+    --output "$root/out/clocking-legacy" || legacy_replay_status=$?
+python3 ci/portable/clocking_legacy.py audit --repo "$root" \
+    --output "$root/out/clocking-legacy" || legacy_audit_status=$?
 regression_check_status=0
 python3 ci/portable/check_results.py || regression_check_status=$?
 # A failed gate must not prevent independent collectors from recording their results.
@@ -179,6 +191,7 @@ run_evidence() {
     return 0
 }
 run_evidence semantic-waves
+run_evidence clocking-legacy
 run_evidence finish-waves
 run_evidence controls-waves
 run_evidence sv-semantics-waves
@@ -207,13 +220,15 @@ python3 ci/portable/finish_acceptance.py check --expected-head "$icarus_head" ||
 printf 'ORIGINAL_ACCEPTANCE_EXITS icarus18_run=%s applicable16_check=%s full18_check=%s finish9_run=%s finish9_check=%s\n' \
     "$icarus_run_status" "$icarus_check_status" "$icarus_full18_status" "$finish9_run_status" "$finish9_check_status"
 run_evidence results
-printf 'CLOUD_VALIDATION_EXITS smoke=%s smoke_record=%s regress=%s regression_check=%s evidence=%s\n' \
-    "${smoke_status:-0}" "${smoke_record_status:-0}" "$regress_status" "$regression_check_status" "$evidence_status"
+printf 'CLOUD_VALIDATION_EXITS smoke=%s smoke_record=%s regress=%s regression_check=%s clocking_wave=%s legacy_replay=%s legacy_audit=%s evidence=%s\n' \
+    "${smoke_status:-0}" "${smoke_record_status:-0}" "$regress_status" "$regression_check_status" \
+    "$clocking_wave_status" "$legacy_replay_status" "$legacy_audit_status" "$evidence_status"
 if [[ ${smoke_status:-0} != 0 || ${smoke_record_status:-0} != 0 || $regress_status != 0 ||
-      $regression_check_status != 0 || $evidence_status != 0 ||
+      $regression_check_status != 0 || $clocking_wave_status != 0 || $legacy_replay_status != 0 ||
+      $legacy_audit_status != 0 || $evidence_status != 0 ||
       $icarus_run_status != 0 || $icarus_check_status != 0 || $icarus_full18_status != 0 ||
       $finish9_run_status != 0 || $finish9_check_status != 0 ||
       $thread_controls_status != 0 || $ram_matrix_status != 0 ]]; then
-    echo "Cloud validation failed: smoke=${smoke_status:-0}, smoke-record=${smoke_record_status:-0}, regress=$regress_status, regression-check=$regression_check_status, evidence=$evidence_status"
+    echo "Cloud validation failed: smoke=${smoke_status:-0}, smoke-record=${smoke_record_status:-0}, regress=$regress_status, regression-check=$regression_check_status, clocking-wave=$clocking_wave_status, legacy-replay=$legacy_replay_status, legacy-audit=$legacy_audit_status, evidence=$evidence_status"
     exit 1
 fi

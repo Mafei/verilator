@@ -10,8 +10,18 @@ import runpy
 import sys
 from pathlib import Path
 
+import check_results
+
 CONTROLS_WAVE_BUDGET = 512 * 1024
 SV_SEMANTICS_WAVE_BUDGET = 512 * 1024
+
+
+def clocking_legacy_evidence(root):
+    """Publish bounded typed evidence while retaining the original raw failures."""
+    head = (root / 'out/provenance.txt').read_text().splitlines()[0]
+    evidence = check_results.clocking_evidence(root, head)
+    (root / 'out/clocking-legacy-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+    print('CLOCKING_LEGACY_EVIDENCE ' + json.dumps(evidence, sort_keys=True))
 
 
 def compiler_evidence(root):
@@ -224,14 +234,18 @@ def main():
     """Report the compiler after building or the outputs after validation."""
     if len(sys.argv) != 2 or sys.argv[1] not in ("compiler", "results", "semantic-waves",
                                                  "finish-waves", "controls-waves", "ram-waves",
-                                                 "thread-waves", "sv-semantics-waves"):
-        raise SystemExit("Usage: log_evidence.py compiler|results|semantic-waves|finish-waves|"
-                         "controls-waves|ram-waves|thread-waves|sv-semantics-waves")
+                                                 "thread-waves", "sv-semantics-waves",
+                                                 "clocking-legacy"):
+        raise SystemExit(
+            "Usage: log_evidence.py compiler|results|semantic-waves|finish-waves|"
+            "controls-waves|ram-waves|thread-waves|sv-semantics-waves|clocking-legacy")
     root = Path.cwd()
     if sys.argv[1] == "compiler":
         compiler_evidence(root)
     elif sys.argv[1] == "results":
         results_evidence(root)
+    elif sys.argv[1] == "clocking-legacy":
+        clocking_legacy_evidence(root)
     elif sys.argv[1] == "semantic-waves":
         semantic_wave_evidence(root)
     elif sys.argv[1] == "sv-semantics-waves":

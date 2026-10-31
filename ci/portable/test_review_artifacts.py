@@ -18,6 +18,7 @@ import tarfile
 import log_evidence
 import review_artifacts as review
 from run_regressions import GROUPS
+from test_clocking_reporting import legacy_report, wave_report
 
 
 def write_json(path, value):
@@ -144,8 +145,7 @@ class ArtifactsTest(unittest.TestCase):
             self.case122_reports[str(main)] = case122
             write_json(main / 'out/case122-review.json', case122)
         self.migration()
-        self.stack = contextlib.ExitStack()
-        self.addCleanup(self.stack.close)
+        self.install_clocking_fixtures()
         self.stack.enter_context(mock.patch.object(review, 'git_head', return_value=self.head))
         self.stack.enter_context(
             mock.patch.object(review.queue_review,
@@ -188,6 +188,34 @@ class ArtifactsTest(unittest.TestCase):
                                   'records': 228,
                                   'wave_sha256': 'a' * 64
                               }, False)))
+
+    def install_clocking_fixtures(self):
+        """Keep typed clocking records bound to each synthetic package compiler."""
+        self.stack = contextlib.ExitStack()
+        self.addCleanup(self.stack.close)
+        self.legacy_reports = {}
+        self.wave_reports = {}
+        for name, binary in self.compiler.items():
+            main = self.root / (name + '-main')
+            (main / 'bin').mkdir()
+            (main / 'bin/verilator_bin').write_bytes(binary)
+            self.legacy_reports[str(main)] = legacy_report(self.head,
+                                                           hashlib.sha256(binary).hexdigest())
+            self.wave_reports[str(main)] = wave_report(self.head,
+                                                       hashlib.sha256(binary).hexdigest())
+        self.stack.enter_context(
+            mock.patch.object(review.clocking_legacy,
+                              'audit',
+                              side_effect=lambda main, *_args: self.legacy_reports[str(main)]))
+        self.stack.enter_context(
+            mock.patch.object(review.clocking_wave,
+                              'validate',
+                              side_effect=lambda main: self.wave_reports[str(main)]))
+        for name in ('mac', 'rocky'):
+            main = self.root / (name + '-main')
+            write_json(main / 'out/clocking-legacy-evidence.json',
+                       review.check_results.clocking_evidence(main, self.head))
+            write_json(main / 'out/clocking-wave-evidence.json', self.wave_reports[str(main)])
 
     def bundle(self, name, platform, binary, update_compiler=True):
         main = self.root / (name + '-main')
@@ -331,6 +359,65 @@ class ArtifactsTest(unittest.TestCase):
             self.assertEqual(data['failed_groups'], [group])
             self.assertEqual(data['by_group'][group]['returncode'], 10)
             self.assertFalse(data['by_group'][group]['success'])
+
+    def test_current_green_keeps_original_criteria_and_global_hold(self):
+        """A green current selection retains the failed original criteria."""
+        row = self.execute(1)
+        for platform in row['platforms'].values():
+            self.assertEqual(platform['current_applicable_gate_exit'], 0)
+            self.assertEqual(platform['original_projection']['counts']['passed'], 436)
+            self.assertEqual(platform['original_projection']['counts']['failed'], 2)
+            self.assertFalse(platform['original_projection']['semantic_pass'])
+            self.assertEqual(
+                platform['clocking_legacy']['cases']['clocking_output_iface']['actual_exit'], 10)
+        self.assertEqual(row['semantic_gate_exit'], 1)
+
+    def test_new_failure_does_not_reduce_original_passes(self):
+        """A failed replacement remains outside the original denominator."""
+        group = 'clocking_contract_20261031'
+        self.set_regression(group, {'passed': 1, 'failed': 1}, 'FAILED', 10)
+        row = self.execute(1)
+        for platform in row['platforms'].values():
+            self.assertEqual(platform['current_applicable_gate_exit'], 1)
+            self.assertEqual(platform['original_projection']['counts']['passed'], 436)
+            self.assertEqual(platform['original_projection']['counts']['failed'], 2)
+
+    def test_legacy_and_projection_fields_are_mandatory_and_typed(self):
+        """Reject absent, forged and mistyped clocking fields in the typed relay."""
+        original = self.producer_records()
+        for missing in ('clocking_legacy', 'clocking_wave', 'original_projection',
+                        'selection_revision'):
+            rows = json.loads(json.dumps(original))
+            del rows['mac']['core'][missing]
+            self.assertFalse(self.relay(rows, 2)['audit_integrity'])
+        for field, changes in (('clocking_legacy', {
+                'semantic_pass': True
+        }), ('clocking_legacy', {
+                'compiler_sha256': '0' * 64
+        }), ('clocking_legacy', {
+                'compiler_matches_run_head': False
+        }), ('clocking_wave', {
+                'compiler_sha256': '0' * 64
+        }), ('original_projection', {
+                'semantic_pass': True
+        }), ('original_projection', {
+                'semantic_pass': 0
+        }), ('original_projection', {
+                'selected_drivers': 436
+        }), ('selection_revision', {
+                'removed_drivers': []
+        })):
+            with self.subTest(field=field, changes=changes):
+                rows = json.loads(json.dumps(original))
+                rows['mac']['core'][field].update(changes)
+                self.assertFalse(self.relay(rows, 2)['audit_integrity'])
+
+    def test_legacy_unknown_failure_is_not_an_applicability_exception(self):
+        """An unreviewed fingerprint makes the producer evidence invalid."""
+        with mock.patch.object(review.clocking_legacy,
+                               'audit',
+                               side_effect=ValueError('unknown fingerprint')):
+            self.assertFalse(self.execute(2)['audit_integrity'])
 
     def test_regression_pass_counts_do_not_hide_nonzero_return(self):
         group = next(iter(GROUPS))

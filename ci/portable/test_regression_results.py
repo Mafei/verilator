@@ -17,11 +17,13 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 import check_results
 import harness_pass_probe
 import log_evidence
 import run_regressions
+from test_clocking_reporting import legacy_report
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
 GROUPS = run_regressions.GROUPS
@@ -68,6 +70,12 @@ class ResultsTest(unittest.TestCase):
         self.head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root,
                                             text=True).strip()
         (self.root / "out/provenance.txt").write_text(self.head + "\n")
+        (self.root / 'bin').mkdir()
+        (self.root / 'bin/verilator_bin').write_bytes(b'fixture compiler')
+        legacy = legacy_report(self.head, hashlib.sha256(b'fixture compiler').hexdigest())
+        patcher = mock.patch.object(check_results.clocking_legacy, 'audit', return_value=legacy)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.results = {}
         self.config = {}
         for group, names in GROUPS.items():
@@ -377,9 +385,22 @@ python3() {
         ci/portable/log_evidence.py)
             [[ "$#" == 2 ]] || return 99
             case "$2" in
-                semantic-waves|finish-waves|controls-waves|sv-semantics-waves|thread-waves|ram-waves|results) ;;
+                semantic-waves|clocking-legacy|finish-waves|controls-waves|sv-semantics-waves|thread-waves|ram-waves|results) ;;
                 *) return 99 ;;
             esac
+            post_calls=$((post_calls + 1)); return 0 ;;
+        ci/portable/clocking_wave.py)
+            [[ "$#" == 1 ]] || return 99
+            post_calls=$((post_calls + 1)); return 0 ;;
+        ci/portable/clocking_legacy.py)
+            [[ "$3" == --repo && "$4" == "$root" ]] || return 99
+            if [[ "$2" == run ]]; then
+                [[ "$#" == 8 && "$5" == --compiler && "$6" == "$root/bin/verilator_bin"
+                   && "$7" == --output && "$8" == "$root/out/clocking-legacy" ]] || return 99
+            else
+                [[ "$#" == 6 && "$2" == audit && "$5" == --output
+                   && "$6" == "$root/out/clocking-legacy" ]] || return 99
+            fi
             post_calls=$((post_calls + 1)); return 0 ;;
         ci/portable/run_thread_controls.py|ci/portable/ram_acceptance.py)
             [[ "$#" == 1 ]] || return 99
@@ -418,7 +439,7 @@ python3() {
                 self.assertEqual("VALIDATION_PASSED" in result.stdout, statuses == (0, 0, 0, 0))
                 self.assertIn(
                     'SMOKE_CALLS=1 RECORD_CALLS=1 REGRESS_CALLS=1 CHECKER_CALLS=1 CAPTURED=' +
-                    str(statuses[0]) + ' POST_CALLS=14', result.stdout)
+                    str(statuses[0]) + ' POST_CALLS=18', result.stdout)
 
 
 class LogEvidenceTest(unittest.TestCase):

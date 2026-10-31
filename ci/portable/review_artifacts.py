@@ -18,9 +18,12 @@ import sys
 import tarfile
 
 import check_results
+import clocking_legacy
+import clocking_wave
 import log_evidence
 import queue_projection_review as queue_review
-from run_regressions import GROUPS, parse_summary, passed_counts, passed_names
+from run_regressions import (GROUPS, actual_passed_names, parse_summary, passed_counts,
+                             passed_names, selection_revision)
 from run_thread_controls import NAMES
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -382,6 +385,63 @@ def regression_summary(rows):
     }
 
 
+def original_projection(regressions, legacy):
+    """Project only original driver identities; new passes cannot repair old failures."""
+    legacy = clocking_legacy.core_fields(legacy)
+    revision = selection_revision()
+    added = set(revision['added_drivers'])
+    unchanged_rows = []
+    passed = []
+    for group, selected in GROUPS.items():
+        original = [name for name in selected if name not in added]
+        require(not original or len(original) == len(selected), 'mixed_revision_group')
+        if original:
+            row = regressions['by_group'][group]
+            unchanged_rows.append(row)
+            passed.extend(row['actual_passed_names'])
+    require(len(passed) == len(set(passed)), 'duplicate_original_pass_identity')
+    counts = {
+        key: sum(row['counts'].get(key, 0) for row in unchanged_rows)
+        for key in REGRESSION_COUNTERS
+    }
+    require(counts['passed'] == len(passed), 'original_pass_identity_count_mismatch')
+    require(counts['passed'] + counts['failed'] <= revision['unchanged_drivers'],
+            'original_execution_count_exceeds_selection')
+    counts['passed'] += legacy['counts']['passed']
+    counts['failed'] += legacy['counts']['failed']
+    return {
+        'schema': 'portable-original-regression-projection-v1',
+        'scope': 'CURRENT_RUN_PROJECTED_ON_ORIGINAL_SELECTION',
+        'head': legacy['head'],
+        'revision': revision['original_revision'],
+        'selector_sha256': revision['original_selector_sha256'],
+        'selected_drivers': revision['original_selected_drivers'],
+        'unchanged_drivers': revision['unchanged_drivers'],
+        'excluded_new_drivers': len(added),
+        'legacy_drivers': len(clocking_legacy.LEGACY_NAMES),
+        'counts': counts,
+        'original_criteria_pass': False,
+        'semantic_pass': False,
+        'strict_gate_exit': 1,
+    }
+
+
+def clocking_files(root, head):
+    """Recompute mandatory legacy and wave evidence before relaying typed fields."""
+    evidence = check_results.clocking_evidence(root, head)
+    require(
+        json.dumps(read(root / 'out/clocking-legacy-evidence.json'),
+                   sort_keys=True) == json.dumps(evidence, sort_keys=True),
+        'legacy_saved_evidence_mismatch')
+    wave = clocking_wave.validate(root)
+    require(
+        json.dumps(read(root / 'out/clocking-wave-evidence.json'),
+                   sort_keys=True) == json.dumps(wave, sort_keys=True),
+        'clocking_saved_wave_mismatch')
+    require(wave['head'] == head, 'clocking_wave_head_mismatch')
+    return evidence, clocking_wave.core_fields(wave)
+
+
 def review_platform(main, pair, source, platform, head, run_id, needs, producer_root=None):
     require(needs in ('success', 'failure'), 'producer_job_not_completed')
     require((main / 'out/provenance.txt').read_text().splitlines()[0] == head,
@@ -400,6 +460,10 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
         require(status == row['summary_status'] and counts == row['counts'],
                 'regression_count_mismatch')
         names_match = passed_names(text, GROUPS[name])
+        identities = actual_passed_names(text)
+        require(
+            len(identities) == len(set(identities)) == counts['passed']
+            and set(identities) <= set(GROUPS[name]), 'regression_pass_identity_mismatch')
         require(
             row['success'] == (row['returncode'] == 0
                                and passed_counts(status, counts, len(GROUPS[name]))
@@ -409,8 +473,10 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
             'counts': counts,
             'returncode': row['returncode'],
             'success': row['success'],
-            'passed_names_match': names_match
+            'passed_names_match': names_match,
+            'actual_passed_names': identities,
         }
+    legacy, wave = clocking_files(main, head)
     semantic = needs == 'failure'
     try:
         with redirect_stdout(io.StringIO()):
@@ -425,9 +491,19 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
         'groups': len(GROUPS),
         'selected_drivers': sum(map(len, GROUPS.values())),
         'regressions': regression_summary(regression_rows),
+        'selection_revision': legacy['selection_revision'],
+        'clocking_legacy': legacy['legacy'],
+        'clocking_wave': wave,
         'package': package(main, platform, head),
         'public_ast': ast_evidence(main, source)
     }
+    result['current_applicable_gate_exit'] = int(bool(result['regressions']['failed_groups']))
+    result['original_projection'] = original_projection(result['regressions'],
+                                                        result['clocking_legacy'])
+    semantic = semantic or result['original_projection']['strict_gate_exit'] != 0
+    require(
+        result['clocking_legacy']['compiler_sha256'] == result['clocking_wave']['compiler_sha256']
+        == result['package']['compiler_sha256'], 'legacy_package_compiler_mismatch')
     result['threads'], producer, failed = thread_evidence(main, source, head)
     require(producer_root is None or producer == producer_root, 'producer_root_mapping_mismatch')
     semantic = semantic or failed
@@ -519,9 +595,16 @@ def regression_fields(data):
         counts = {key: integer(value) for key, value in row['counts'].items()}
         status = row['summary_status']
         code = integer(row['returncode'], signed=True)
+        identities = row['actual_passed_names']
+        require(
+            isinstance(identities, list) and all(isinstance(value, str) for value in identities)
+            and len(identities) == len(set(identities)) == counts['passed']
+            and set(identities) <= set(selected), 'typed_regression_identity_mismatch')
         require(
             status in ('PASSED', 'FAILED', 'PASSED w/SKIPS') and isinstance(row['success'], bool)
             and isinstance(row['passed_names_match'], bool), 'typed_regression_record_invalid')
+        require(row['passed_names_match'] == (len(identities) == len(selected)),
+                'typed_regression_name_summary_mismatch')
         require(
             row['success'] == (code == 0 and passed_counts(status, counts, len(selected))
                                and row['passed_names_match']), 'typed_regression_success_mismatch')
@@ -530,7 +613,8 @@ def regression_fields(data):
             'counts': counts,
             'returncode': code,
             'success': row['success'],
-            'passed_names_match': row['passed_names_match']
+            'passed_names_match': row['passed_names_match'],
+            'actual_passed_names': identities,
         }
     require(
         isinstance(data['totals'], dict) and set(data['totals']) == set(REGRESSION_COUNTERS),
@@ -542,6 +626,29 @@ def regression_fields(data):
     return result
 
 
+def clocking_core(data, regressions):
+    """Validate both selection revisions and their mandatory typed clocking evidence."""
+    result = {}
+    revision = selection_revision()
+    require(
+        json.dumps(data['selection_revision'], sort_keys=True) == json.dumps(revision,
+                                                                             sort_keys=True),
+        'typed_selection_revision_mismatch')
+    result['selection_revision'] = revision
+    result['clocking_legacy'] = clocking_legacy.core_fields(data['clocking_legacy'])
+    result['clocking_wave'] = clocking_wave.core_fields(data['clocking_wave'])
+    gate = integer(data['current_applicable_gate_exit'])
+    require(gate == int(bool(regressions['failed_groups'])), 'typed_current_gate_mismatch')
+    result['current_applicable_gate_exit'] = gate
+    projection = original_projection(regressions, result['clocking_legacy'])
+    require(
+        json.dumps(data['original_projection'], sort_keys=True) == json.dumps(projection,
+                                                                              sort_keys=True),
+        'typed_original_projection_mismatch')
+    result['original_projection'] = projection
+    return result
+
+
 def core_fields(data, platform):
     """Whitelist small typed fields; never relay arbitrary text or raw logs."""
     result = integers(data, ('groups', 'selected_drivers'))
@@ -550,6 +657,7 @@ def core_fields(data, platform):
         'selected_drivers': sum(map(len, GROUPS.values()))
     }, 'typed_regression_selection_mismatch')
     result['regressions'] = regression_fields(data['regressions'])
+    result.update(clocking_core(data, result['regressions']))
     bundle = data['package']
     architecture = 'Mach-O64 arm64' if platform == 'macos-arm64' else 'ELF64 x86_64'
     require(bundle['header'] == architecture and bundle['producer_program_executed'] is False,
@@ -557,6 +665,12 @@ def core_fields(data, platform):
     result['package'] = dict(hash_fields(bundle, ('archive_sha256', 'compiler_sha256')),
                              header=architecture,
                              producer_program_executed=False)
+    require(
+        result['clocking_legacy']['compiler_sha256'] == result['clocking_wave']['compiler_sha256']
+        == result['package']['compiler_sha256']
+        and result['clocking_legacy']['compiler_matches_run_head'] is True and
+        result['clocking_legacy']['compiler_checkout_head'] == result['clocking_legacy']['head'],
+        'typed_legacy_package_compiler_mismatch')
     require(isinstance(data['public_ast'], list) and data['public_ast'], 'typed_ast_missing')
     result['public_ast'] = []
     for row in data['public_ast']:
@@ -735,6 +849,9 @@ def summarize(args):
                 == ('/work' if platform == 'rocky8-x86_64' else mapping['reader_root']),
                 'invalid_root_mapping')
             data = core_fields(row['core'], platform)
+            require(
+                data['clocking_legacy']['head'] == data['clocking_wave']['head'] ==
+                args.expected_head, 'typed_clocking_head_mismatch')
             require(data['case122_review']['head'] == args.expected_head,
                     'typed_case122_head_mismatch')
             result['platforms'][platform] = dict(
@@ -743,7 +860,8 @@ def summarize(args):
                 file_mapping={key: mapping[key]
                               for key in ('recorded_root', 'reader_root')})
             visible_failure = (
-                bool(data['regressions']['failed_groups']) or any(
+                data['original_projection']['strict_gate_exit'] != 0
+                or bool(data['regressions']['failed_groups']) or any(
                     data['other_gates'][key]
                     for key in ('full18_gate_exit', 'finish9_gate_exit', 'fixed128_overall_exit'))
                 or data['threads']['native_exit'] != 0

@@ -1,5 +1,37 @@
 # Experimental four-state builds
 
+The `fourstate-clocking-contract-20261031` candidate starts at PR44 commit
+`4272ac27fbcb061c2a542c51e0381b598ac23ebe`. The five old clocking fixtures match
+the files removed by upstream [PR8925](https://github.com/verilator/verilator/pull/8925)
+byte for byte. Their archived inputs, expectations, failure receipts and replay
+instructions are in [the legacy clocking archive](ci/portable/legacy/clocking-8925/README.md).
+Their original failures remain failures; an independently successful fingerprint
+audit supplies no semantic pass credit. The revised applicable regression
+selection and the projection onto the original 438-driver selection are
+reported separately, including the removed and added driver names.
+
+The replacement clocking tests exercise explicit output ports, passive input
+expressions and the four-state skewed-output support boundary. Wave evidence
+checks every output transition at the declared 1ps skew and preserves passive
+source values. An unused clockvar declaration has a narrowly scoped diagnostic
+waiver; this does not claim support for driving input ports. Original Strict18
+and pinned Icarus fixed128 expectations remain unchanged, with global HOLD.
+
+A separate compiler fix rejects recognized value operators connected to output
+ports after parameter and hierarchical-name resolution. Ten negative forms
+include arithmetic, calls, casts and packed replication; legal input expressions,
+selected/concatenated/streamed outputs and positional patterns have separate
+execution controls. Constants retain the existing PORTSHORT diagnostic. This
+does not implement complete lvalue grammar enforcement: count-one parser
+ambiguity and other member/type-dependent forms retain their existing checks.
+The revised selection has 440 drivers: 436 unchanged originals and four new
+drivers. The original 438-driver projection includes the two replayed failures.
+
+Artifact transport uses the existing pinned upload action, one retry after
+15 seconds, and unique names for each attempt. The job log and summary retain
+both outcomes. Publication requires a successful action outcome and finalized
+artifact metadata; producer integrity and semantic failures remain fatal.
+
 The `fourstate-strict-fix-20261011` candidate starts from the PR17 commit
 `eca3e7779126a81b297a7af2af6ecc26240ccae2`. It adds a single-wait lowering for
 blocking four-state event assignments and releases both halves of forced
