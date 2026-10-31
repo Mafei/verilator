@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 """Run explicit cloud regression groups and record their actual test counts."""
 
+import hashlib
 import json
 import re
 import subprocess
@@ -134,10 +135,9 @@ GROUPS = {
     ],
     # Official changes through cf89d898e2e6a047231a886d41179d099ff9a46f.
     "upstream_daily_20261014": [
-        "clocking_output_iface", "clocking_output_unsup", "covergroup_incdec", "math_signed3",
-        "property_nested_instance", "property_nested_instance_bad",
-        "property_nested_instance_cover", "property_nested_instance_unsup",
-        "property_recursive_unsup"
+        "covergroup_incdec", "math_signed3", "property_nested_instance",
+        "property_nested_instance_bad", "property_nested_instance_cover",
+        "property_nested_instance_unsup", "property_recursive_unsup"
     ],
     # Official changes through 75b107a6e94265102850fca288ff493948051f20.
     "upstream_daily_20261014_followup": ["clocking_event_or"],
@@ -236,12 +236,64 @@ GROUPS = {
     # Official changes through 92ac4051b66ab409351361910b865b9db98b816e.
     "upstream_daily_20261031": [
         "class_scope_nonvirtual", "class_static_method", "cuse_iface",
-        "randomize_method_with_scoping", "unroll_stmt",
-        "trace_dumpvars_dyn_0_cc_fst", "trace_dumpvars_dyn_0_cc_saif",
-        "trace_dumpvars_dyn_0_cc_vcd", "trace_dumpvars_dyn_1_cc_fst",
-        "trace_dumpvars_dyn_1_cc_saif", "trace_dumpvars_dyn_1_cc_vcd"
-    ]
+        "randomize_method_with_scoping", "unroll_stmt", "trace_dumpvars_dyn_0_cc_fst",
+        "trace_dumpvars_dyn_0_cc_saif", "trace_dumpvars_dyn_0_cc_vcd",
+        "trace_dumpvars_dyn_1_cc_fst", "trace_dumpvars_dyn_1_cc_saif",
+        "trace_dumpvars_dyn_1_cc_vcd"
+    ],
+    # The two original clocking drivers are replayed and audited separately;
+    # this revision removes two stale contracts and adds two distinct drivers.
+    "clocking_contract_20261031": ["clocking_port_connections", "fourstate_clocking_out_unsup"],
 }
+
+
+def selection_revision():
+    """Identify both ordered selections, even when their driver counts agree."""
+    # Import lazily: the legacy replay imports the harness summary parser here.
+    import clocking_legacy  # pylint: disable=import-outside-toplevel
+
+    archive = Path(
+        clocking_legacy.__file__).resolve().parent / 'legacy/clocking-8925/manifest.json'
+    original = json.loads(archive.read_text())['original_selected_names']
+
+    def digest(names):
+        return hashlib.sha256(('\n'.join(names) + '\n').encode()).hexdigest()
+
+    if (len(original) != 438 or len(set(original)) != 438
+            or digest(original) != clocking_legacy.ORIGINAL_SELECTOR_SHA256):
+        raise ValueError('Original regression selection changed')
+    order = [
+        *clocking_legacy.ORIGINAL_GROUPS,
+        *(name for name in GROUPS if name not in clocking_legacy.ORIGINAL_GROUPS)
+    ]
+    if len(order) != len(set(order)) or set(order) != set(GROUPS):
+        raise ValueError('Missing original regression group')
+    current = [name for group in order for name in GROUPS[group]]
+    if len(current) != len(set(current)):
+        raise ValueError('Duplicate current regression driver')
+    removed = [name for name in original if name not in current]
+    added = [name for name in current if name not in original]
+    unchanged = [name for name in original if name not in removed]
+    if (removed != list(clocking_legacy.LEGACY_NAMES)
+            or unchanged != [name for name in current if name in original]):
+        raise ValueError('Original regression selection delta changed')
+    return {
+        'schema': 'clocking-regression-selection-v1',
+        'original_revision': clocking_legacy.BASE_SHA,
+        'current_revision': 'clocking-contract-20261031',
+        'original_selector_sha256': digest(original),
+        'current_selector_sha256': digest(current),
+        'original_selected_drivers': len(original),
+        'current_selected_drivers': len(current),
+        'unchanged_drivers': len(unchanged),
+        'removed_drivers': removed,
+        'added_drivers': added,
+    }
+
+
+def actual_passed_names(log_text):
+    """Preserve individual pass identities for the original-selection projection."""
+    return re.findall(r"^vlt/t_([A-Za-z0-9_]+): Self PASSED$", log_text, re.MULTILINE)
 
 
 def parse_summary(log_text):
@@ -268,8 +320,8 @@ def passed_counts(status, counts, expected):
 
 def passed_names(log_text, selected):
     """Require one actual harness pass record for each selected driver."""
-    actual = re.findall(r"^vlt/(t_[A-Za-z0-9_]+): Self PASSED$", log_text, re.MULTILINE)
-    expected = {"t_" + name for name in selected}
+    actual = actual_passed_names(log_text)
+    expected = set(selected)
     return len(actual) == len(selected) == len(set(actual)) and set(actual) == expected
 
 

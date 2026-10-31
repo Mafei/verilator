@@ -18,11 +18,11 @@ import unittest
 ROOT = Path(os.environ.get('BUILD_STATUS_SOURCE_ROOT', Path(__file__).resolve().parents[2]))
 MARKER = "# The harness uses this checkout's headers and release binary."
 HEAD = '1' * 40
-EVIDENCE = ('semantic-waves', 'finish-waves', 'controls-waves', 'sv-semantics-waves',
-            'thread-waves', 'ram-waves', 'results')
+EVIDENCE = ('semantic-waves', 'clocking-legacy', 'finish-waves', 'controls-waves',
+            'sv-semantics-waves', 'thread-waves', 'ram-waves', 'results')
 REQUIRED = {
     'regress', 'check_results', 'threads', 'ram', 'git_head', 'icarus_run', 'icarus_check',
-    'icarus_full18', 'finish9_run', 'finish9_check'
+    'icarus_full18', 'finish9_run', 'finish9_check', 'clocking_wave', 'legacy_run', 'legacy_audit'
 }
 REQUIRED.update('evidence:' + mode for mode in EVIDENCE)
 
@@ -60,6 +60,10 @@ else:
             'run_thread_controls.py': 'threads', 'ram_acceptance.py': 'ram'}
     if program == 'log_evidence.py':
         key = 'evidence:' + args[1]
+    elif program == 'clocking_legacy.py':
+        key = 'legacy_' + args[1]
+    elif program == 'clocking_wave.py':
+        key = 'clocking_wave'
     elif program == 'icarus_acceptance.py':
         key = 'icarus_full18' if '--full18' in args else 'icarus_' + args[1]
     elif program == 'finish_acceptance.py':
@@ -148,6 +152,18 @@ sys.exit(config['exits'].get(key, 2 if key.startswith('unexpected:') else 0))
     def test_regression_checker_failure_is_preserved(self):
         result, _ = self.assert_failed({'check_results': 9})
         self.assertIn('regression_check=9', result.stdout)
+
+    def test_clocking_failure_gates_and_order_are_preserved(self):
+        for key, marker in (('clocking_wave', 'clocking_wave'), ('legacy_run', 'legacy_replay'),
+                            ('legacy_audit', 'legacy_audit')):
+            with self.subTest(key=key):
+                result, rows = self.assert_failed({key: 17})
+                self.assertIn(marker + '=17', result.stdout)
+                keys = [row['key'] for row in rows]
+                self.assertLess(keys.index('regress'), keys.index('legacy_run'))
+                self.assertLess(keys.index('legacy_run'), keys.index('legacy_audit'))
+                self.assertLess(keys.index('legacy_audit'), keys.index('check_results'))
+                self.assertLess(keys.index('legacy_audit'), keys.index('evidence:results'))
 
     def test_each_evidence_failure_is_preserved(self):
         for mode in EVIDENCE:
