@@ -33,6 +33,11 @@ fi
 python3 -m venv .ci-venv
 source .ci-venv/bin/activate
 python3 -m pip install --disable-pip-version-check distro
+python3 -m pip install --no-cache-dir --disable-pip-version-check --no-deps \
+    --only-binary=:all: --require-hashes --target "$root/.ci-tools/solver" \
+    -r ci/portable/solver-requirements.txt
+export PATH="$root/.ci-tools/solver/bin:$PATH"
+z3 --version
 # Build the waveform comparator on the Rocky baseline; Ubuntu-built binaries
 # can require a newer glibc. macOS uses the official ARM64 release archive.
 if [[ -n ${PORTABLE_BASELINE:-} ]]; then

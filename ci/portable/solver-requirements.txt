@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+# Official PyPI 4.15.3.0 wheels: macOS ARM64 and manylinux2014 x86_64.
+z3-solver==4.15.3.0 \
+    --hash=sha256:65335aab295ded7c0ce27c85556067087a87052389ff160777d1a1d48ef0d74f \
+    --hash=sha256:a9afd9ceb290482097474d43f08415bcc1874f433189d1449f6c1508e9c68384
