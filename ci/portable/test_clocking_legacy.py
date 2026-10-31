@@ -50,14 +50,17 @@ class ArchiveTest(unittest.TestCase):
             row = next(row for row in data['fixtures'] if row['archived_path'].endswith('.out'))
             row['sha256'] = legacy.file_sha(path)
             row['bytes'] = path.stat().st_size
+
         self.change_manifest(update)
         with self.assertRaisesRegex(ValueError, 'archive_fixture_bytes_changed'):
             legacy.verify_archive(self.repo)
 
     def test_selection_and_consistent_rehash_cannot_drop_failures(self):
+
         def update(data):
             data['original_selected_names'].remove(legacy.LEGACY_NAMES[0])
             data['original_selector_sha256'] = legacy.selector_sha(data['original_selected_names'])
+
         self.change_manifest(update)
         with self.assertRaisesRegex(ValueError, 'original_selection_mismatch'):
             legacy.verify_archive(self.repo)
@@ -113,12 +116,27 @@ class NativeFailureTest(unittest.TestCase):
 
     def test_log_and_receipt_mutations_are_rejected(self):
         original = copy.deepcopy(self.receipt)
-        for change in ({'actual_exit': 0, 'exit_status': 0, 'raw_wait_status': 0},
-                       {'termination_reason': 'timeout'}, {'kill_sent': True},
-                       {'actual_exit': True}, {'wait4_pid': self.receipt['pid'] + 1},
-                       {'log_sha256': '0' * 64},
-                       {'exited_normally': False, 'signal': 11, 'exit_status': None,
-                        'actual_exit': -11, 'raw_wait_status': 11}):
+        for change in ({
+                'actual_exit': 0,
+                'exit_status': 0,
+                'raw_wait_status': 0
+        }, {
+                'termination_reason': 'timeout'
+        }, {
+                'kill_sent': True
+        }, {
+                'actual_exit': True
+        }, {
+                'wait4_pid': self.receipt['pid'] + 1
+        }, {
+                'log_sha256': '0' * 64
+        }, {
+                'exited_normally': False,
+                'signal': 11,
+                'exit_status': None,
+                'actual_exit': -11,
+                'raw_wait_status': 11
+        }):
             with self.subTest(change=change):
                 self.receipt = dict(original, **change)
                 with self.assertRaises(ValueError):
@@ -147,16 +165,29 @@ class CoreTest(unittest.TestCase):
 
     def setUp(self):
         self.report = {
-            'schema': 'clocking-legacy-audit-v1', 'head': legacy.BASE_SHA,
-            'compiler_checkout_head': legacy.BASE_SHA, 'compiler_sha256': 'a' * 64,
-            'compiler_matches_run_head': True, 'compiler_build_provenance': 'NOT_INDEPENDENTLY_VERIFIED',
-            'archive_manifest_sha256': 'b' * 64, 'evidence_sha256': 'c' * 64,
+            'schema': 'clocking-legacy-audit-v1',
+            'head': legacy.BASE_SHA,
+            'compiler_checkout_head': legacy.BASE_SHA,
+            'compiler_sha256': 'a' * 64,
+            'compiler_matches_run_head': True,
+            'compiler_build_provenance': 'NOT_INDEPENDENTLY_VERIFIED',
+            'archive_manifest_sha256': 'b' * 64,
+            'evidence_sha256': 'c' * 64,
             'original_selector_sha256': legacy.ORIGINAL_SELECTOR_SHA256,
-            'original_selected_count': 438, 'remaining_original_count': 436,
-            'classification': legacy.CLASSIFICATION, 'audit_verified': True,
-            'semantic_pass': False, 'original_criteria_pass': False, 'raw_returncode': 1,
+            'original_selected_count': 438,
+            'remaining_original_count': 436,
+            'classification': legacy.CLASSIFICATION,
+            'audit_verified': True,
+            'semantic_pass': False,
+            'original_criteria_pass': False,
+            'raw_returncode': 1,
             'raw_returncode_scope': 'DERIVED_FROM_BOTH_OBSERVED_NATIVE_FAILURES',
-            'counts': {'passed': 0, 'failed': 2}, 'global_status': 'HOLD', 'cases': {}
+            'counts': {
+                'passed': 0,
+                'failed': 2
+            },
+            'global_status': 'HOLD',
+            'cases': {}
         }
         for name in legacy.LEGACY_NAMES:
             folder = ROOT / legacy.ARCHIVE / 'historical-427' / name
@@ -174,12 +205,30 @@ class CoreTest(unittest.TestCase):
 
     def test_status_count_identity_and_type_tampering(self):
         original = copy.deepcopy(self.report)
-        for change in ({'semantic_pass': True}, {'original_criteria_pass': True},
-                       {'classification': 'PASS'}, {'global_status': 'PASS'},
-                       {'raw_returncode': 0}, {'raw_returncode': True},
-                       {'counts': {'passed': False, 'failed': 2}},
-                       {'compiler_matches_run_head': False}, {'original_selected_count': 436},
-                       {'original_selector_sha256': '0' * 64}):
+        for change in ({
+                'semantic_pass': True
+        }, {
+                'original_criteria_pass': True
+        }, {
+                'classification': 'PASS'
+        }, {
+                'global_status': 'PASS'
+        }, {
+                'raw_returncode': 0
+        }, {
+                'raw_returncode': True
+        }, {
+                'counts': {
+                    'passed': False,
+                    'failed': 2
+                }
+        }, {
+                'compiler_matches_run_head': False
+        }, {
+                'original_selected_count': 436
+        }, {
+                'original_selector_sha256': '0' * 64
+        }):
             with self.subTest(change=change):
                 self.report = dict(original, **change)
                 with self.assertRaises(ValueError):
