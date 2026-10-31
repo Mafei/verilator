@@ -33,6 +33,11 @@ fi
 python3 -m venv .ci-venv
 source .ci-venv/bin/activate
 python3 -m pip install --disable-pip-version-check distro
+python3 -m pip install --no-cache-dir --disable-pip-version-check --no-deps \
+    --only-binary=:all: --require-hashes --target "$root/.ci-tools/solver" \
+    -r ci/portable/solver-requirements.txt
+export PATH="$root/.ci-tools/solver/bin:$PATH"
+z3 --version
 # Build the waveform comparator on the Rocky baseline; Ubuntu-built binaries
 # can require a newer glibc. macOS uses the official ARM64 release archive.
 if [[ -n ${PORTABLE_BASELINE:-} ]]; then
@@ -160,7 +165,7 @@ export VERILATOR_ROOT="$root"
 export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
 # Preserve every baseline selection and add the independently checked SV semantic controls.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 upstream_daily_20261029 upstream_daily_20261030 || regress_status=$?
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 upstream_daily_20261029 upstream_daily_20261030 upstream_daily_20261031 || regress_status=$?
 regression_check_status=0
 python3 ci/portable/check_results.py || regression_check_status=$?
 # A failed gate must not prevent independent collectors from recording their results.
