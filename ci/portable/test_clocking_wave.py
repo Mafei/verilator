@@ -27,7 +27,13 @@ class ClockingWaveTest(unittest.TestCase):
             raise ValueError('Captured baseline waveform changed')
 
     def test_original_capture(self):
-        self.assertEqual(clocking_wave.verify(self.wave), 426)
+        self.assertEqual(clocking_wave.verify(self.wave), 474)
+
+    def test_first_output_early_with_later_timestamp_preserved(self):
+        """An early first drive must fail even if its later observation is correct."""
+        wave = self.wave.replace(b'#15000\n', b'#14000\nb1011010010011 /\n#15000\n', 1)
+        with self.assertRaisesRegex(ValueError, 'clocking_output_transition_times'):
+            clocking_wave.verify(wave)
 
     def test_output_at_event_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -38,7 +44,7 @@ class ClockingWaveTest(unittest.TestCase):
             clocking_wave.verify(self.wave.replace(b'#15001\n', b'#15002\n'))
 
     def test_zero_output_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, 'clocking_value'):
+        with self.assertRaises(ValueError):
             clocking_wave.verify(self.wave.replace(b'#16002\n', b'b0 /\n#16002\n', 1))
 
     def test_passive_source_write_is_rejected(self):
@@ -52,7 +58,7 @@ class ClockingWaveTest(unittest.TestCase):
     def test_missing_cycle_is_rejected(self):
         begin = self.wave.index(b'#15001\n')
         end = self.wave.index(b'#16002\n', begin)
-        with self.assertRaisesRegex(ValueError, 'clocking_missing_observation'):
+        with self.assertRaises(ValueError):
             clocking_wave.verify(self.wave[:begin] + self.wave[end:])
 
     def test_truncated_wave_is_rejected(self):

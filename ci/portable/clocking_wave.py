@@ -86,6 +86,21 @@ def verify(data):  # pylint: disable=too-many-locals
         require(int(raw, 2) == expected, f'clocking_value time={time} signal={signal}')
         checks += 1
 
+    expected_updates = [15001 + cycle * 10000 for cycle in range(8)]
+    for signal in output_values(0):
+        require(signal in names, 'clocking_missing_output')
+        previous = None
+        updates = []
+        for time, frame in sorted(frames.items()):
+            raw = frame.get(names[signal], '')
+            require(raw and not set(raw).difference('01'), 'clocking_unknown_value')
+            value = int(raw, 2)
+            if previous is not None and value != previous:
+                updates.append(time)
+            previous = value
+        require(updates == expected_updates, 'clocking_output_transition_times')
+        checks += len(updates)
+
     for cycle in range(8):
         value = (cycle * 5281 + 5779) & 0x7fff
         event = 15000 + cycle * 10000
