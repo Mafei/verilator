@@ -7784,6 +7784,60 @@ class WidthVisitor final : public VNVisitor {
         return true;
     }
 
+    // An output actual is parsed as an expression until the port direction is known.
+    // Reject value operators before widthing can lower or fold away their source form.
+    // Other forms retain their existing type and writability checks.
+    static const AstNodeExpr* findOutputRvalue(const AstNodeExpr* const nodep) {
+        if (VN_IS(nodep, NodeVarRef) || VN_IS(nodep, MemberSel)) return nullptr;
+        // Keep the existing PORTSHORT diagnostic and suppression policy for constants.
+        if (VN_IS(nodep, Const)) return nullptr;
+        if (const AstNodePreSel* const selp = VN_CAST(nodep, NodePreSel)) {
+            return findOutputRvalue(selp->fromp());
+        }
+        if (const AstNodeSel* const selp = VN_CAST(nodep, NodeSel)) {
+            return findOutputRvalue(selp->fromp());
+        }
+        if (const AstSel* const selp = VN_CAST(nodep, Sel)) {
+            return findOutputRvalue(selp->fromp());
+        }
+        if (const AstStructSel* const selp = VN_CAST(nodep, StructSel)) {
+            return findOutputRvalue(selp->fromp());
+        }
+        if (const AstConcat* const concatp = VN_CAST(nodep, Concat)) {
+            if (const AstNodeExpr* const badp = findOutputRvalue(concatp->lhsp())) return badp;
+            return findOutputRvalue(concatp->rhsp());
+        }
+        if (const AstReplicate* const concatp = VN_CAST(nodep, Replicate)) {
+            // The parser represents a self-determined concatenation as Replicate(1).
+            const AstConst* const countp = VN_CAST(concatp->countp(), Const);
+            if (!VN_IS(concatp->srcp(), Const) && countp && !countp->num().isOpaque()
+                && !countp->num().isFourState() && !countp->num().isEqOne()) {
+                return nodep;
+            }
+            return findOutputRvalue(concatp->srcp());
+        }
+        if (const AstNodeStream* const streamp = VN_CAST(nodep, NodeStream)) {
+            return findOutputRvalue(streamp->lhsp());
+        }
+        if (const AstPattern* const patternp = VN_CAST(nodep, Pattern)) {
+            for (const AstNode* itemp = patternp->itemsp(); itemp; itemp = itemp->nextp()) {
+                const AstPatMember* const memberp = VN_CAST(itemp, PatMember);
+                if (!memberp || memberp->keyp() || memberp->repp()) return patternp;
+                for (const AstNodeExpr* valuep = memberp->lhssp(); valuep;
+                     valuep = VN_AS(valuep->nextp(), NodeExpr)) {
+                    if (const AstNodeExpr* const badp = findOutputRvalue(valuep)) return badp;
+                }
+            }
+            return nullptr;
+        }
+        if (VN_IS(nodep, NodeBiop) || VN_IS(nodep, NodeUniop) || VN_IS(nodep, NodeTriop)
+            || VN_IS(nodep, NodeFTaskRef) || VN_IS(nodep, Cast) || VN_IS(nodep, CastParse)
+            || VN_IS(nodep, CastSize)) {
+            return nodep;
+        }
+        return nullptr;
+    }
+
     void visit(AstPin* nodep) override {
         VL_RESTORER(m_writerp);
         m_writerp = nodep;
@@ -7817,6 +7871,15 @@ class WidthVisitor final : public VNVisitor {
             // Very much like like an assignment, but which side is LH/RHS
             // depends on pin being a in/output/inout.
             const VDirection pinDirection = nodep->modVarp()->direction();
+            if (pinDirection.isOutput()) {
+                AstNodeExpr* const exprp = VN_AS(nodep->exprp(), NodeExpr);
+                if (const AstNodeExpr* const badp = findOutputRvalue(exprp)) {
+                    badp->v3error("Output port connection must be an lvalue (IEEE 1800-2023 "
+                                  "23.3.3).");
+                    VL_DO_DANGLING(pushDeletep(exprp->unlinkFrBack()), exprp);
+                    return;
+                }
+            }
             if (VN_IS(nodep->exprp(), NodeStream) && pinDirection.isInoutOrRef()) {
                 nodep->exprp()->v3error("Streaming concatenation cannot be connected to '"
                                         << pinDirection.prettyName()

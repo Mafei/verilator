@@ -1,0 +1,42 @@
+%Error: t/t_inst_output_value_bad.v:37:31: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   37 |   output_module arithmetic (a + b);
+      |                               ^
+        ... See the manual at https://verilator.org/verilator_doc.html?v=latest for more assistance.
+%Error: t/t_inst_output_value_bad.v:38:37: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   38 |   output_if interface_arithmetic (a + b);
+      |                                     ^
+%Error: t/t_inst_output_value_bad.v:39:24: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   39 |   output_module unary (~a);
+      |                        ^
+%Error: t/t_inst_output_value_bad.v:40:43: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   40 |   output_module conditional_value (choose ? a : b);
+      |                                           ^
+%Error: t/t_inst_output_value_bad.v:41:33: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   41 |   output_module function_value (value());
+      |                                 ^~~~~
+%Error: t/t_inst_output_value_bad.v:42:30: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   42 |   output_module cast_value (7'(a));
+      |                              ^
+%Error: t/t_inst_output_value_bad.v:43:47: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   43 |   output_module concat_value ({a[6:4], b[3:0] + 4'h1});
+      |                                               ^
+%Error: t/t_inst_output_value_bad.v:44:30: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   44 |   output_packet keyed_value ('{tag:a[6:4], data:b[3:0]});
+      |                              ^~
+%Error: t/t_inst_output_value_bad.v:45:34: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   45 |   output_array replicated_value ('{2{a}});
+      |                                  ^~
+%Error: t/t_inst_output_value_bad.v:46:37: Output port connection must be an lvalue (IEEE 1800-2023 23.3.3).
+                                         : ... note: In instance 't'
+   46 |   output_wide packed_replication ({2{a}});
+      |                                     ^
+%Error: Exiting due to
