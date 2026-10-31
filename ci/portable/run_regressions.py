@@ -232,7 +232,15 @@ GROUPS = {
     ],
     # Official changes through 453b02a33cf3a569a57f853aad3fc5d1523517ab.
     "upstream_daily_20261030":
-    ["trace_dumpvars_sparse_fst", "trace_dumpvars_sparse_saif", "trace_dumpvars_sparse_vcd"]
+    ["trace_dumpvars_sparse_fst", "trace_dumpvars_sparse_saif", "trace_dumpvars_sparse_vcd"],
+    # Official changes through 92ac4051b66ab409351361910b865b9db98b816e.
+    "upstream_daily_20261031": [
+        "class_scope_nonvirtual", "class_static_method", "cuse_iface",
+        "randomize_method_with_scoping", "unroll_stmt",
+        "trace_dumpvars_dyn_0_cc_fst", "trace_dumpvars_dyn_0_cc_saif",
+        "trace_dumpvars_dyn_0_cc_vcd", "trace_dumpvars_dyn_1_cc_fst",
+        "trace_dumpvars_dyn_1_cc_saif", "trace_dumpvars_dyn_1_cc_vcd"
+    ]
 }
 
 
