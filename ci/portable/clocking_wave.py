@@ -131,7 +131,7 @@ def verify(data):  # pylint: disable=too-many-locals
             if begin <= time < begin + 10000:
                 for signal, expected in sources.items():
                     compare(time, signal, expected)
-    require(checks >= 426, 'clocking_incomplete_checks')
+    require(checks >= 474, 'clocking_incomplete_checks')
     return checks
 
 
@@ -184,7 +184,7 @@ def core_fields(report):
     require(
         type(report['cycles']) is int and report['cycles'] == 8
         and type(report['output_skew_ps']) is int and report['output_skew_ps'] == 1
-        and type(report['checks']) is int and 426 <= report['checks'] <= 20000,
+        and type(report['checks']) is int and 474 <= report['checks'] <= 20000,
         'clocking_typed_checks')
     # pylint: enable=unidiomatic-typecheck
     return dict(report)

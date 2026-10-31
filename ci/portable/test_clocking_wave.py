@@ -98,11 +98,11 @@ class ClockingWaveTest(unittest.TestCase):
             'wave_sha256': WAVE_SHA256,
             'sim_log_sha256': 'c' * 64,
             'cycles': 8,
-            'checks': 426,
+            'checks': 474,
             'output_skew_ps': 1,
             'semantic_pass': True
         }
-        for field, value in (('checks', True), ('checks', 425), ('cycles', 7),
+        for field, value in (('checks', True), ('checks', 426), ('checks', 473), ('cycles', 7),
                              ('output_skew_ps', 0), ('semantic_pass', False),
                              ('wave_sha256', 'unknown'), ('head', 'wrong')):
             with self.subTest(field=field, value=value):
