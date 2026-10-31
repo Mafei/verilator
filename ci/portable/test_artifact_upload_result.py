@@ -204,6 +204,15 @@ class WorkflowPolicyTest(unittest.TestCase):
                     self.assertEqual(self.field(block, 'if-no-files-found', 10), 'error')
                     self.assertIsNone(self.field(block, 'overwrite', 10))
 
+    def test_clocking_raw_wave_is_retained_for_both_platforms(self):
+        wave = 'test_regress/obj_vlt/t_clocking_port_connections/simx.vcd'
+        main = [(job, primary) for job, (primary, _, _, _) in self.policies
+                if self.field(primary, 'id') == 'upload_main_primary']
+        self.assertEqual({job for job, _ in main}, {'macos', 'rocky8'})
+        for job, primary in main:
+            with self.subTest(job=job):
+                self.assertEqual(primary.count(wave), 1)
+
     def test_semantic_steps_are_fatal_and_producer_review_precedes_upload(self):
         for job, text in self.jobs.items():
             for block in re.split(r'(?=^      - )', text, flags=re.M)[1:]:
