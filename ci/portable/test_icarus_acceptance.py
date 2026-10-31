@@ -195,7 +195,8 @@ sys.exit(item.get('build_exit',0))
         # Include the actual helper and successful gates preceding this isolated tail.
         block = source[source.index('run_evidence() {\n'):]
         block = ('smoke_status=0\nsmoke_record_status=0\nregress_status=0\n'
-                 'regression_check_status=0\nevidence_status=0\n' +
+                 'regression_check_status=0\nevidence_status=0\n'
+                 'clocking_wave_status=0\nlegacy_replay_status=0\nlegacy_audit_status=0\n' +
                  block[:block.index('\n}\n') + 3] +
                  source[source.index('icarus_head=$(git rev-parse HEAD)\n'):])
         fake_bin = self.root / 'fake-python-bin'

@@ -17,6 +17,16 @@ source values. An unused clockvar declaration has a narrowly scoped diagnostic
 waiver; this does not claim support for driving input ports. Original Strict18
 and pinned Icarus fixed128 expectations remain unchanged, with global HOLD.
 
+A separate compiler fix rejects recognized value operators connected to output
+ports after parameter and hierarchical-name resolution. Ten negative forms
+include arithmetic, calls, casts and packed replication; legal input expressions,
+selected/concatenated/streamed outputs and positional patterns have separate
+execution controls. Constants retain the existing PORTSHORT diagnostic. This
+does not implement complete lvalue grammar enforcement: count-one parser
+ambiguity and other member/type-dependent forms retain their existing checks.
+The revised selection has 440 drivers: 436 unchanged originals and four new
+drivers. The original 438-driver projection includes the two replayed failures.
+
 Artifact transport uses the existing pinned upload action, one retry after
 15 seconds, and unique names for each attempt. The job log and summary retain
 both outcomes. Publication requires a successful action outcome and finalized

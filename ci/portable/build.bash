@@ -102,6 +102,7 @@ python3 ci/portable/test_build_status.py
 python3 ci/portable/test_clocking_reporting.py
 python3 ci/portable/test_clocking_legacy.py
 python3 ci/portable/test_clocking_wave.py
+python3 ci/portable/test_artifact_upload_result.py
 {
     git rev-parse HEAD
     printf 'BASELINE=%s\n' "${PORTABLE_BASELINE:-integrated}"
@@ -167,8 +168,8 @@ export VERILATOR_ROOT="$root"
 # Keep the original per-process CPU limits while compiling generated files separately.
 export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
-# Revised 438 = 436 unchanged + 2 new drivers; the original 438 has a separate audit.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 upstream_daily_20261029 upstream_daily_20261030 upstream_daily_20261031 clocking_contract_20261031 || regress_status=$?
+# Revised 440 = 436 unchanged + 4 new drivers; the original 438 has a separate audit.
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 upstream_daily_20261029 upstream_daily_20261030 upstream_daily_20261031 clocking_contract_20261031 output_lvalue_20261031 || regress_status=$?
 clocking_wave_status=0
 python3 ci/portable/clocking_wave.py || clocking_wave_status=$?
 legacy_replay_status=0

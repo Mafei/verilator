@@ -244,6 +244,7 @@ GROUPS = {
     # The two original clocking drivers are replayed and audited separately;
     # this revision removes two stale contracts and adds two distinct drivers.
     "clocking_contract_20261031": ["clocking_port_connections", "fourstate_clocking_out_unsup"],
+    "output_lvalue_20261031": ["inst_output_lvalue", "inst_output_value_bad"],
 }
 
 
