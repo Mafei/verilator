@@ -8,6 +8,7 @@
 
 // verilog_format: off
 `define checkh(gotv,expv) do begin checks++; if ((gotv) !== (expv)) begin $write("%%Error: %s:%0d: got=%b expected=%b\n", `__FILE__, `__LINE__, (gotv), (expv)); $stop; end end while (0);
+`define STRINGIFY(x) `"x`"
 // verilog_format: on
 
 module t;
@@ -31,7 +32,7 @@ module t;
   end
 
   initial begin
-    $dumpfile("simx.vcd");
+    $dumpfile(`STRINGIFY(`TEST_DUMPFILE));
     $dumpvars(0, t);
     for (int phase = 0; phase < 4; phase++) begin
       case (phase)
