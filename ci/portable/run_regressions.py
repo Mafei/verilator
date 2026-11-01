@@ -245,6 +245,8 @@ GROUPS = {
     # this revision removes two stale contracts and adds two distinct drivers.
     "clocking_contract_20261031": ["clocking_port_connections", "fourstate_clocking_out_unsup"],
     "output_lvalue_20261031": ["inst_output_lvalue", "inst_output_value_bad"],
+    # Official enum conditional typing plus unknown-selector value controls.
+    "upstream_daily_20261101": ["enum_cond_type", "fourstate_enum_cond"],
 }
 
 
