@@ -285,6 +285,8 @@ GROUPS = {
         "to_string_emitted_class_hierarchy6",
         "tri_pullup_bus",
         "unroll_count_exit",
+        "fourstate_wait_eval",
+        "timing_wait_eval",
     ],
 }
 
