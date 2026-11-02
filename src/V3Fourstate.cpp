@@ -4530,6 +4530,13 @@ class FourstateVisitor final : public VNVisitor {
         const AstNodeDType* const elementDTypep
             = nodep->dtypep()->skipRefp()->subDTypep()->skipRefp();
         if (elementDTypep->isIntegralOrPacked() && !needsSplitting(elementDTypep)) {
+            AstNodeExpr* const defaultp = nodep->defaultp();
+            if (defaultp && defaultp->dtypep()->skipRefp()->isIntegralOrPacked()
+                && isFourstate(defaultp)) {
+                // Keyed defaults have the same two-state element context as explicit items.
+                defaultp->replaceWith(getTwoStateCast(defaultp));
+                pushDeletep(defaultp);
+            }
             for (AstConsQueueItem* const itemp : nodep->itemspList()) {
                 AstNodeExpr* const valuep = itemp->valuep();
                 if (valuep->dtypep()->skipRefp()->isIntegralOrPacked() && isFourstate(valuep)) {
