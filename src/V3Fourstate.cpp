@@ -3853,10 +3853,11 @@ class FourstateVisitor final : public VNVisitor {
                 for (AstNode *stmtp = capturep->stmtsp(), *nextp; stmtp; stmtp = nextp) {
                     nextp = stmtp->nextp();
                     if (AstVar* const varp = VN_CAST(stmtp, Var)) {
-                        nodep->addHereThisAsNext(varp->unlinkFrBack());
+                        addPrecalculation(varp->unlinkFrBack());
                     }
                 }
             }
+            FourstateLogicTypePropagator{nodep->condp()};
         }
         iterateAndNextNull(nodep->stmtsp());
     }
