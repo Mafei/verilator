@@ -3845,12 +3845,21 @@ class FourstateVisitor final : public VNVisitor {
     void visit(AstWait* const nodep) override {
         StmtHelper stmtHelper{*this, nodep};
         if (AstNodeExpr* const condp = nodep->condp()) {
-            if (isFourstate(condp)) {
-                nodep->condp(getTwoStateCast(condp->unlinkFrBack()));
-                condp->deleteTree();
+            // Reevaluate captures with the condition, including two-state results such as ===.
+            nodep->condp(newCapturedExpression(condp->unlinkFrBack(), true));
+            if (AstExprStmt* const capturep = VN_CAST(nodep->condp(), ExprStmt)) {
+                // The expression emitter evaluates its result after the capture lambda.
+                // Keep declarations in the owning process, but no evaluations before the wait.
+                for (AstNode *stmtp = capturep->stmtsp(), *nextp; stmtp; stmtp = nextp) {
+                    nextp = stmtp->nextp();
+                    if (AstVar* const varp = VN_CAST(stmtp, Var)) {
+                        addPrecalculation(varp->unlinkFrBack());
+                    }
+                }
             }
+            FourstateLogicTypePropagator{nodep->condp()};
         }
-        iterateChildren(nodep);
+        iterateAndNextNull(nodep->stmtsp());
     }
 
     void lowerConstantWildcardCase(AstCase* const nodep) {
@@ -4070,22 +4079,9 @@ class FourstateVisitor final : public VNVisitor {
         capturep->addStmtsp(new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE}, resultp});
         capturep->resultp(new AstVarRef{flp, varp, VAccess::READ});
     }
-    AstNodeExpr* newSensitivityExpression(AstNodeExpr* const originalp, const bool truth) {
+    AstNodeExpr* newCapturedExpression(AstNodeExpr* const originalp, const bool truth) {
         FileLine* const flp = originalp->fileline();
-        if (truth && !originalp->isPure()) {
-            originalp->v3warn(E_UNSUPPORTED,
-                              "Unsupported: Impure sensitivity condition with --fourstate.");
-            pushDeletep(originalp);
-            return new AstConst{flp, AstConst::BitFalse{}};
-        }
-        if (!truth && isFourstate(originalp) && !originalp->isPure()) {
-            originalp->v3warn(
-                E_UNSUPPORTED,
-                "Unsupported: Impure four-state sensitivity expression with --fourstate.");
-            pushDeletep(originalp);
-            return new AstConst{flp, AstConst::BitFalse{}};
-        }
-        // Captures must execute when the sensitivity is evaluated, before its process runs.
+        // Captures must execute whenever the enclosing condition or sensitivity is evaluated.
         // Keep declarations local to this expression, including two-state results such as ===.
         VL_RESTORER_CLEAR(m_tmpUnusedVarps);
         VL_RESTORER(m_currentTmpSpotp);
@@ -4142,6 +4138,23 @@ class FourstateVisitor final : public VNVisitor {
         }
         captureSensitivityResult(capturep);
         return capturep;
+    }
+    AstNodeExpr* newSensitivityExpression(AstNodeExpr* const originalp, const bool truth) {
+        FileLine* const flp = originalp->fileline();
+        if (truth && !originalp->isPure()) {
+            originalp->v3warn(E_UNSUPPORTED,
+                              "Unsupported: Impure sensitivity condition with --fourstate.");
+            pushDeletep(originalp);
+            return new AstConst{flp, AstConst::BitFalse{}};
+        }
+        if (!truth && isFourstate(originalp) && !originalp->isPure()) {
+            originalp->v3warn(
+                E_UNSUPPORTED,
+                "Unsupported: Impure four-state sensitivity expression with --fourstate.");
+            pushDeletep(originalp);
+            return new AstConst{flp, AstConst::BitFalse{}};
+        }
+        return newCapturedExpression(originalp, truth);
     }
     void visit(AstSenItem* const nodep) override {
         if (AstNodeExpr* const sensp = nodep->sensp()) {
@@ -4530,6 +4543,13 @@ class FourstateVisitor final : public VNVisitor {
         const AstNodeDType* const elementDTypep
             = nodep->dtypep()->skipRefp()->subDTypep()->skipRefp();
         if (elementDTypep->isIntegralOrPacked() && !needsSplitting(elementDTypep)) {
+            AstNodeExpr* const defaultp = nodep->defaultp();
+            if (defaultp && defaultp->dtypep()->skipRefp()->isIntegralOrPacked()
+                && isFourstate(defaultp)) {
+                // Keyed defaults have the same two-state element context as explicit items.
+                defaultp->replaceWith(getTwoStateCast(defaultp));
+                pushDeletep(defaultp);
+            }
             for (AstConsQueueItem* const itemp : nodep->itemspList()) {
                 AstNodeExpr* const valuep = itemp->valuep();
                 if (valuep->dtypep()->skipRefp()->isIntegralOrPacked() && isFourstate(valuep)) {

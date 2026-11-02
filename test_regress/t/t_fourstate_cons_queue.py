@@ -13,6 +13,7 @@ test.scenarios('vlt')
 
 test.compile(verilator_flags2=['--binary', '--fourstate', '-Wno-FUTURE'])
 
-test.execute()
+test.execute(check_finished=True)
+test.file_grep(test.run_log_filename, r'CONS_QUEUE_PASS checks=(\d+) calls=2', 77)
 
 test.passes()
