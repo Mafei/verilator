@@ -120,7 +120,6 @@ module t;
   end
 
   task automatic wait_lane(input bit lane, input bit [63:0] expected_time);
-    // verilator no_inline_task
     wait (&lanes[lane]);
     `checkh($time, expected_time);
     `checkh(lanes[lane], 7'h7f);
