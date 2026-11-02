@@ -20,6 +20,8 @@ module t;
   bit [7:0] done = 0;
   bit [31:0] checks = 0;
   bit [31:0] calls = 0;
+  logic [1:0][6:0] lanes = 0;
+  bit [1:0] lane_done = 0;
 
   function automatic logic [64:0] sample(input logic [64:0] value);
     calls++;
@@ -37,19 +39,18 @@ module t;
     drive = 4'hf;
 `ifdef FOURSTATE_EXPECT
     wide = 'x;
-    #1;
-    wide = 'z;
-    bit_ready = 1;
-    #1;
-    wide[64] = 1;
-`else
-    #1;
-    bit_ready = 1;
-    #1;
-    wide[64] = 1;
 `endif
     #1;
+`ifdef FOURSTATE_EXPECT
+    wide = 'z;
+`endif
+    bit_ready = 1;
+    lanes[0] = '1;
+    #1;
+    wide[64] = 1;
+    #1;
     wide = '1;
+    lanes[1] = '1;
   end
 
   initial begin
@@ -118,10 +119,25 @@ module t;
     done[7] = 1;
   end
 
+  task automatic wait_lane(input bit lane, input bit [63:0] expected_time);
+    // verilator no_inline_task
+    wait (&lanes[lane]);
+    `checkh($time, expected_time);
+    `checkh(lanes[lane], 7'h7f);
+    lane_done[lane] = 1;
+  endtask
+
   initial begin
-    wait (&done);
+    fork
+      wait_lane(0, 64'd2);
+      wait_lane(1, 64'd4);
+    join
+  end
+
+  initial begin
+    wait ((&done) && (&lane_done));
     #1ps;
-    if (checks != 17) $fatal(1, "Missing wait condition checks");
+    if (checks != 21) $fatal(1, "Missing wait condition checks");
     $display("WAIT_EVAL_PASS checks=%0d calls=%0d", checks, calls);
     $write("*-* All Finished *-*\n");
     $finish;

@@ -14,5 +14,5 @@ test.compile(verilator_flags2=[
     '--binary', '--fourstate', '--debug-check', '+define+FOURSTATE_EXPECT', '-Wno-FUTURE'
 ])
 test.execute(check_finished=True)
-test.file_grep(test.run_log_filename, r'^WAIT_EVAL_PASS checks=(\d+) calls=1$', 17)
+test.file_grep(test.run_log_filename, r'^WAIT_EVAL_PASS checks=(\d+) calls=1$', 21)
 test.passes()
