@@ -3847,6 +3847,16 @@ class FourstateVisitor final : public VNVisitor {
         if (AstNodeExpr* const condp = nodep->condp()) {
             // Reevaluate captures with the condition, including two-state results such as ===.
             nodep->condp(newCapturedExpression(condp->unlinkFrBack(), true));
+            if (AstExprStmt* const capturep = VN_CAST(nodep->condp(), ExprStmt)) {
+                // The expression emitter evaluates its result after the capture lambda.
+                // Keep declarations in the owning process, but no evaluations before the wait.
+                for (AstNode *stmtp = capturep->stmtsp(), *nextp; stmtp; stmtp = nextp) {
+                    nextp = stmtp->nextp();
+                    if (AstVar* const varp = VN_CAST(stmtp, Var)) {
+                        nodep->addHereThisAsNext(varp->unlinkFrBack());
+                    }
+                }
+            }
         }
         iterateAndNextNull(nodep->stmtsp());
     }
