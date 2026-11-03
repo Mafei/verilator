@@ -164,6 +164,8 @@ jobs:
             test_regress/obj_vltmt/t_threads_group_hier/*.log
             test_regress/obj_vltmt/t_threads_group_hier/*.status
             test_regress/obj_vltmt/t_threads_group_hier/*__stats.txt
+            test_regress/obj_vltmt/t_threads_group_hier/Vt_threads_group_hier__hier.dir/*__stats.txt
+            test_regress/obj_vltmt/t_threads_group_hier/Vtile/*__stats.txt
             test_regress/obj_vltmt/t_threads_group_vlt/*.log
             test_regress/obj_vltmt/t_threads_group_vlt/*.status
             test_regress/obj_vltmt/t_threads_group_vlt/*__stats.txt
@@ -522,6 +524,8 @@ jobs:
             test_regress/obj_vltmt/t_threads_group_hier/*.log
             test_regress/obj_vltmt/t_threads_group_hier/*.status
             test_regress/obj_vltmt/t_threads_group_hier/*__stats.txt
+            test_regress/obj_vltmt/t_threads_group_hier/Vt_threads_group_hier__hier.dir/*__stats.txt
+            test_regress/obj_vltmt/t_threads_group_hier/Vtile/*__stats.txt
             test_regress/obj_vltmt/t_threads_group_vlt/*.log
             test_regress/obj_vltmt/t_threads_group_vlt/*.status
             test_regress/obj_vltmt/t_threads_group_vlt/*__stats.txt
