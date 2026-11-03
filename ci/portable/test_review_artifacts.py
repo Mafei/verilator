@@ -67,7 +67,7 @@ class ArtifactsTest(unittest.TestCase):
                                    },
                                    summary_status='PASSED')
             write_json(main / 'out/regression-results.json', rows)
-            ast = main / 'test_regress/obj_vlt/t_debug_emitv/Vfixture_width.tree.v'
+            ast = main / 'test_regress/obj_vlt/t_debug_emitv/Vfixture_widthcommit.tree.v'
             ast.parent.mkdir(parents=True)
             ast.write_bytes((review.ROOT / 'test_regress/t/t_debug_emitv.out').read_bytes())
             write_json(main / 'out/enum-hash-evidence.json',
@@ -162,9 +162,9 @@ class ArtifactsTest(unittest.TestCase):
                               'thread_evidence',
                               side_effect=lambda main, *_args: ({
                                   'passed_names':
-                                  6,
+                                  len(review.NAMES),
                                   'counts': {
-                                      'passed': 6,
+                                      'passed': len(review.NAMES),
                                       'failed': 0
                                   },
                                   'native_exit':
@@ -581,12 +581,136 @@ class ArtifactsTest(unittest.TestCase):
         write_json(path, rows)
         self.execute(2)
 
-    def test_consistent_ast_manifest_cannot_replace_original_gold(self):
+    def change_public_ast(self):
+        """Keep a self-consistent manifest that still disagrees with the original gold."""
         main = self.root / 'mac-main'
-        path = main / 'test_regress/obj_vlt/t_debug_emitv/Vfixture_width.tree.v'
+        path = main / 'test_regress/obj_vlt/t_debug_emitv/Vfixture_widthcommit.tree.v'
         path.write_bytes(path.read_bytes() + b'// Changed public AST literal\n')
         write_json(main / 'out/enum-hash-evidence.json', [log_evidence.enum_evidence(path, main)])
-        self.execute(2)
+
+    def test_consistent_ast_manifest_cannot_replace_original_gold(self):
+        """A strict AST failure keeps independently checked counts outside the full core."""
+        self.change_public_ast()
+        self.needs['mac'] = 'failure'
+        group = next(iter(GROUPS))
+        self.set_regression(group, {'passed': len(GROUPS[group]) - 1, 'failed': 1}, 'FAILED', 10)
+        records = self.producer_records()
+        producer = records['mac']
+        self.assertFalse(producer['audit_integrity'])
+        self.assertEqual(producer['actual_exit'], 2)
+        self.assertEqual(producer['semantic_gate_exit'], 1)
+        self.assertNotIn('core', producer)
+        diagnostic = producer['diagnostics']
+        self.assertEqual(diagnostic['scope'], 'PARTIAL_REGRESSION_LOGS_RECOMPUTED_BEFORE_UPLOAD')
+        self.assertIs(diagnostic['complete_audit'], False)
+        self.assertEqual(diagnostic['failure_code'], 'ast_original_golden_mismatch')
+        self.assertEqual(diagnostic['regressions']['totals']['failed'], 1)
+        self.assertEqual(diagnostic['regressions']['totals']['passed'],
+                         sum(map(len, GROUPS.values())) - 1)
+        self.assertEqual(diagnostic['regressions']['failed_groups'], [group])
+        row = self.relay(records, 2)
+        self.assertFalse(row['audit_integrity'])
+        self.assertEqual(row['semantic_gate_exit'], 1)
+        platform = row['platforms']['macos-arm64']
+        self.assertEqual(platform['reason'], 'missing_or_invalid_typed_producer_output')
+        self.assertEqual(platform['diagnostics'], diagnostic)
+        self.assertNotIn('regressions', platform)
+        self.assertNotIn('core', platform)
+        self.assertIs(row['artifact_bytes_independently_recomputed_after_upload'], False)
+        self.assertIs(row['producer_programs_executed'], False)
+
+    def test_partial_counts_are_unknown_for_invalid_regression_files(self):
+        self.change_public_ast()
+        main = self.root / 'mac-main'
+        record = main / 'out/regression-results.json'
+        log = main / 'logs' / (next(iter(GROUPS)) + '-regressions.log')
+        provenance = main / 'out/provenance.txt'
+        originals = {path: path.read_bytes() for path in (record, log, provenance)}
+        for change in ('record_count', 'missing_log', 'wrong_provenance'):
+            with self.subTest(change=change):
+                for path, content in originals.items():
+                    path.write_bytes(content)
+                if change == 'record_count':
+                    rows = json.loads(record.read_text())
+                    rows[next(iter(GROUPS))]['counts']['passed'] -= 1
+                    write_json(record, rows)
+                elif change == 'missing_log':
+                    log.unlink()
+                else:
+                    provenance.write_text('b' * 40 + '\n')
+                records = self.producer_records()
+                self.assertFalse(records['mac']['audit_integrity'])
+                self.assertIsNone(records['mac']['diagnostics']['regressions'])
+                row = self.relay(records, 2)
+                self.assertIsNone(row['platforms']['macos-arm64']['diagnostics']['regressions'])
+
+    def test_partial_counts_require_producer_checkout_identity(self):
+        with mock.patch.object(review, 'git_head', return_value='b' * 40):
+            records = self.producer_records()
+        for record in records.values():
+            self.assertFalse(record['audit_integrity'])
+            self.assertEqual(record['diagnostics']['failure_code'], 'producer_checkout_mismatch')
+            self.assertIsNone(record['diagnostics']['regressions'])
+        self.assertFalse(self.relay(records, 2)['audit_integrity'])
+
+    def test_partial_relay_rejects_missing_or_tampered_diagnostics(self):
+        self.change_public_ast()
+        original = self.producer_records()
+        group = next(iter(GROUPS))
+        changes = [
+            (('scope', ), 'FULLY_AUDITED'),
+            (('complete_audit', ), True),
+            (('failure_code', ), 'https://private.invalid/secret'),
+            (('failure_code', ), 'producer_checkout_mismatch'),
+            (('regressions', 'totals', 'passed'), True),
+            (('regressions', 'totals', 'passed'), sum(map(len, GROUPS.values())) + 1),
+            (('regressions', 'by_group', group, 'actual_passed_names'), ['unknown_driver']),
+        ]
+        for path, value in changes:
+            with self.subTest(path=path, value=value):
+                rows = json.loads(json.dumps(original))
+                target = rows['mac']['diagnostics']
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                row = self.relay(rows, 2)
+                self.assertFalse(row['audit_integrity'])
+                self.assertNotIn('diagnostics', row['platforms']['macos-arm64'])
+        for field in ('diagnostics', 'file_mapping'):
+            rows = json.loads(json.dumps(original))
+            del rows['mac'][field]
+            self.assertNotIn('diagnostics', self.relay(rows, 2)['platforms']['macos-arm64'])
+        for field, value in (('head', 'b' * 40), ('file_mapping', {
+                'reader_root': '/fixture',
+                'recorded_root': '/wrong'
+        })):
+            rows = json.loads(json.dumps(original))
+            rows['mac'][field] = value
+            self.assertNotIn('diagnostics', self.relay(rows, 2)['platforms']['macos-arm64'])
+
+    def test_partial_relay_whitelists_failure_codes_and_fields(self):
+        private = 'private:///restricted/location?secret=DO_NOT_RELAY'
+        with mock.patch.object(review, 'ast_evidence', side_effect=ValueError(private)):
+            records = self.producer_records()
+        for record in records.values():
+            self.assertEqual(record['diagnostics']['failure_code'],
+                             'missing_or_invalid_producer_files')
+            self.assertNotIn(private, json.dumps(record))
+        records['mac']['diagnostics']['raw_error'] = private
+        records['mac']['diagnostics']['regressions']['raw_log'] = private
+        row = self.relay(records, 2)
+        self.assertNotIn(private, json.dumps(row))
+        self.assertIsNotNone(row['platforms']['macos-arm64']['diagnostics']['regressions'])
+
+    def test_public_ast_requires_the_widthcommit_stage(self):
+        main = self.root / 'mac-main'
+        ast = main / 'test_regress/obj_vlt/t_debug_emitv/Vfixture_widthcommit.tree.v'
+        ast.rename(ast.with_name('Vfixture_width.tree.v'))
+        records = self.producer_records()
+        diagnostic = records['mac']['diagnostics']
+        self.assertEqual(diagnostic['failure_code'], 'missing_or_oversized_public_ast')
+        self.assertIsNotNone(diagnostic['regressions'])
+        self.assertFalse(self.relay(records, 2)['audit_integrity'])
 
     def test_tar_compiler_and_architecture_mismatch(self):
         self.bundle('mac', 'macos-arm64', self.compiler['mac'] + b'changed', update_compiler=False)
@@ -666,7 +790,10 @@ class ArtifactsTest(unittest.TestCase):
         rows['rocky']['file_mapping']['recorded_root'] = '/different'
         self.relay(rows, 2)
         with mock.patch.object(review, 'thread_evidence', return_value=({}, '/different', False)):
-            self.execute(2)
+            row = self.execute(2)
+        diagnostic = row['platforms']['macos-arm64']['diagnostics']
+        self.assertEqual(diagnostic['failure_code'], 'producer_root_mapping_mismatch')
+        self.assertIsNone(diagnostic['regressions'])
 
     def test_native_output_file_failure_reaches_cli_exit_two(self):
         main = self.root / 'mac-main'
@@ -775,19 +902,20 @@ class ReceiptTest(unittest.TestCase):
                 self.assertTrue(failed)
 
     def test_thread_return_and_success_bind_native_record(self):
-        with tempfile.TemporaryDirectory() as temporary:
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(
+                review, 'NAMES', tuple('fixture_thread_' + str(index) for index in range(10))):
             root = Path(temporary)
             folder = root / 'out/thread-controls'
             folder.mkdir(parents=True)
             names = ['t_' + name for name in review.NAMES]
             text = ''.join('vltmt/' + name + ': Self PASSED\n' for name in names)
-            text += '==TESTS DONE, PASSED: Passed 6  Failed 0  Time 0:01\n'
+            text += '==TESTS DONE, PASSED: Passed %d  Failed 0  Time 0:01\n' % len(review.NAMES)
             (folder / 'run.log').write_text(text)
             base = dict(commit='a' * 40,
                         selected=list(review.NAMES),
                         actual_pass_names=names,
                         counts={
-                            'passed': 6,
+                            'passed': len(review.NAMES),
                             'failed': 0
                         },
                         summary_status='PASSED',
