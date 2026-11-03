@@ -28,7 +28,7 @@ test.lint(
         "--dump-graph --dumpi-tree-json 9 --no-json-ids"
     ])
 
-output_vs = test.glob_some(test.obj_dir + "/" + test.vm_prefix + "_*_width.tree.v")
+output_vs = test.glob_some(test.obj_dir + "/" + test.vm_prefix + "_*_widthcommit.tree.v")
 
 total_output_bytes = sum(Path(path).stat().st_size for path in output_vs)
 if total_output_bytes > 128 * 1024:

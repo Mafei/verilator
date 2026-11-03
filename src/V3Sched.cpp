@@ -240,7 +240,9 @@ LogicClasses gatherLogicClasses(AstNetlist* netlistp) {
             } else if (senTreep->hasCombo()) {
                 UASSERT_OBJ(!senTreep->sensesp()->nextp(), activep,
                             "combinational logic with additional sensitivities");
-                if (VN_IS(activep->stmtsp(), AlwaysPostponed)) {
+                if (activep->isPostponed()) {
+                    UASSERT_OBJ(!activep->stmtsp()->nextp(), activep,
+                                "AlwaysPostponed must be alone under its active");
                     result.m_postponed.add(scopep, activep);
                 } else {
                     result.m_comb.add(scopep, activep);
@@ -398,14 +400,14 @@ AstCFunc* createStatic(AstNetlist* netlistp, const LogicClasses& logicClasses) {
     std::vector<size_t> indices(orig.size());
     for (size_t i = 0; i < orig.size(); ++i) indices[i] = i;
     std::stable_sort(indices.begin(), indices.end(), [&](size_t a, size_t b) {
-        const AstNodeModule* const modA = orig[a].m_scopep->modp();
-        const AstNodeModule* const modB = orig[b].m_scopep->modp();
-        const bool isPkgA = VN_IS(modA, Package);
-        const bool isPkgB = VN_IS(modB, Package);
+        const AstNodeModule* const modAp = orig[a].m_scopep->modp();
+        const AstNodeModule* const modBp = orig[b].m_scopep->modp();
+        const bool isPkgA = VN_IS(modAp, Package);
+        const bool isPkgB = VN_IS(modBp, Package);
         if (isPkgA != isPkgB) return isPkgA;  // Packages before non-packages
         if (isPkgA && isPkgB) {
             // Sort packages by source file position (compilation order)
-            return modA->fileline()->operatorCompare(*modB->fileline()) < 0;
+            return modAp->fileline()->operatorCompare(*modBp->fileline()) < 0;
         }
         return false;  // Both non-package: preserve original order
     });
@@ -987,7 +989,7 @@ void schedule(AstNetlist* netlistp) {
                              extraTriggers, false, v3Global.usesTiming());
 
     // Add post updates from the timing kit
-    if (timingKit.m_postUpdates) trigKit.compBasep()->addStmtsp(timingKit.m_postUpdates);
+    if (timingKit.m_postUpdatesp) trigKit.compBasep()->addStmtsp(timingKit.m_postUpdatesp);
 
     if (dpiExportTriggerVscp) {
         trigKit.addExtraTriggerAssignment(dpiExportTriggerVscp, dpiExportTriggerIndex);
@@ -1047,10 +1049,10 @@ void schedule(AstNetlist* netlistp) {
         UINFO(2, "Scheduling " << name << " #logic = " << logic.size());
         AstVarScope* const trigVscp = trigKit.newTrigVec(name);
         // Add the trigger indices of the input logic
-        for (LogicByScope* lbs : logic) {
-            addTriggerIndices(*lbs, trigKit, false);
+        for (LogicByScope* lbsp : logic) {
+            addTriggerIndices(*lbsp, trigKit, false);
             if (name == "nba" && zeroDelayResumedVscp) {
-                addZeroDelaySensitivity(*lbs, trigKit.extraTriggerIndex(zeroDelayTriggerIndex));
+                addZeroDelaySensitivity(*lbsp, trigKit.extraTriggerIndex(zeroDelayTriggerIndex));
             }
         }
 

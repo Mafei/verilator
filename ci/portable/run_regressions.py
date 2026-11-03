@@ -288,6 +288,18 @@ GROUPS = {
         "fourstate_wait_eval",
         "timing_wait_eval",
     ],
+    "upstream_daily_20261103": [
+        "dfg_postponed_active",
+        "package_import_wild",
+        "package_import_wild_bad",
+        "package_import_wild_scale",
+        "package_export_unimported_bad",
+        "unroll_bit_copy",
+        "randomize_solver_reply",
+        "constraint_unique_cond",
+        "class_name",
+        "lint_similarname",
+    ],
 }
 
 

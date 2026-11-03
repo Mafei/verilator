@@ -53,7 +53,7 @@ def enum_evidence(path, root):
 
 def results_evidence(root):
     """Print enum records and output hashes, excluding the checksum file itself."""
-    paths = sorted((root / "test_regress/obj_vlt/t_debug_emitv").glob("*_width.tree.v"))
+    paths = sorted((root / "test_regress/obj_vlt/t_debug_emitv").glob("*_widthcommit.tree.v"))
     if not paths:
         raise FileNotFoundError("Missing debug enum output")
     records = [enum_evidence(path, root) for path in paths]
