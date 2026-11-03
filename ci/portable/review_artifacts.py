@@ -166,7 +166,7 @@ def ast_evidence(main, source):
         source / 'test_regress/vltest_generated_ids.py')['normalize_generated_identifiers']
     golden = normalize(
         (source / 'test_regress/t/t_debug_emitv.out').read_bytes().decode('latin1'))[0]
-    paths = sorted((main / 'test_regress/obj_vlt/t_debug_emitv').glob('*_width.tree.v'))
+    paths = sorted((main / 'test_regress/obj_vlt/t_debug_emitv').glob('*_widthcommit.tree.v'))
     require(paths and sum(p.stat().st_size for p in paths) <= 128 * 1024,
             'missing_or_oversized_public_ast')
     records = [log_evidence.enum_evidence(path, main) for path in paths]
@@ -236,7 +236,8 @@ def thread_evidence(main, source, head):
         result['commit'] == head and result['selected'] == list(NAMES)
         and result['actual_pass_names'] == names and result['counts'] == counts
         and result['summary_status'] == status, 'thread_record_mismatch')
-    complete = passed_counts(status, counts, 6) and len(names) == len(set(names)) == 6
+    complete = passed_counts(status, counts,
+                             len(NAMES)) and len(names) == len(set(names)) == len(NAMES)
     require(set(names) <= {'t_' + name for name in NAMES}, 'unexpected_thread_name')
     # native_process returns 128 + signal to its caller after preserving wait4.
     wrapper_exit = record['actual_exit'] if record[
@@ -442,11 +443,11 @@ def clocking_files(root, head):
     return evidence, clocking_wave.core_fields(wave)
 
 
-def review_platform(main, pair, source, platform, head, run_id, needs, producer_root=None):
-    require(needs in ('success', 'failure'), 'producer_job_not_completed')
-    require((main / 'out/provenance.txt').read_text().splitlines()[0] == head,
+def regression_files(root, head):
+    """Check regression logs and their records independently of other evidence files."""
+    require((root / 'out/provenance.txt').read_text().splitlines()[0] == head,
             'artifact_head_mismatch')
-    groups = read(main / 'out/regression-results.json')
+    groups = read(root / 'out/regression-results.json')
     require(set(groups) == set(GROUPS), 'missing_regression_group')
     regression_rows = {}
     for name, row in groups.items():
@@ -455,7 +456,7 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
             and type(row['expected']) is int and row['expected'] == len(GROUPS[name])
             and type(row['returncode']) is int and type(row['success']) is bool
             and all(type(n) is int for n in row['counts'].values()), 'regression_record_type')
-        text = (main / 'logs' / (name + '-regressions.log')).read_text()
+        text = (root / 'logs' / (name + '-regressions.log')).read_text()
         status, counts = parse_summary(text)
         require(status == row['summary_status'] and counts == row['counts'],
                 'regression_count_mismatch')
@@ -476,6 +477,12 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
             'passed_names_match': names_match,
             'actual_passed_names': identities,
         }
+    return regression_summary(regression_rows)
+
+
+def review_platform(main, pair, source, platform, head, run_id, needs, producer_root=None):
+    require(needs in ('success', 'failure'), 'producer_job_not_completed')
+    regressions = regression_files(main, head)
     legacy, wave = clocking_files(main, head)
     semantic = needs == 'failure'
     try:
@@ -490,7 +497,7 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
         'producer_job_result': needs,
         'groups': len(GROUPS),
         'selected_drivers': sum(map(len, GROUPS.values())),
-        'regressions': regression_summary(regression_rows),
+        'regressions': regressions,
         'selection_revision': legacy['selection_revision'],
         'clocking_legacy': legacy['legacy'],
         'clocking_wave': wave,
@@ -550,6 +557,16 @@ def review_platform(main, pair, source, platform, head, run_id, needs, producer_
 
 
 SCOPE = 'PRODUCER_FILES_RECOMPUTED_BEFORE_UPLOAD'
+PARTIAL_SCOPE = 'PARTIAL_REGRESSION_LOGS_RECOMPUTED_BEFORE_UPLOAD'
+# These failures invalidate the counts themselves, rather than an unrelated file.
+UNVERIFIED_COUNTS_CODES = frozenset(
+    ('producer_checkout_mismatch', 'unexpected_producer_root', 'producer_job_not_completed',
+     'producer_root_mapping_mismatch', 'artifact_head_mismatch', 'missing_regression_group',
+     'regression_record_type', 'regression_count_mismatch', 'regression_pass_identity_mismatch',
+     'regression_success_mismatch'))
+FAILURE_CODES = UNVERIFIED_COUNTS_CODES | frozenset(
+    ('missing_or_oversized_public_ast', 'ast_manifest_mismatch', 'ast_original_golden_mismatch',
+     'missing_or_invalid_producer_files'))
 EVIDENCE_ERRORS = (OSError, ValueError, KeyError, AssertionError, TypeError, IndexError,
                    AttributeError, EOFError, tarfile.TarError)
 
@@ -624,6 +641,22 @@ def regression_fields(data):
     require(totals == result['totals'] and data['failed_groups'] == result['failed_groups'],
             'typed_regression_summary_mismatch')
     return result
+
+
+def diagnostic_fields(data):
+    """Relay only partial checked counters; this can never supply a complete core."""
+    require(
+        data['scope'] == PARTIAL_SCOPE and data['complete_audit'] is False
+        and data['failure_code'] in FAILURE_CODES, 'invalid_partial_diagnostics')
+    require(data['failure_code'] not in UNVERIFIED_COUNTS_CODES or data['regressions'] is None,
+            'unverified_partial_counts')
+    regressions = None if data['regressions'] is None else regression_fields(data['regressions'])
+    return {
+        'scope': PARTIAL_SCOPE,
+        'complete_audit': False,
+        'failure_code': data['failure_code'],
+        'regressions': regressions
+    }
 
 
 def clocking_core(data, regressions):
@@ -777,11 +810,13 @@ def producer(args):
                       'recorded_root': args.producer_root,
                       'reader_root': str(ROOT)
                   })
+    identity_verified = False
     try:
         require(not sys.flags.optimize and git_head(ROOT) == args.expected_head,
                 'producer_checkout_mismatch')
         require(args.producer_root == ('/work' if args.platform == 'rocky8-x86_64' else str(ROOT)),
                 'unexpected_producer_root')
+        identity_verified = True
         data, failed = review_platform(ROOT,
                                        ROOT / 'pinned-icarus',
                                        ROOT,
@@ -792,9 +827,24 @@ def producer(args):
                                        producer_root=args.producer_root)
         result['core'] = core_fields(data, args.platform)
         result['semantic_gate_exit'] |= int(failed)
-    except EVIDENCE_ERRORS:
+    except EVIDENCE_ERRORS as error:
         result['audit_integrity'] = False
         result['reason'] = 'missing_or_invalid_producer_files'
+        code = str(error) if isinstance(error, ValueError) else ''
+        code = code if code in FAILURE_CODES else 'missing_or_invalid_producer_files'
+        result['diagnostics'] = {
+            'scope': PARTIAL_SCOPE,
+            'complete_audit': False,
+            'failure_code': code,
+            'regressions': None
+        }
+        # The independent log check cannot repair the failed full-file audit.
+        if identity_verified and code not in UNVERIFIED_COUNTS_CODES:
+            try:
+                result['diagnostics']['regressions'] = regression_fields(
+                    regression_files(ROOT, args.expected_head))
+            except EVIDENCE_ERRORS:
+                pass
     result['actual_exit'] = result['semantic_gate_exit'] if result['audit_integrity'] else 2
     publish(args.output, result)
     # One compact JSON value uses the native runner output file, never shell evaluation.
@@ -822,6 +872,7 @@ def summarize(args):
     for name, platform in [('MACOS', 'macos-arm64'), ('ROCKY8', 'rocky8-x86_64')]:
         needs = os.environ.get(name + '_JOB_RESULT', '')
         result['semantic_gate_exit'] |= int(needs == 'failure')
+        diagnostic = None
         try:
             require(needs in ('success', 'failure'), 'producer_job_not_completed')
             row = json.loads(os.environ.get(name + '_CORE_REVIEW', ''))
@@ -839,7 +890,6 @@ def summarize(args):
                 and row['semantic_gate_exit'] in (0, 1) and type(row['actual_exit']) is int and
                 row['actual_exit'] == (row['semantic_gate_exit'] if row['audit_integrity'] else 2),
                 'invalid_producer_identity_or_status')
-            require(row['audit_integrity'], 'producer_file_integrity_failed')
             mapping = row['file_mapping']
             require(
                 all(
@@ -848,6 +898,9 @@ def summarize(args):
                     for key in ('recorded_root', 'reader_root')) and mapping['recorded_root']
                 == ('/work' if platform == 'rocky8-x86_64' else mapping['reader_root']),
                 'invalid_root_mapping')
+            if not row['audit_integrity']:
+                diagnostic = diagnostic_fields(row['diagnostics'])
+            require(row['audit_integrity'], 'producer_file_integrity_failed')
             data = core_fields(row['core'], platform)
             require(
                 data['clocking_legacy']['head'] == data['clocking_wave']['head'] ==
@@ -880,6 +933,8 @@ def summarize(args):
                 'producer_job_result': needs,
                 'reason': 'missing_or_invalid_typed_producer_output'
             }
+            if diagnostic is not None:
+                result['platforms'][platform]['diagnostics'] = diagnostic
     if result['audit_integrity']:
         result['cross_host_ast_equal'] = ([
             x['normalized_sha256'] for x in result['platforms']['macos-arm64']['public_ast']
