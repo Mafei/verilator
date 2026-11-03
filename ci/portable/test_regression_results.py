@@ -452,7 +452,7 @@ class LogEvidenceTest(unittest.TestCase):
                 (root / directory).mkdir(parents=True)
             binary = b"fixture compiler bytes\n"
             (root / "bin/verilator_bin").write_bytes(binary)
-            tree = root / "test_regress/obj_vlt/t_debug_emitv/Vt_023_width.tree.v"
+            tree = root / "test_regress/obj_vlt/t_debug_emitv/Vt_023_widthcommit.tree.v"
             tree.write_text("__Venum_h123abcde__0\n")
             command = [shutil.which("python3"), str(SOURCE_ROOT / "ci/portable/log_evidence.py")]
             result = subprocess.run([*command, "compiler"],
