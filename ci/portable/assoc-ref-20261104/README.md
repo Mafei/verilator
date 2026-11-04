@@ -14,8 +14,9 @@ appends the 14 missing directed drivers, for 523 total.
 After building, run the two public behavior drivers:
 
 ```sh
-test_regress/t/t_assoc_ref_bounds.py
-test_regress/t/t_fourstate_assoc_ref_bounds.py
+cd test_regress
+python3 driver.py --vlt -j2 --no-skip-identical \
+  t/t_assoc_ref_bounds.py t/t_fourstate_assoc_ref_bounds.py
 ```
 
 `review.json` records source hashes and native precommit evidence. Commit-bound
