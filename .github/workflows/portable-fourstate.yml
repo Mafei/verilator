@@ -175,6 +175,8 @@ jobs:
             test_regress/obj_vltmt/t_opt_combine_dpi/*.log
             test_regress/obj_vltmt/t_opt_combine_dpi/*.status
             test_regress/obj_vltmt/t_opt_combine_dpi/*.cpp
+            test_regress/obj_vltmt/t_opt_combine_dpi/*__stats.txt
+            test_regress/obj_vlt/t_opt_combine_dpi/*__stats.txt
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_flag_language_noconfig/*.status
             test_regress/obj_vlt/t_flag_language_noconfig_bad/*.status
@@ -541,6 +543,8 @@ jobs:
             test_regress/obj_vltmt/t_opt_combine_dpi/*.log
             test_regress/obj_vltmt/t_opt_combine_dpi/*.status
             test_regress/obj_vltmt/t_opt_combine_dpi/*.cpp
+            test_regress/obj_vltmt/t_opt_combine_dpi/*__stats.txt
+            test_regress/obj_vlt/t_opt_combine_dpi/*__stats.txt
             test_regress/obj_vlt/t_fourstate_nba_event_concat/*.vcd
             test_regress/obj_vlt/t_flag_language_noconfig/*.status
             test_regress/obj_vlt/t_flag_language_noconfig_bad/*.status
