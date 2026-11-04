@@ -15,6 +15,7 @@ test.compile(verilator_flags2=["--stats"])
 
 test.execute()
 
-test.file_grep(test.stats, r'Unknowns, else branches created\s+(\d+)', 1)
+test.file_grep(test.stats, r'Unknowns, else branches created\s+(\d+)', 0)
+test.file_grep(test.stats, r'Unknowns, checked ref accesses created\s+(\d+)', 1)
 
 test.passes()

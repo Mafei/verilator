@@ -918,6 +918,7 @@ static constexpr bool validateArgsDescriptor(const char* descrp) {
     macro(ARRAY_AT,                           "at",                     PURE,   CLEAN,  false,      "r") \
     macro(ARRAY_AT_BACK,                      "atBack",                 PURE,   CLEAN,  false,      "r") \
     macro(ARRAY_AT_WRITE,                     "atWrite",                PURE,   CLEAN,  false,      "r") \
+    macro(ARRAY_AT_WRITE_BOUNDED,             "atWriteBounded",         false,  CLEAN,  false,      "rrmr") \
     macro(ARRAY_FIND,                         "find",                   PURE,   CLEAN,  false,      "") \
     macro(ARRAY_FIND_FIRST,                   "find_first",             PURE,   CLEAN,  false,      "") \
     macro(ARRAY_FIND_FIRST_INDEX,             "find_first_index",       PURE,   CLEAN,  false,      "") \

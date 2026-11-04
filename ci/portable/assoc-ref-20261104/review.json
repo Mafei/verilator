@@ -1,0 +1,165 @@
+{
+  "schema": "assoc-ref-bounds-review-v1",
+  "parent": "164a9a74197bc59d192d5de657fbb46477e41d9b",
+  "source_scope": "Direct whole fixed-array element reference arguments; existing nested/wrapped selector handling is retained.",
+  "compiler_source_sha256": {
+    "include/verilated_types.h": "624318b46ca97f01d5664d0a237e2d35c984ab71f62996c347fdd88b49d4bbf5",
+    "src/V3AstAttr.h": "064cceb45647907205f3584a5c4dc90b68afa22d8cfc536ad347230ee302c541",
+    "src/V3AstNodes.cpp": "77bbe45f574629ed5de59e75c44b62fe3d9eef018e36c9d37a6f8c72b25ffd35",
+    "src/V3Task.cpp": "9e26826d8a0ca0e9bc7cc5ddb50154bb817851d30de52caa9304a708cce23ab6",
+    "src/V3Premit.cpp": "5462d8392914a215ea46537c1e618a5a18e4b16575e062258e3815800f6ae416",
+    "src/V3Unknown.cpp": "5e1378eec1d57cb5554fa1718c4ffc83b0a9b87e7d75dcc4edb1a771d0f2c7bb"
+  },
+  "test_input_sha256": {
+    "test_regress/t/t_assoc_ref_bounds.py": {
+      "sha256": "deb0b2e80b4b1e4ef8ae1ac34b6dadab802be76175b4376cd56ded4bec214389",
+      "bytes": 596
+    },
+    "test_regress/t/t_assoc_ref_bounds.v": {
+      "sha256": "1e25d21dfc5254dd79352955a1829aa990fbfc134a559e4cd558bba40ecc0a64",
+      "bytes": 8906
+    },
+    "test_regress/t/t_fourstate_assoc_ref_bounds.py": {
+      "sha256": "9b9af173d445b6f2f49694798e0a113d58bbee57bf536703d9df1f8e3d87640d",
+      "bytes": 721
+    },
+    "test_regress/t/t_select_bound_side_effect.py": {
+      "sha256": "2b6a8384550e10bd5b61b74d4a5cf1be5b975732207743c682eb7fbb8233ae5a",
+      "bytes": 670
+    }
+  },
+  "native_precommit": {
+    "selected": [
+      "assoc_ref_bounds",
+      "fourstate_assoc_ref_bounds",
+      "assoc",
+      "assoc2",
+      "assoc_method",
+      "assoc_ref_type",
+      "assoc_default_func",
+      "assocsel_sideeffect",
+      "func_out_short_circuit",
+      "func_outfirst",
+      "select_bound1",
+      "select_bound2",
+      "select_bound3",
+      "select_bound_side_effect",
+      "select_write_oob_high",
+      "oob_2state_array"
+    ],
+    "actual_passed_names": [
+      "assoc_ref_bounds",
+      "fourstate_assoc_ref_bounds",
+      "assoc2",
+      "assoc",
+      "assoc_method",
+      "assoc_default_func",
+      "assoc_ref_type",
+      "func_out_short_circuit",
+      "assocsel_sideeffect",
+      "select_bound1",
+      "func_outfirst",
+      "select_bound2",
+      "select_bound3",
+      "select_bound_side_effect",
+      "select_write_oob_high",
+      "oob_2state_array"
+    ],
+    "counts": {
+      "passed": 16,
+      "failed": 0
+    },
+    "actual_exit": 0,
+    "raw_wait_status": 0,
+    "log_sha256": "b1a594130296801193e86352a89af1a6f337dfab3958b870e52f6fc0ab4a12ed",
+    "new_driver_checks": {
+      "assoc_ref_bounds": 997,
+      "fourstate_assoc_ref_bounds": 1162
+    },
+    "original_statistics_contract_still_failed": true
+  },
+  "native_precommit_opt_sha256": "6ee0d1a8bd19fb5579c85a033a5b5e59f1243007ec9eb3263a03592dfe4b345b",
+  "evidence_scope": "Native source-hash-bound evidence before commit, not macOS/Rocky validation. Final commit and Actions evidence are reported separately.",
+  "selection": {
+    "parent": "164a9a74197bc59d192d5de657fbb46477e41d9b",
+    "default_selected": 523,
+    "default_groups": 45,
+    "old_509_dict_order_preserved": true,
+    "old_44_execution_order_preserved": true,
+    "new_group": [
+      "assoc2",
+      "assoc_default_func",
+      "assoc_method",
+      "assoc_ref_bounds",
+      "assoc_ref_type",
+      "assocsel_sideeffect",
+      "fourstate_assoc_ref_bounds",
+      "func_outfirst",
+      "oob_2state_array",
+      "select_bound1",
+      "select_bound2",
+      "select_bound3",
+      "select_bound_side_effect",
+      "select_write_oob_high"
+    ],
+    "workflow_permissions_and_action_pins_unchanged": true,
+    "main_evidence_additions": "new2 generated C++/headers and precise select-bound stats; all driver logs/status already captured"
+  },
+  "statistics_contract_archive": "../legacy/select-bound-ref-20261104/manifest.json",
+  "unresolved_native_probes": {
+    "signed_assoc_control.sv": "Baseline and candidate both fail signed-key first: got0 expected-5. Not fixed or reclassified.",
+    "alias_explicit_control.sv": "Baseline and candidate both fail return-left alias assertion: return17 but original element18. Return-right observes18. Not fixed or reclassified.",
+    "alias_external_control.sv": "Baseline rejects non-inlined ref function external-state access with IMPURE; not suppressed."
+  },
+  "scope_limits": [
+    "Native evidence only; no macOS or Rocky results for this dirty source and no release/delivery promotion.",
+    "Checked-reference conversion is limited to direct whole-element arguments; pre-existing wrapped/nested selector handling remains, with valid 2D/class/unpacked-struct-member non-regression controls.",
+    "Four-state all-X defaults explicitly cover metadata-backed original basic numeric components; mixed packed structs and broader composite invalid-reference defaults are not established.",
+    "C++14 component validation establishes syntax/basic ABI controls, not GLIBC2.28 migration or full cross-platform portability.",
+    "Strict18/fixed128/original gold classifications and parent frozen PR50 are unchanged."
+  ],
+  "probes": {
+    "alias_explicit_control.sv": {
+      "recorded_probe_sha256": "f938600287d5286f5ce5f6fe3c39f50afcbef1817a4ad1f2305569735d0807fb",
+      "published_sha256": "4de9719badf1d07ea53f67f9827a465c05f763af98c292b669acbb2967776d22",
+      "only_added_bytes": "SPDX comment header"
+    },
+    "alias_external_control.sv": {
+      "recorded_probe_sha256": "7f3a766ce335dbcab7a6e904426ba9e7a8646030e2c213e40668b415e42c33f4",
+      "published_sha256": "9e969100f94b3f65e0bc26151bf6cbdba5dcb25680f6fbe855d7c7dbcfe53bc3",
+      "only_added_bytes": "SPDX comment header"
+    },
+    "logic_ref_control.sv": {
+      "recorded_probe_sha256": "f537b5c5e9d2ab49b51a7a74bfb95a8dcd5aaa5a3cc5563c9139d7edf5664472",
+      "published_sha256": "e59b4d561ef6fb20ecf6d17545c0562dc520f0b380bab4eb0e032918c66b07e3",
+      "only_added_bytes": "SPDX comment header"
+    },
+    "ref_2d_control.sv": {
+      "recorded_probe_sha256": "37b62ad4c9ec379488cba5ebb2a965900226aaf47033960e4a915cd97800dcbc",
+      "published_sha256": "84f89ba7aea5b9c42490de4f76935e6f57f44ab1b789d476dc1475e9245438aa",
+      "only_added_bytes": "SPDX comment header"
+    },
+    "ref_struct_member_control.sv": {
+      "recorded_probe_sha256": "274a5f30ade52dd874f62e113d71c2261f699adebc1dc95a9cab30251fc47556",
+      "published_sha256": "18d7adb11185c5ac9f9bc4ec29fee50adf789bea43cb40a507fc7dcd10f0e222",
+      "only_added_bytes": "SPDX comment header"
+    },
+    "signed_assoc_control.sv": {
+      "recorded_probe_sha256": "8ccc8b75c080b6445c77fa6fa993b5670b42fcf979cc1efeae0f3f88b50c64b9",
+      "published_sha256": "1ac53f119e38f04f74ce3b314e983788c87478dd2b6a2a30d408f4b16816fbf1",
+      "only_added_bytes": "SPDX comment header"
+    },
+    "runtime-bounded-cxx14-v1.cpp": {
+      "recorded_probe_sha256": "cdb9f8c7fc5dc4dd2cdccca1c5e09a509091cfaab7ed0bb7bb8e1f773ace69e5",
+      "published_sha256": "7cfe844c32fe9ae7b6f38d75b35261a8a13ddd0ed7bbb9c6711ae92f070f64cf",
+      "only_added_bytes": "SPDX comment header"
+    },
+    "assoc_inout_min.sv": {
+      "recorded_probe_sha256": "0c6fa1b68ef3acfa9a05bb50ac58aa0af72768c0cffdc2585d3a183d3a049940",
+      "published_sha256": "b3291fe592f808d78cbd90df6edb18597fa8e563a57597841f920999eacb33a0",
+      "only_added_bytes": "SPDX comment header"
+    }
+  },
+  "delivery_hold": true,
+  "old_gold_and_icarus_oracles_changed": false
+}

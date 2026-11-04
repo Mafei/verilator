@@ -53,6 +53,7 @@ class UnknownVisitor final : public VNVisitor {
     // STATE - across all visitors
     VDouble0 m_statUnkVars;  // Statistic of xrand variable created
     VDouble0 m_statElses;  // Statistic of else branches created for array selects
+    VDouble0 m_statCheckedRefs;  // Statistic of checked ref accesses created
     V3UniqueNames m_lvboundNames;  // For generating unique temporary variable names
     std::unique_ptr<V3UniqueNames> m_xrandNames;  // For generating unique temporary variable names
 
@@ -535,13 +536,63 @@ class UnknownVisitor final : public VNVisitor {
                 nodep->bitp(indexForArraySelect(bitp, adtypep));
                 return;
             }
+            AstNode* indexStmtp = nullptr;
+            const AstCMethodHard* const parentMethodp = VN_CAST(nodep->backp(), CMethodHard);
+            const bool wholeArgument
+                = VN_IS(nodep->backp(), Arg) || (parentMethodp && parentMethodp->pinsp() == nodep);
+            const bool checkedRef = wholeArgument && nodep->getVAccessRecurse().isRW();
+            if (checkedRef && !bitp->isPure()) {
+                // Sequence the index capture before all accessor arguments (also in C++14).
+                AstVar* const indexVarp = createAddTemp(bitp);
+                indexStmtp = new AstAssign{
+                    bitp->fileline(), new AstVarRef{bitp->fileline(), indexVarp, VAccess::WRITE},
+                    bitp};
+                bitp = new AstVarRef{nodep->fileline(), indexVarp, VAccess::READ};
+            }
             nodep->bitp(indexForArraySelect(newExprStmtOrClone(bitp), adtypep));
             AstNodeExpr* condp = new AstGte{nodep->fileline(), declElementsp, bitp};
             // Note below has null backp(); the Edit function knows how to deal with that.
             const AstNodeDType* const nodeDtp = nodep->dtypep()->skipRefp();
-            if (!lvalue
-                // Making a scalar would break if we're making an array
-                && VN_IS(nodeDtp, BasicDType)) {
+            if (checkedRef) {
+                ++m_statCheckedRefs;
+                // Return the actual element reference when valid, preserving aliases. Each
+                // invalid ref argument uses its own reset temporary, without cloning the call.
+                FileLine* const flp = nodep->fileline();
+                AstVar* const tmpp = new AstVar{flp, VVarType::MODULETEMP,
+                                                m_lvboundNames.get(nodep), nodep->dtypep()};
+                AstVar* const defaultp = new AstVar{flp, VVarType::MODULETEMP,
+                                                    m_lvboundNames.get(nodep), nodep->dtypep()};
+                const AstNodeExpr* const targetp = nodep->getVAccessTargetRecurse();
+                const AstVar* sourcep = nullptr;
+                if (const AstNodeVarRef* const refp = VN_CAST(targetp, NodeVarRef)) {
+                    sourcep = refp->varp();
+                } else if (const AstMemberSel* const selp = VN_CAST(targetp, MemberSel)) {
+                    sourcep = selp->varp();
+                }
+                if (sourcep
+                    && (sourcep->fourstateComplementp() || sourcep->isFourstateComplement())
+                    && sourcep->fourstateOriginalDTypeKwd().isIntNumeric()
+                    && VN_IS(nodeDtp, BasicDType) && nodeDtp->isIntegralOrPacked()) {
+                    // Four-state lowering has run: both value and X/Z parts default to all ones.
+                    V3Number value{nodep, nodep->width()};
+                    value.setAllBits1();
+                    defaultp->valuep(new AstConst{flp, value});
+                }
+                addVar(tmpp);
+                addVar(defaultp);
+                AstCMethodHard* const newp = new AstCMethodHard{
+                    flp, nodep->fromp()->unlinkFrBack(), VCMethod::ARRAY_AT_WRITE_BOUNDED, condp};
+                newp->addPinsp(nodep->bitp()->unlinkFrBack());
+                newp->addPinsp(new AstVarRef{flp, tmpp, VAccess::READWRITE});
+                newp->addPinsp(new AstVarRef{flp, defaultp, VAccess::READ});
+                newp->dtypeFrom(nodep);
+                AstNodeExpr* replacementp = newp;
+                if (indexStmtp) replacementp = new AstExprStmt{flp, indexStmtp, newp};
+                nodep->replaceWith(replacementp);
+                VL_DO_DANGLING(pushDeletep(nodep), nodep);
+            } else if (!lvalue
+                       // Making a scalar would break if we're making an array
+                       && VN_IS(nodeDtp, BasicDType)) {
                 // ARRAYSEL(...) -> COND(LT(bit<maxbit), ARRAYSEL(...), {width{1'bx}})
                 VNRelinker replaceHandle;
                 nodep->unlinkFrBack(&replaceHandle);
@@ -595,6 +646,7 @@ public:
     ~UnknownVisitor() override {  //
         V3Stats::addStat("Unknowns, variables created", m_statUnkVars);
         V3Stats::addStat("Unknowns, else branches created", m_statElses);
+        V3Stats::addStat("Unknowns, checked ref accesses created", m_statCheckedRefs);
     }
 };
 

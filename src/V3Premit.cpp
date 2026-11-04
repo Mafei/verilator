@@ -374,6 +374,8 @@ class PremitVisitor final : public VNVisitor {
     }
     void visit(AstCMethodHard* nodep) override {
         iterateChildren(nodep);
+        // This accessor returns an element reference; a value temporary would discard writes.
+        if (nodep->method() == VCMethod::ARRAY_AT_WRITE_BOUNDED) return;
         checkNode(nodep);
     }
     void visit(AstCvtArrayToPacked* nodep) override {
