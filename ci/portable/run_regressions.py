@@ -300,6 +300,26 @@ GROUPS = {
         "class_name",
         "lint_similarname",
     ],
+    "upstream_daily_20261104": [
+        "cover_error",
+        "flag_j_hier_build",
+        "interface_virtual_dispatch",
+        "lint_usebeforedecl_bad",
+        "opt_combine_dpi",
+        "udp_bad_no_output",
+        "covergroup_bins_unpack_bad",
+        "covergroup_bins_unpack_bad2",
+        "covergroup_bins_unpack_bad3",
+        "covergroup_bins_unpack_parse_unsup",
+        "covergroup_bins_unpack_unsup",
+        "enum_type_methods",
+        "unpacked_to_queue",
+        "struct_cons_cast",
+        "opt_merge_cond_no_motion",
+        "dpi_open_oob_bad",
+        "param_circ_bad",
+        "lint_unusedloop_removed_bad",
+    ],
 }
 
 

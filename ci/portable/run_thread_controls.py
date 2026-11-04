@@ -13,7 +13,8 @@ from run_regressions import parse_summary, passed_counts
 
 NAMES = ("threads_counter_2", "threads_nondeterminism", "fourstate_mt_trace", "trace_basic_cc_vcd",
          "variable_order_writers", "fourstate_sen_hierarchy", "threads_group",
-         "threads_group_hazard", "threads_group_hier", "threads_group_vlt")
+         "threads_group_hazard", "threads_group_hier", "threads_group_vlt", "cover_error",
+         "opt_combine_dpi")
 
 
 def main():
