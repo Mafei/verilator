@@ -1,5 +1,8 @@
 # Fixed-array reference arguments
 
+<!-- SPDX-FileCopyrightText: 2026 Mafei
+     SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0 -->
+
 The native observations below are historical evidence for PR51, based on
 implementation commit `93a84cf3` and final documentation commit `921b8562`.
 The later [lifetime reference fix](../life-ref-20261104/README.md) records its

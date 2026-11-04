@@ -1,4 +1,8 @@
 {
+  "_spdx": [
+    "SPDX-FileCopyrightText: 2026 Mafei",
+    "SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0"
+  ],
   "schema": "life-ref-native-review-v1",
   "base_commit": "921b8562ff1379bc1b1e6de49b361e01b0920001",
   "evidence_scope": "uncommitted prototype with the following exact production/test hashes; not formal final-commit or platform acceptance",
@@ -131,5 +135,23 @@
   "old_output_goldens_changed": false,
   "Strict18_fixed128_oracles_or_classifications_changed": false,
   "platform_acceptance": "pending exact final commit",
-  "hold": true
+  "hold": true,
+  "metadata_followup": {
+    "base_commit": "cf22a16ad1aae9a0ae49a36cad50404dc3b416d0",
+    "scope": "Attribution and SPDX metadata only; production C++, SV input, Python driver ASTs, selection and controls unchanged",
+    "drivers": {
+      "test_regress/t/t_opt_life_ref_alias.py": {
+        "before_sha256": "3df162ccd0bedd936060f7ed2a8dd7f5327ccfcb4efee520aeb6717c4539aa24",
+        "after_sha256": "950e147b22fb29132cb785253e33709c774549fd894e05f183094b33f7f6c057",
+        "python_AST_identical": true,
+        "attribution": "Driver scaffolding follows existing t_opt_life.py; preserve its copyright and the new contribution author."
+      },
+      "test_regress/t/t_fourstate_life_ref_alias.py": {
+        "before_sha256": "fcee4f01503c8cda52ccdb8a96bda2c090564b535e41fc0e65311420372b87f3",
+        "after_sha256": "741adc42f9aa219dc17abd63123b5296b2fb3c2e71350b975cfe6b3611fa7800",
+        "python_AST_identical": true,
+        "attribution": "Driver scaffolding follows existing t_opt_life.py; preserve its copyright and the new contribution author."
+      }
+    }
+  }
 }

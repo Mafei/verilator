@@ -1,5 +1,8 @@
 # Reference aliases in lifetime optimization
 
+<!-- SPDX-FileCopyrightText: 2026 Mafei
+     SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0 -->
+
 Two reference formals can name the same object. For example, after `left = 17;
 right = right + 1; return left;`, a call with the same valid element for both
 arguments must return 18. The previous compiler returned 17 while the element
