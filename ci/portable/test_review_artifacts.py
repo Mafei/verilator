@@ -641,6 +641,10 @@ class ArtifactsTest(unittest.TestCase):
                 records = self.producer_records()
                 self.assertFalse(records['mac']['audit_integrity'])
                 self.assertIsNone(records['mac']['diagnostics']['regressions'])
+                if change == 'missing_log':
+                    self.assertIsNotNone(records['mac']['diagnostics']['other_gates'])
+                else:
+                    self.assertIsNone(records['mac']['diagnostics']['other_gates'])
                 row = self.relay(records, 2)
                 self.assertIsNone(row['platforms']['macos-arm64']['diagnostics']['regressions'])
 
@@ -711,6 +715,167 @@ class ArtifactsTest(unittest.TestCase):
         self.assertEqual(diagnostic['failure_code'], 'missing_or_oversized_public_ast')
         self.assertIsNotNone(diagnostic['regressions'])
         self.assertFalse(self.relay(records, 2)['audit_integrity'])
+
+    def test_partial_reported_gates_survive_ast_failure(self):
+        self.change_public_ast()
+        self.needs['mac'] = 'failure'
+        main = self.root / 'mac-main'
+        full_path = main / 'out/icarus/check-full18.json'
+        full = json.loads(full_path.read_text())
+        full.update(full18_gate_exit=1, counts={'passed': 16, 'failed': 2})
+        write_json(full_path, full)
+        pair_path = main / 'pinned-icarus/RUN_SUMMARY.json'
+        pair = json.loads(pair_path.read_text())
+        pair['pair_status_counts'] = {
+            'PASS_BOTH': 104,
+            'UNREVIEWED_OUTPUT_DIFFERENCE': 6,
+            'VERILATOR_COMPILE_FAILED': 8,
+            'VERILATOR_UNSUPPORTED': 10
+        }
+        write_json(pair_path, pair)
+        expected, failed = review.reported(main, main / 'pinned-icarus', self.head)
+        self.assertTrue(failed)
+        records = self.producer_records()
+        record = records['mac']
+        self.assertFalse(record['audit_integrity'])
+        self.assertEqual(record['actual_exit'], 2)
+        self.assertEqual(record['semantic_gate_exit'], 1)
+        self.assertNotIn('core', record)
+        self.assertEqual(record['diagnostics']['other_gates'], expected)
+        row = self.relay(records, 2)
+        self.assertFalse(row['audit_integrity'])
+        self.assertEqual(row['semantic_gate_exit'], 1)
+        self.assertEqual(row['platforms']['macos-arm64']['diagnostics']['other_gates'], expected)
+        self.assertIs(row['producer_programs_executed'], False)
+        self.assertIs(row['artifact_bytes_independently_recomputed_after_upload'], False)
+
+    def test_partial_reported_gates_invalid_files_are_unknown(self):
+        self.change_public_ast()
+        main = self.root / 'mac-main'
+        paths = {
+            'full': main / 'out/icarus/check-full18.json',
+            'finish': main / 'out/finish9/check.json',
+            'pair': main / 'pinned-icarus/RUN_SUMMARY.json'
+        }
+        original = {key: json.loads(path.read_text()) for key, path in paths.items()}
+        cases = [('full', None, None), ('finish', None, None), ('pair', None, None),
+                 ('full', 'compiler_head', 'b' * 40), ('finish', 'commit', 'b' * 40),
+                 ('pair', 'verilator_head', 'b' * 40), ('pair', 'pin', 'b' * 40),
+                 ('full', 'full18_gate_exit', True), ('full', 'counts', {
+                     'passed': 17
+                 }), ('full', 'selected', 17), ('finish', 'passed', -1),
+                 ('finish', 'selected', True), ('pair', 'fixed_selected', 127),
+                 ('pair', 'full_suite_complete', True), ('pair', 'unselected_UNRUN', 3723),
+                 ('pair', 'pair_status_counts', {
+                     'X' * 65: 128
+                 }), ('full', '__update__', {
+                     'selected': 17,
+                     'counts': {
+                         'passed': 17
+                     }
+                 }), ('finish', '__update__', {
+                     'executed': 10,
+                     'passed': 10
+                 }),
+                 ('pair', '__update__', {
+                     'fixed_selected': 127,
+                     'unselected_UNRUN': 3723,
+                     'pair_status_counts': {
+                         'PASS_BOTH': 127
+                     }
+                 }), ('pair', '__update__', {
+                     'default_denominator': 3851,
+                     'unselected_UNRUN': 3723
+                 })]
+        for name, field, value in cases:
+            with self.subTest(name=name, field=field, value=value):
+                for key, path in paths.items():
+                    write_json(path, original[key])
+                if field is None:
+                    paths[name].unlink()
+                elif field == '__update__':
+                    write_json(paths[name], dict(original[name], **value))
+                else:
+                    write_json(paths[name], dict(original[name], **{field: value}))
+                records = self.producer_records()
+                self.assertFalse(records['mac']['audit_integrity'])
+                self.assertEqual(records['mac']['actual_exit'], 2)
+                self.assertIsNone(records['mac']['diagnostics']['other_gates'])
+                row = self.relay(records, 2)
+                self.assertIsNone(row['platforms']['macos-arm64']['diagnostics']['other_gates'])
+
+    def test_partial_reported_gates_require_identity_and_provenance(self):
+        self.change_public_ast()
+        provenance = self.root / 'mac-main/out/provenance.txt'
+        provenance.write_text('b' * 40 + '\n')
+        records = self.producer_records()
+        self.assertIsNone(records['mac']['diagnostics']['other_gates'])
+        provenance.write_text(self.head + '\n')
+        with mock.patch.object(review, 'git_head', return_value='b' * 40):
+            records = self.producer_records()
+        for record in records.values():
+            self.assertIsNone(record['diagnostics']['other_gates'])
+        row = self.relay(records, 2)
+        self.assertFalse(row['audit_integrity'])
+
+    def test_partial_reported_relay_rejects_tampering(self):
+        self.change_public_ast()
+        original = self.producer_records()
+        changes = [(('scope', ), 'independently_recomputed'), (('full18_gate_exit', ), False),
+                   (('full18', 'counts'), {
+                       'passed': 17
+                   }), (('finish9', 'executed'), 10), (('fixed128', 'full_suite_complete'), True),
+                   (('fixed128', 'pair_status_counts'), {
+                       'PASS_BOTH': True
+                   })]
+        for path, value in changes:
+            with self.subTest(path=path, value=value):
+                records = json.loads(json.dumps(original))
+                target = records['mac']['diagnostics']['other_gates']
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                row = self.relay(records, 2)
+                self.assertFalse(row['audit_integrity'])
+                self.assertNotIn('diagnostics', row['platforms']['macos-arm64'])
+        for field, value in [('head', 'b' * 40), ('run_id', 999), ('run_attempt', 999),
+                             ('file_mapping', {
+                                 'reader_root': '/fixture',
+                                 'recorded_root': '/wrong'
+                             })]:
+            with self.subTest(field=field):
+                records = json.loads(json.dumps(original))
+                records['mac'][field] = value
+                self.assertNotIn('diagnostics', self.relay(records, 2)['platforms']['macos-arm64'])
+        records = json.loads(json.dumps(original))
+        records['mac']['diagnostics'].update(failure_code='producer_checkout_mismatch',
+                                             regressions=None)
+        self.assertNotIn('diagnostics', self.relay(records, 2)['platforms']['macos-arm64'])
+        private = 'private:///DO_NOT_RELAY'
+        original['mac']['diagnostics']['other_gates']['raw_log'] = private
+        original['mac']['diagnostics']['other_gates']['full18']['private_path'] = private
+        self.assertNotIn(private, json.dumps(self.relay(original, 2)))
+
+    def test_partial_reported_failure_keeps_semantic_one(self):
+        for name in ('mac', 'rocky'):
+            path = self.root / (name + '-main/pinned-icarus/RUN_SUMMARY.json')
+            row = json.loads(path.read_text())
+            row['overall_exit'] = 0  # The original counts still contain an output difference.
+            write_json(path, row)
+        with mock.patch.object(review,
+                               'ast_evidence',
+                               side_effect=ValueError('ast_original_golden_mismatch')):
+            records = self.producer_records()
+        self.assertEqual(records['mac']['prior_job_result'], 'success')
+        self.assertEqual(records['mac']['semantic_gate_exit'], 1)
+        # Neither a zero producer flag nor absent unrelated facts can hide the
+        # valid partial counterexample retained for the macOS producer.
+        for record in records.values():
+            record['semantic_gate_exit'] = 0
+        records['rocky']['diagnostics']['other_gates'] = None
+        row = self.relay(records, 2)
+        self.assertEqual(row['semantic_gate_exit'], 1)
+        self.assertFalse(row['audit_integrity'])
 
     def test_tar_compiler_and_architecture_mismatch(self):
         self.bundle('mac', 'macos-arm64', self.compiler['mac'] + b'changed', update_compiler=False)
