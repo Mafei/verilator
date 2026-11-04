@@ -1,0 +1,135 @@
+{
+  "schema": "life-ref-native-review-v1",
+  "base_commit": "921b8562ff1379bc1b1e6de49b361e01b0920001",
+  "evidence_scope": "uncommitted prototype with the following exact production/test hashes; not formal final-commit or platform acceptance",
+  "source_sha256": {
+    "src/V3Life.cpp": "0c4eeb112028d398ea425fc79d44b2ac18b326f5fe383dd04964d0beef83e481",
+    "test_regress/t/t_opt_life_ref_alias.v": "21856cfee65a2bd53bc794eb2565a0adcccd0c3251dbb7dfc3cf9c6dc424ab12",
+    "test_regress/t/t_opt_life_ref_alias.py": "3df162ccd0bedd936060f7ed2a8dd7f5327ccfcb4efee520aeb6717c4539aa24",
+    "test_regress/t/t_fourstate_life_ref_alias.py": "fcee4f01503c8cda52ccdb8a96bda2c090564b535e41fc0e65311420372b87f3"
+  },
+  "compiler_sha256": "0e620d0d4b343ed4ec1ea1fcfaedf439985e2c09d37bf4b64e63c6b1c04be7fb",
+  "compiler_cli": "Verilator 5.055 devel rev vUNKNOWN-built20261104-921b8562f (mod)",
+  "native_stages": {
+    "prototype-build-v1": {
+      "actual_exit": 0,
+      "raw_wait_status": 0,
+      "elapsed_seconds": 279.56325005100007,
+      "log_sha256": "ba22fc84ae89aa3245ebbbc18c8781261455a6b8027916402b66f0111118121f"
+    },
+    "prototype-new2-v1": {
+      "actual_exit": 0,
+      "raw_wait_status": 0,
+      "elapsed_seconds": 14.936163693000708,
+      "log_sha256": "973f900468bdbf86f16e28950e9ac8bd1f8d3ab92b37507c76341bcf0357ca14"
+    },
+    "prototype-related15-v1": {
+      "actual_exit": 0,
+      "raw_wait_status": 0,
+      "elapsed_seconds": 85.65742318399862,
+      "log_sha256": "0def6c339bb30179c5c41e50a012aa01f7759da093343bd872ed0d6eb597ccfb"
+    },
+    "prototype-original-probe-compile-v1": {
+      "actual_exit": 0,
+      "raw_wait_status": 0,
+      "elapsed_seconds": 16.187366443999053,
+      "log_sha256": "c598611deee51fa464581927323dfddcc5d31b0da0d5b3cec536de59c819d30f"
+    },
+    "prototype-original-probe-run-v1": {
+      "actual_exit": 0,
+      "raw_wait_status": 0,
+      "elapsed_seconds": 0.2529316679992917,
+      "log_sha256": "e1fa0817919bb26f4ab695ad3907ddd5274518b24e4ae6bbe5675dce95f319b5"
+    }
+  },
+  "new_driver_checks": {
+    "two_state": 192,
+    "four_state": 288
+  },
+  "new_driver_call_sites": {
+    "two_state": 64,
+    "four_state": 96
+  },
+  "new_driver_cycles": 8,
+  "related_selected_names": [
+    "opt_life",
+    "opt_life_off",
+    "opt_life_dpi_read",
+    "opt_life_dpi_written",
+    "opt_life_loop_call",
+    "opt_life_timing_loop",
+    "func_ref",
+    "func_ref_noinline",
+    "func_ref_arg",
+    "func_ref_arg_default",
+    "func_ref_arg_default_noinl",
+    "ref_arg_array_range_dir",
+    "ref_arg_array_range_dir_noinline",
+    "func_out_short_circuit",
+    "func_outfirst"
+  ],
+  "existing_related_driver_sha256": {
+    "test_regress/t/t_opt_life.py": "0e6ea7e9ef3087ad9bdcd43000e361d4741a5cd59088a82dda61db19a45c2e82",
+    "test_regress/t/t_opt_life_off.py": "05064d552c901179efdfbdd4fea56f0546b2c6ae56737d9e94a16b41d58cf224",
+    "test_regress/t/t_opt_life_dpi_read.py": "b9dba0960cf532d4a7ee356118a801fb6e51eedd8aaad93c9f924d3149ff740a",
+    "test_regress/t/t_opt_life_dpi_written.py": "6fbc4c44d5abab6f2f997448c6ef562eafd2cbea5881730ab879f2b9ecc5dd29",
+    "test_regress/t/t_opt_life_loop_call.py": "52a66fa82cab80232539c7cb9cbab0b1f8805702dfe5b4fd6bf3890fec664429",
+    "test_regress/t/t_opt_life_timing_loop.py": "74ef30eb4acd0df85d99a82a332e14617bff0650d8454540169a182ae4fa34b4",
+    "test_regress/t/t_func_ref.py": "9132d5d5a1c7bfc54a6997473948b42ab134a7b25fdbdb8a0c87568082f9a4b8",
+    "test_regress/t/t_func_ref_noinline.py": "780e136cb26b0e90b45b2903a55cb3b79537b6b2a4486020322f28201e944f4c",
+    "test_regress/t/t_func_ref_arg.py": "9132d5d5a1c7bfc54a6997473948b42ab134a7b25fdbdb8a0c87568082f9a4b8",
+    "test_regress/t/t_func_ref_arg_default.py": "214d8e5b3952712e213fd38fcbcd8a553da8f915704054554acc940f207786e2",
+    "test_regress/t/t_func_ref_arg_default_noinl.py": "5635cada1a51c7a727200c80a8ccfe3576b873016bf35f746bc319393891ea55",
+    "test_regress/t/t_ref_arg_array_range_dir.py": "214d8e5b3952712e213fd38fcbcd8a553da8f915704054554acc940f207786e2",
+    "test_regress/t/t_ref_arg_array_range_dir_noinline.py": "be5751172d934aa6b227bf34c5a0f11d7f508162e58c01331019001ead14481e",
+    "test_regress/t/t_func_out_short_circuit.py": "52a66fa82cab80232539c7cb9cbab0b1f8805702dfe5b4fd6bf3890fec664429",
+    "test_regress/t/t_func_outfirst.py": "9132d5d5a1c7bfc54a6997473948b42ab134a7b25fdbdb8a0c87568082f9a4b8"
+  },
+  "ordinary_optimization_statistics": {
+    "lifetime_assign_deletions": 5,
+    "lifetime_constant_prop": 5,
+    "lifetime_postassign_deletions": 1
+  },
+  "original_public_probe": {
+    "path": "ci/portable/assoc-ref-20261104/probes/alias_explicit_control.sv",
+    "sha256": "4de9719badf1d07ea53f67f9827a465c05f763af98c292b669acbb2967776d22",
+    "baseline_921b_run_exit": 1,
+    "baseline_with_only_fno_life_run_exit": 0,
+    "prototype_run_exit": 0,
+    "expected_return_and_element": 18
+  },
+  "baseline_new_fixture": {
+    "test_sha256": "21856cfee65a2bd53bc794eb2565a0adcccd0c3251dbb7dfc3cf9c6dc424ab12",
+    "two_profiles_compile_exit": 0,
+    "separately_selected_failing_semantic_cases": 9,
+    "baseline_manifest_sha256": "db78f3b78b4d7b1863331a3a5176dcf17c7fa0f89b8ca7d644e696aff01ac8fc"
+  },
+  "first_bad_pass": {
+    "name": "life",
+    "before": "048_active; 049/050 report no changes",
+    "after": "051_life",
+    "return_left_replaced_with_constant": 17,
+    "early_write_removed_before_const_ref_read": true,
+    "evidence_manifest_sha256": "71d3ed606f5a4df157a5eb4b62a0a8df2da55d2c55b88ccccb2f7ffd10c5cdb4"
+  },
+  "prototype_manifest_sha256": "227150f18f35cc199ac2aa675036f2f6d321fbd76d1344b519c6b6d20d97c956",
+  "prototype_patch_sha256": "9f49e99cfa538685c0091c80f98d20f9282abb23d4fdc77a20b5bdd05e8e3a60",
+  "root_static_review_sha256": "81e29876e62f917cefa7d61f73f3d6189f76b705b55973b4591807d76529c94a",
+  "semantic_reference": "https://www.accellera.org/images/eda/sv-ec/0768.html",
+  "preserved_independent_frontend_limitations": {
+    "ref-alias-bit-index-constref-input-v3.v": "985c209bda03cbebcd94260b99ebcb1fcff88f343612c342e65cf523f0bae834",
+    "ref-alias-dynamic-constref-input-v1.v": "ded498cb6ae835460295869e509a586a7f723491329728d74136e0534775b3b2",
+    "ref-alias-onebit-fourstate-index-input-v2.v": "e8fb9044c216925685d621d42015cb8eb2741662df8231dee5ec287c8b221e95"
+  },
+  "formal_selection": {
+    "retained_previous_drivers": 523,
+    "added_drivers": 6,
+    "selected": 529,
+    "groups": 46,
+    "original_438_projection_unchanged": true
+  },
+  "old_output_goldens_changed": false,
+  "Strict18_fixed128_oracles_or_classifications_changed": false,
+  "platform_acceptance": "pending exact final commit",
+  "hold": true
+}

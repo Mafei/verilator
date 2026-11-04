@@ -336,6 +336,14 @@ GROUPS = {
         "select_bound_side_effect",
         "select_write_oob_high",
     ],
+    "life_ref_20261104": [
+        "fourstate_life_ref_alias",
+        "func_ref",
+        "func_ref_noinline",
+        "opt_life",
+        "opt_life_off",
+        "opt_life_ref_alias",
+    ],
 }
 
 

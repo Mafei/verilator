@@ -1,5 +1,10 @@
 # Fixed-array reference arguments
 
+The native observations below are historical evidence for PR51, based on
+implementation commit `93a84cf3` and final documentation commit `921b8562`.
+The later [lifetime reference fix](../life-ref-20261104/README.md) records its
+own results without rewriting these original observations.
+
 This candidate replaces statement cloning for direct whole fixed-array element
 arguments with a checked reference accessor. Valid arguments alias the original
 element. Invalid arguments use separate caller-owned storage, reset on each
