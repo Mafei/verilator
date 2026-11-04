@@ -616,12 +616,28 @@ class TaskVisitor final : public VNVisitor {
         }
     }
 
+    static AstNodeExpr* clonePortPin(AstNodeExpr* const pinp, const bool pureCheck) {
+        if (pureCheck) {
+            if (AstCMethodHard* const methodp = VN_CAST(pinp, CMethodHard)) {
+                if (methodp->method() == VCMethod::ARRAY_AT_WRITE_BOUNDED) {
+                    // Input and output each require a checked access. Repeating the private
+                    // fallback reset is intentional; all address expressions must remain pure.
+                    methodp->fromp()->foreach([](AstNode* nodep) { nodep->purityCheck(); });
+                    for (AstNodeExpr* const argp : methodp->pinspList()) {
+                        argp->foreach([](AstNode* nodep) { nodep->purityCheck(); });
+                    }
+                    return pinp->cloneTree(true);
+                }
+            }
+        }
+        return pureCheck ? pinp->cloneTreePure(true) : pinp->cloneTree(true);
+    }
+
     AstAssign* connectPortMakeInAssign(AstNodeExpr* pinp, AstVarScope* newvscp, bool pureCheck) {
         // Create input assignment to go in FRONT of function call
         AstNodeExpr* inPinp = pinp;
         if (AstResizeLValue* sinPinp = VN_CAST(inPinp, ResizeLValue)) inPinp = sinPinp->lhsp();
-        AstNodeExpr* inPinClonep
-            = pureCheck ? inPinp->cloneTreePure(true) : inPinp->cloneTree(true);
+        AstNodeExpr* inPinClonep = clonePortPin(inPinp, pureCheck);
         // A reversed array is assigned by the left-to-right order of elements (IEEE 1800-2023 7.6)
         const AstUnpackArrayDType* const arrayp
             = VN_CAST(newvscp->dtypep()->skipRefp(), UnpackArrayDType);
@@ -685,8 +701,7 @@ class TaskVisitor final : public VNVisitor {
             postRhsp = new AstCvtQueueToUnpack{pinp->fileline(), postRhsp, outPinp->dtypep()};
         }
         // Put output assignment AFTER function call
-        AstNodeExpr* const outPinClonep
-            = pureCheck ? outPinp->cloneTreePure(true) : outPinp->cloneTree(true);
+        AstNodeExpr* const outPinClonep = clonePortPin(outPinp, pureCheck);
         // A reversed array is assigned by the left-to-right order of elements (IEEE 1800-2023 7.6)
         const AstUnpackArrayDType* const arrayp
             = VN_CAST(outPinp->dtypep()->skipRefp(), UnpackArrayDType);
@@ -711,6 +726,19 @@ class TaskVisitor final : public VNVisitor {
     void connectPort(const AstNodeFTaskRef* refp, AstVar* portp, AstArg* argp, AstNode* beginp,
                      bool inlineTask) {
         AstNodeExpr* pinp = argp->exprp();
+        AstNode* pinPreludep = nullptr;
+        if (AstExprStmt* const exprp = VN_CAST(pinp, ExprStmt)) {
+            if (const AstCMethodHard* const methodp = VN_CAST(exprp->resultp(), CMethodHard)) {
+                if (methodp->method() == VCMethod::ARRAY_AT_WRITE_BOUNDED) {
+                    // Capture the address once before an inout's separate input/output accesses.
+                    pinPreludep = exprp->stmtsp()->unlinkFrBackWithNext();
+                    AstNodeExpr* const resultp = exprp->resultp()->unlinkFrBack();
+                    pinp->replaceWith(resultp);
+                    VL_DO_DANGLING(pushDeletep(pinp), pinp);
+                    pinp = resultp;
+                }
+            }
+        }
         if (inlineTask) {
             portp->unlinkFrBack();
             pushDeletep(portp);  // Remove it from the clone (not original)
@@ -752,7 +780,8 @@ class TaskVisitor final : public VNVisitor {
                                    || cMethodp->method() == VCMethod::DYN_AT_WRITE_APPEND_BACK;
                     } else {
                         changeAtWriteRecurse(cMethodp);
-                        refArgOk = cMethodp->method() == VCMethod::ARRAY_AT_WRITE;
+                        refArgOk = cMethodp->method() == VCMethod::ARRAY_AT_WRITE
+                                   || cMethodp->method() == VCMethod::ARRAY_AT_WRITE_BOUNDED;
                     }
                 }
                 if (refArgOk) {
@@ -813,6 +842,7 @@ class TaskVisitor final : public VNVisitor {
                 beginp->addNextHere(preassp);
             }
         }
+        if (pinPreludep) beginp->addNextHere(pinPreludep);
     }
 
     bool hasRefArgument(AstNodeFTask* nodep) {

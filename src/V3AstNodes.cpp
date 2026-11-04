@@ -3136,6 +3136,9 @@ const AstNodeExpr* AstNodeExpr::getVAccessTargetRecurse() const {
     if (VN_IS(this, NodeVarRef)) return this;
     if (VN_IS(this, MemberSel)) return this;
     if (VN_IS(this, SelBit)) return this;
+    if (const AstExprStmt* const anodep = VN_CAST(this, ExprStmt)) {
+        return anodep->hasResult() ? anodep->resultp()->getVAccessTargetRecurse() : nullptr;
+    }
     if (const AstNodeSel* const anodep = VN_CAST(this, NodeSel)) {
         return anodep->fromp()->getVAccessTargetRecurse();
     }
@@ -3157,6 +3160,7 @@ const AstNodeExpr* AstNodeExpr::getVAccessTargetRecurse() const {
         case VCMethod::ARRAY_AT:
         case VCMethod::ARRAY_AT_BACK:
         case VCMethod::ARRAY_AT_WRITE:
+        case VCMethod::ARRAY_AT_WRITE_BOUNDED:
         case VCMethod::DYN_AT_WRITE_APPEND:
         case VCMethod::DYN_AT_WRITE_APPEND_BACK:
             // Used for things like Queue/AssocArray/DynArray

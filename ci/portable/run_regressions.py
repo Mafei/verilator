@@ -320,6 +320,22 @@ GROUPS = {
         "param_circ_bad",
         "lint_unusedloop_removed_bad",
     ],
+    "assoc_ref_20261104": [
+        "assoc2",
+        "assoc_default_func",
+        "assoc_method",
+        "assoc_ref_bounds",
+        "assoc_ref_type",
+        "assocsel_sideeffect",
+        "fourstate_assoc_ref_bounds",
+        "func_outfirst",
+        "oob_2state_array",
+        "select_bound1",
+        "select_bound2",
+        "select_bound3",
+        "select_bound_side_effect",
+        "select_write_oob_high",
+    ],
 }
 
 

@@ -1,0 +1,108 @@
+{
+  "schema": "select-bound-ref-contract-v1",
+  "baseline_head": "164a9a74197bc59d192d5de657fbb46477e41d9b",
+  "files": {
+    "t_select_bound_side_effect.py": {
+      "sha256": "3e76ef9e86ee8d04c0e57a22480c7202b93429f953b1d2be39216ee17be0fd2f",
+      "bytes": 589,
+      "original_path": "test_regress/t/t_select_bound_side_effect.py",
+      "archived_path": "fixtures/t_select_bound_side_effect.py"
+    },
+    "t_select_bound_side_effect.v": {
+      "sha256": "afaa69d9ea92ecf4ade80bc306e59a59259c953ad57b234d782ba4e291ebc325",
+      "bytes": 1879,
+      "original_path": "test_regress/t/t_select_bound_side_effect.v",
+      "archived_path": "fixtures/t_select_bound_side_effect.v"
+    }
+  },
+  "original_contract": {
+    "statistic": "Unknowns, else branches created",
+    "expected": 1,
+    "v6_observed": 0,
+    "v6_result": "FAIL",
+    "related_driver_counts": {
+      "passed": 13,
+      "failed": 1,
+      "selected": 14
+    },
+    "harness_actual_exit": 10,
+    "harness_raw_wait_status": 2560,
+    "harness_log_sha256": "972c23c95951a5f6fac203ce95c145c6e0842ce3a343c034e6bbbcdf26074a6b",
+    "unchanged_model_actual_exit": 0,
+    "unchanged_model_raw_wait_status": 0,
+    "unchanged_model_stdout_marker": "*-* All Finished *-*",
+    "unchanged_model_log_sha256": "90d4632365bf2f1f8fcdbacf9c128aba579ad931a466037d175d56889af4eab3",
+    "final_legacy_replay": {
+      "passed": 0,
+      "failed": 1,
+      "actual_exit": 10,
+      "raw_wait_status": 2560,
+      "log_sha256": "431c24c27b50280585353a9c2a7db7fbce93a9773e9ef8f8c4e34e968efefdc6",
+      "driver_bytes_sha256": "3e76ef9e86ee8d04c0e57a22480c7202b93429f953b1d2be39216ee17be0fd2f",
+      "driver_unique_replay_basename": "t_select_bound_legacy_contract.py",
+      "top_filename_archive": "fixtures/t_select_bound_side_effect.v",
+      "model_actual_exit": 0,
+      "model_log_sha256": "ae9af2aea6e05f62550b26591bb54a29d931380fd484fcec492947a3f236210a"
+    },
+    "invalid_same_basename_attempt": {
+      "valid_legacy_evidence": false,
+      "actual_exit": 0,
+      "log_sha256": "08f7c8657722c15a2f88ae787f64c333ee5e6e0ef84227551d2d16e3afa08534",
+      "reason": "Harness resolves matching basenames in canonical t/ first, selecting the active driver. A unique replay basename plus explicit archived top filename was required."
+    }
+  },
+  "v6_experiment_identity": {
+    "source_base_head": "164a9a74197bc59d192d5de657fbb46477e41d9b",
+    "source_patch_sha256": "e282e95766440dc4f613578401bce955c873925e74ba0bd37cd384b8223df564",
+    "opt_binary_sha256": "cafb5ba61185d7e7e3ac07fb3aeeeaaaec5bc76250235df5ef14e4151114ff69",
+    "committed": false
+  },
+  "replacement_contract": {
+    "state": "validated_native_before_commit",
+    "expected_else_branches_created": 0,
+    "expected_checked_ref_accesses_created": 1,
+    "count_scope": "compiler rewrite sites before task inlining, not runtime calls",
+    "unique_site_source": "test_regress/t/t_select_bound_side_effect.v:42 add_z(arr[i])",
+    "unknown_tree_sha256": "2628d4c9a944e03c66a34e6a1e59586b32ebfd537c21deee55cdf2d4bfa1829e",
+    "behavioral_assertions_changed": false,
+    "golden_files_changed": false,
+    "red_controls": {
+      "baseline_old_else_1": {
+        "actual_exit": 10,
+        "raw_wait_status": 2560,
+        "log_sha256": "08e3b44f1c34b5829d0354944b1b258d714c98872bc483535542087057ddc6d8"
+      },
+      "v6_counter_missing": {
+        "actual_exit": 10,
+        "raw_wait_status": 2560,
+        "log_sha256": "61913ba2eaa317a040d8d95377126daf0b3f71ece3e47b2ed8136b44be96f21b"
+      }
+    },
+    "active_driver_expected_counts": {
+      "else_branches_created": 0,
+      "checked_ref_accesses_created": 1
+    },
+    "active_driver_actual_counts": {
+      "else_branches_created": 0,
+      "checked_ref_accesses_created": 1
+    },
+    "active_cohort": {
+      "selected": 16,
+      "passed": 16,
+      "failed": 0,
+      "actual_exit": 0,
+      "raw_wait_status": 0,
+      "log_sha256": "b1a594130296801193e86352a89af1a6f337dfab3958b870e52f6fc0ab4a12ed"
+    },
+    "compiler_sha256": "6ee0d1a8bd19fb5579c85a033a5b5e59f1243007ec9eb3263a03592dfe4b345b",
+    "compiler_source_hashes": {
+      "include/verilated_types.h": "624318b46ca97f01d5664d0a237e2d35c984ab71f62996c347fdd88b49d4bbf5",
+      "src/V3AstAttr.h": "064cceb45647907205f3584a5c4dc90b68afa22d8cfc536ad347230ee302c541",
+      "src/V3AstNodes.cpp": "77bbe45f574629ed5de59e75c44b62fe3d9eef018e36c9d37a6f8c72b25ffd35",
+      "src/V3Task.cpp": "9e26826d8a0ca0e9bc7cc5ddb50154bb817851d30de52caa9304a708cce23ab6",
+      "src/V3Premit.cpp": "5462d8392914a215ea46537c1e618a5a18e4b16575e062258e3815800f6ae416",
+      "src/V3Unknown.cpp": "5e1378eec1d57cb5554fa1718c4ffc83b0a9b87e7d75dcc4edb1a771d0f2c7bb"
+    }
+  },
+  "scope": "This archives the old implementation statistic, not a semantic exception or a passing claim for that old statistic. Strict18 and pinned Icarus oracles/classification are unchanged."
+}

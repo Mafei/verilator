@@ -1629,6 +1629,14 @@ public:
     T_Value& operator[](size_t index) { return m_storage[index]; }
     constexpr const T_Value& operator[](size_t index) const { return m_storage[index]; }
 
+    /// Return a writable element reference, or reset caller-owned storage for an invalid index.
+    T_Value& atWriteBounded(const bool inRange, const IData index, T_Value& fallback,
+                            const T_Value& defaultValue) {
+        if (VL_LIKELY(inRange)) return m_storage[index];
+        fallback = defaultValue;
+        return fallback;
+    }
+
     // *this != that, which might be used for change detection/trigger computation, but avoid
     // operator overloading in VlUnpacked for safety in other contexts.
     bool neq(const VlUnpacked<T_Value, N_Depth>& that) const { return neq(*this, that); }
