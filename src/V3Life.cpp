@@ -163,6 +163,11 @@ public:
         VL_DO_DANGLING(m_deleter.pushDeletep(oldassp), oldassp);
     }
     void simpleAssign(AstVarScope* nodep, AstNodeStmt* assp) {
+        // Reference formals may alias, so another formal can observe or change this value.
+        if (nodep->varp()->isRef() || nodep->varp()->isConstRef()) {
+            complexAssign(nodep);
+            return;
+        }
         // Do we have a old assignment we can nuke?
         UINFO(4, "     ASSIGNof: " << nodep);
         UINFO(7, "       new: " << assp);
@@ -190,6 +195,11 @@ public:
     }
     void varUsageReplace(AstVarScope* nodep, AstVarRef* varrefp,
                          const bool allowInheritedConstants) {
+        // A different formal may have modified the same storage since the last assignment.
+        if (nodep->varp()->isRef() || nodep->varp()->isConstRef()) {
+            consumedFind(nodep);
+            return;
+        }
         // Variable rvalue.  If it references a constant, we can replace it
         LifeVarEntry& entr = m_map[nodep];
         if (entr.isNew()) {
