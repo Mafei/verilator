@@ -29,6 +29,7 @@ from run_thread_controls import NAMES
 ROOT = Path(__file__).resolve().parents[2]
 PIN = 'f45ffabed3212a106f01cb362ef42c5d293f4513'
 REGRESSION_COUNTERS = ('passed', 'failed', 'failed-first', 'skipped', 'left', 'running')
+REPORTED_GATE_KEYS = ('full18_gate_exit', 'finish9_gate_exit', 'fixed128_overall_exit')
 
 
 def require(value, reason):
@@ -443,10 +444,15 @@ def clocking_files(root, head):
     return evidence, clocking_wave.core_fields(wave)
 
 
-def regression_files(root, head):
-    """Check regression logs and their records independently of other evidence files."""
+def check_provenance(root, head):
+    """Bind independently collected diagnostics to this producer checkout."""
     require((root / 'out/provenance.txt').read_text().splitlines()[0] == head,
             'artifact_head_mismatch')
+
+
+def regression_files(root, head):
+    """Check regression logs and their records independently of other evidence files."""
+    check_provenance(root, head)
     groups = read(root / 'out/regression-results.json')
     require(set(groups) == set(GROUPS), 'missing_regression_group')
     regression_rows = {}
@@ -643,19 +649,61 @@ def regression_fields(data):
     return result
 
 
+def reported_fields(other):
+    """Whitelist the original producer-reported counters without claiming a rerun."""
+    gates = integers(other, REPORTED_GATE_KEYS)
+    require(
+        all(value in (0, 1) for value in gates.values())
+        and other['scope'] == 'producer_reported_not_independently_recomputed',
+        'typed_reported_gate_invalid')
+    full = dict(integers(other['full18'], ('selected', )),
+                counts=count_fields(other['full18']['counts']))
+    finish = integers(other['finish9'], ('selected', 'executed', 'passed', 'failed'))
+    paired = dict(integers(other['fixed128'],
+                           ('fixed_selected', 'default_denominator', 'unselected_UNRUN')),
+                  pair_status_counts=count_fields(other['fixed128']['pair_status_counts']))
+    complete = other['fixed128']['full_suite_complete']
+    require(
+        full['selected'] == sum(full['counts'].values()) == 18 and finish['selected'] == 9
+        and finish['passed'] + finish['failed'] == finish['executed']
+        and finish['executed'] <= finish['selected']
+        and paired['fixed_selected'] == sum(paired['pair_status_counts'].values()) == 128
+        and paired['default_denominator'] == paired['fixed_selected'] + paired['unselected_UNRUN']
+        == 3850 and type(complete) is bool and complete == (paired['unselected_UNRUN'] == 0),
+        'typed_reported_counts_mismatch')
+    paired['full_suite_complete'] = complete
+    return dict(gates,
+                scope='producer_reported_not_independently_recomputed',
+                full18=full,
+                finish9=finish,
+                fixed128=paired)
+
+
+def reported_failure(other):
+    """Keep the original complete-count criterion, even when exit flags claim zero."""
+    return (any(other[key] for key in REPORTED_GATE_KEYS) or other['full18']['counts'] != {
+        'passed': 18
+    } or other['finish9']['passed'] != 9 or other['fixed128']['pair_status_counts'] != {
+        'PASS_BOTH': 128
+    })
+
+
 def diagnostic_fields(data):
-    """Relay only partial checked counters; this can never supply a complete core."""
+    """Relay checked logs and explicitly reported summaries, never a complete core."""
     require(
         data['scope'] == PARTIAL_SCOPE and data['complete_audit'] is False
         and data['failure_code'] in FAILURE_CODES, 'invalid_partial_diagnostics')
-    require(data['failure_code'] not in UNVERIFIED_COUNTS_CODES or data['regressions'] is None,
-            'unverified_partial_counts')
+    other = data.get('other_gates')
+    require(
+        data['failure_code'] not in UNVERIFIED_COUNTS_CODES
+        or (data['regressions'] is None and other is None), 'unverified_partial_counts')
     regressions = None if data['regressions'] is None else regression_fields(data['regressions'])
     return {
         'scope': PARTIAL_SCOPE,
         'complete_audit': False,
         'failure_code': data['failure_code'],
-        'regressions': regressions
+        'regressions': regressions,
+        'other_gates': None if other is None else reported_fields(other)
     }
 
 
@@ -748,33 +796,8 @@ def core_fields(data, platform):
                                    raw_wait_status='NOT_RECORDED')
     else:
         result['migration'] = {'scope': 'not_recomputed_by_producer_review'}
-    other = data['other_gates']
-    gates = integers(other, ('full18_gate_exit', 'finish9_gate_exit', 'fixed128_overall_exit'))
-    require(
-        all(value in (0, 1) for value in gates.values())
-        and other['scope'] == 'producer_reported_not_independently_recomputed',
-        'typed_reported_gate_invalid')
-    full = dict(integers(other['full18'], ('selected', )),
-                counts=count_fields(other['full18']['counts']))
-    finish = integers(other['finish9'], ('selected', 'executed', 'passed', 'failed'))
-    paired = dict(integers(other['fixed128'],
-                           ('fixed_selected', 'default_denominator', 'unselected_UNRUN')),
-                  pair_status_counts=count_fields(other['fixed128']['pair_status_counts']))
-    complete = other['fixed128']['full_suite_complete']
-    require(
-        full['selected'] == sum(full['counts'].values()) == 18 and finish['selected'] == 9
-        and finish['passed'] + finish['failed'] == finish['executed']
-        and finish['executed'] <= finish['selected']
-        and paired['fixed_selected'] == sum(paired['pair_status_counts'].values()) == 128
-        and paired['default_denominator'] == paired['fixed_selected'] + paired['unselected_UNRUN']
-        == 3850 and type(complete) is bool and complete == (paired['unselected_UNRUN'] == 0),
-        'typed_reported_counts_mismatch')
-    paired['full_suite_complete'] = complete
-    result['other_gates'] = dict(gates,
-                                 scope='producer_reported_not_independently_recomputed',
-                                 full18=full,
-                                 finish9=finish,
-                                 fixed128=paired)
+    result['other_gates'] = reported_fields(data['other_gates'])
+    paired = result['other_gates']['fixed128']
     result['case122_review'] = queue_review.core_fields(data['case122_review'])
     require(
         result['case122_review']['raw_output_difference_count'] ==
@@ -836,13 +859,22 @@ def producer(args):
             'scope': PARTIAL_SCOPE,
             'complete_audit': False,
             'failure_code': code,
-            'regressions': None
+            'regressions': None,
+            'other_gates': None
         }
         # The independent log check cannot repair the failed full-file audit.
         if identity_verified and code not in UNVERIFIED_COUNTS_CODES:
             try:
                 result['diagnostics']['regressions'] = regression_fields(
                     regression_files(ROOT, args.expected_head))
+            except EVIDENCE_ERRORS:
+                pass
+            try:
+                check_provenance(ROOT, args.expected_head)
+                other, _failed = reported(ROOT, ROOT / 'pinned-icarus', args.expected_head)
+                other = reported_fields(other)
+                result['diagnostics']['other_gates'] = other
+                result['semantic_gate_exit'] |= int(reported_failure(other))
             except EVIDENCE_ERRORS:
                 pass
     result['actual_exit'] = result['semantic_gate_exit'] if result['audit_integrity'] else 2
@@ -898,8 +930,12 @@ def summarize(args):
                     for key in ('recorded_root', 'reader_root')) and mapping['recorded_root']
                 == ('/work' if platform == 'rocky8-x86_64' else mapping['reader_root']),
                 'invalid_root_mapping')
+            result['semantic_gate_exit'] |= row['semantic_gate_exit']
             if not row['audit_integrity']:
                 diagnostic = diagnostic_fields(row['diagnostics'])
+                if diagnostic['other_gates'] is not None:
+                    result['semantic_gate_exit'] |= int(reported_failure(
+                        diagnostic['other_gates']))
             require(row['audit_integrity'], 'producer_file_integrity_failed')
             data = core_fields(row['core'], platform)
             require(
@@ -914,18 +950,11 @@ def summarize(args):
                               for key in ('recorded_root', 'reader_root')})
             visible_failure = (
                 data['original_projection']['strict_gate_exit'] != 0
-                or bool(data['regressions']['failed_groups']) or any(
-                    data['other_gates'][key]
-                    for key in ('full18_gate_exit', 'finish9_gate_exit', 'fixed128_overall_exit'))
-                or data['threads']['native_exit'] != 0
+                or bool(data['regressions']['failed_groups'])
+                or reported_failure(data['other_gates']) or data['threads']['native_exit'] != 0
                 or data['threads']['passed_names'] != len(NAMES)
                 or not passed_counts('PASSED', data['threads']['counts'], len(NAMES))
-                or data['other_gates']['full18']['counts'] != {
-                    'passed': 18
-                } or data['other_gates']['finish9']['passed'] != 9
-                or data['other_gates']['fixed128']['pair_status_counts'] != {
-                    'PASS_BOTH': 128
-                } or (platform == 'macos-arm64' and data['migration']['returned_status'] != 0))
+                or (platform == 'macos-arm64' and data['migration']['returned_status'] != 0))
             result['semantic_gate_exit'] |= int(row['semantic_gate_exit'] or visible_failure)
         except EVIDENCE_ERRORS:
             result['audit_integrity'] = False

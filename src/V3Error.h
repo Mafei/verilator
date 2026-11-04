@@ -190,6 +190,7 @@ public:
         UNUSEDLOOP,     // Loop is unused
         UNUSEDPARAM,    // No receivers for parameters
         UNUSEDSIGNAL,   // No receivers for signals
+        USEBEFOREDECL,  // Parameter referenced before its declaration
         USERERROR,      // Elaboration time $error
         USERFATAL,      // Elaboration time $fatal
         USERINFO,       // Elaboration time $info
@@ -250,7 +251,8 @@ public:
             "SPLITVAR", "STATICVAR", "STMTDLY", "SUPERNFIRST", "SYMRSVDWORD", "SYNCASYNCNET",
             "TICKCOUNT", "TIMESCALEMOD", "UNDRIVEN", "UNOPT", "UNOPTFLAT", "UNOPTPUBLIC", "UNOPTTHREADS",
             "UNPACKED", "UNSATCONSTR", "UNSIGNED", "UNUSED", "UNUSEDGENVAR", "UNUSEDLOOP",
-            "UNUSEDPARAM", "UNUSEDSIGNAL", "USERERROR", "USERFATAL", "USERINFO", "USERWARN",
+            "UNUSEDPARAM", "UNUSEDSIGNAL", "USEBEFOREDECL", "USERERROR", "USERFATAL",
+            "USERINFO", "USERWARN",
             "VARHIDDEN", "WAITCONST", "WIDTH", "WIDTHCONCAT", "WIDTHDIGITS", "WIDTHEXPAND",
             "WIDTHTRUNC", "WIDTHXZEXPAND", "ZERODLY", "ZEROREPL", " MAX"};
         return names[m_e];
@@ -281,7 +283,7 @@ public:
                 || m_e == HIERPARAM || m_e == FUNCTIMECTL || m_e == IMPURE || m_e == MODMISSING
                 || m_e == NOTREDOP || m_e == PARAMNODEFAULT || m_e == PINNOTFOUND
                 || m_e == PKGNODECL || m_e == PROCASSWIRE || m_e == PROTOTYPEMIS
-                || m_e == SUPERNFIRST || m_e == ZEROREPL);
+                || m_e == SUPERNFIRST || m_e == USEBEFOREDECL || m_e == ZEROREPL);
     }
     // Warnings to mention manual
     bool mentionManual() const VL_MT_SAFE {
