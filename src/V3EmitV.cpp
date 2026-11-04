@@ -1428,7 +1428,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         }
         if (!VN_IS(nodep->taskp(), Property)) {
             puts("(");
-            iterateAndNextConstNull(nodep->argsp());
+            iterateAndCommaConstNull(nodep->argsp());
             puts(")");
             iterateConstNull(nodep->withp());
         }
