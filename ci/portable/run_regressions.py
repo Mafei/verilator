@@ -380,6 +380,7 @@ GROUPS = {
         "waiveroutput_multiline",
     ],
     "emitv_ccall_20261105": ["debug_emitv_ccall"],
+    "pull_audit_20261105": ["fourstate_multi_unsup"],
 }
 
 

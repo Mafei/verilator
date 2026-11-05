@@ -1198,6 +1198,14 @@ public:
         for (AstVar* const varp : m_varOrder) {
             const Net& net = m_nets.at(varp);
             if (!needsNetAudit(net) || !overlaps(net)) continue;
+            // Explicit pulls have their own rejection in FourstateVisitor. Preserve its
+            // diagnostic collection instead of treating their unknown contribution as overlap.
+            const bool hasExplicitPull
+                = std::any_of(net.writerIndices.begin(), net.writerIndices.end(),
+                              [](const std::pair<const AstNode* const, size_t>& writer) {
+                                  return VN_IS(writer.first, Pull);
+                              });
+            if (hasExplicitPull) continue;
             // Disjoint partial writers and procedural-only ports retain their existing path.
             string reason;
             if (!VN_IS(net.modulep, Module) || varp->isIO() || varp->varType() == VVarType::PORT
