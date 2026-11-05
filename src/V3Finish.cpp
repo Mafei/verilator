@@ -13,9 +13,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 //
 //*************************************************************************
-// Run after task inlining, while each initial/always still owns its source
-// body. Wrap only bodies containing $finish in a jump block, then leave that
-// block immediately after requesting termination. This also skips the caller's
+// Run after task inlining, while initial/always and deferred assertion Reactive
+// processes still own their source bodies. Wrap bodies containing $finish in a jump block, then
+// leave that block immediately after requesting termination. This also skips the caller's
 // remaining statements and copyback after an inlined finishing call.
 //
 // Internal source tasks and value functions also get local exits. A direct
@@ -42,6 +42,11 @@
 #include <vector>
 
 VL_DEFINE_DEBUG_FUNCTIONS;
+
+// Deferred immediate assertion actions execute in a compiler-generated Reactive process.
+static bool isSupportedSourceProcess(const AstNode* const nodep) {
+    return VN_IS(nodep, Initial) || VN_IS(nodep, Always) || VN_IS(nodep, AlwaysReactive);
+}
 
 class FinishVertex final : public V3GraphVertex {
     VL_RTTI_IMPL(FinishVertex, V3GraphVertex);
@@ -82,8 +87,7 @@ class FinishTaskStateVisitor final : public VNVisitorConst {
         const auto it = m_vertexps.find(nodep);
         if (it != m_vertexps.end()) return it->second;
         const AstCFunc* const funcp = VN_CAST(nodep, CFunc);
-        const bool canExit
-            = funcp ? eligibleTask(funcp) : (VN_IS(nodep, Initial) || VN_IS(nodep, Always));
+        const bool canExit = funcp ? eligibleTask(funcp) : isSupportedSourceProcess(nodep);
         FinishVertex* const vxp = new FinishVertex{&m_callGraph, canExit};
         m_vertexps.emplace(nodep, vxp);
         return vxp;
@@ -272,7 +276,7 @@ class FinishVisitor final : public VNVisitor {
     void visit(AstNodeProcedure* nodep) override {
         VL_RESTORER(m_procp);
         VL_RESTORER(m_coverageTailp);
-        m_procp = (VN_IS(nodep, Initial) || VN_IS(nodep, Always)) ? nodep : nullptr;
+        m_procp = isSupportedSourceProcess(nodep) ? nodep : nullptr;
         m_coverageTailp = nullptr;
         // Sensitivity expressions are not part of the source body.
         iterateAndNextNull(nodep->stmtsp());

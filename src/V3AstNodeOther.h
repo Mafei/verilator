@@ -304,6 +304,7 @@ public:
 class AstNodeFuncCovItem VL_NOT_FINAL : public AstNode {
     // Base class for functional coverage items (coverpoints, crosses)
     // @astgen ptr := m_instCoveragep : Optional[AstFunc]  // [V3Width] Its get_inst_coverage()
+    // @astgen ptr := m_optionVarp : Optional[AstVar]  // Generated option struct member
 protected:
     string m_name;  // Item name
 
@@ -319,6 +320,8 @@ public:
     bool maybePointedTo() const override { return true; }
     AstFunc* instCoveragep() const { return m_instCoveragep; }
     void instCoveragep(AstFunc* funcp) { m_instCoveragep = funcp; }
+    AstVar* optionVarp() const { return m_optionVarp; }
+    void optionVarp(AstVar* varp) { m_optionVarp = varp; }
 };
 class AstNodeGen VL_NOT_FINAL : public AstNode {
     // Generate construct
@@ -3378,6 +3381,9 @@ public:
     // Covergroup options accessors
     int cgAutoBinMax() const { return m_cgAutoBinMax; }
     void cgAutoBinMax(int value) { m_cgAutoBinMax = value; }
+    // Return true if this class is an extension of base class following all extends (SLOW)
+    // Accepts nullptrs
+    static bool isClassDerivedFrom(const AstClass* refClassp, const AstClass* baseClassp);
     // Return true if this class is an extension of base class (SLOW)
     // Accepts nullptrs
     static bool isClassExtendedFrom(const AstClass* refClassp, const AstClass* baseClassp);
