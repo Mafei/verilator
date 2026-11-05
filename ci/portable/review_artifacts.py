@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 
+import cache_evidence
 import check_results
 import clocking_legacy
 import clocking_wave
@@ -455,6 +456,7 @@ def regression_files(root, head):
     check_provenance(root, head)
     groups = read(root / 'out/regression-results.json')
     require(set(groups) == set(GROUPS), 'missing_regression_group')
+    cache_evidence.validate(root, head, GROUPS)
     regression_rows = {}
     for name, row in groups.items():
         require(

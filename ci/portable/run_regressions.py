@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from compile_cache import reclaim_completed
+
 GROUPS = {
     "amd-repair": [
         "fourstate_blocking_delay", "fourstate_cond_scale", "fourstate_drive_buffer",
@@ -476,6 +478,8 @@ def run_groups(root, groups):  # pylint: disable=too-many-locals
         (root / directory).mkdir(exist_ok=True)
     results = {}
     failed = False
+    cache_failed = False
+    cache_results = {}
     for group in groups:
         names = GROUPS[group]
         drivers = ["t/t_" + name + ".py" for name in names]
@@ -512,8 +516,52 @@ def run_groups(root, groups):  # pylint: disable=too-many-locals
             "success": passed
         }
         failed = failed or not passed
+        # A parent wait alone does not establish that an abnormal harness left no workers.
+        # Require its complete, closed summary before touching any compilation cache.
+        completed = (returncode >= 0 and status in ('PASSED', 'FAILED')
+                     and counts.get('left', 0) == 0 and counts.get('running', 0) == 0
+                     and sum(counts.get(key, 0)
+                             for key in ('passed', 'failed', 'skipped')) == len(names))
+        if not completed:
+            cache_results[group] = {
+                'schema': 'completed-compile-cache-v1',
+                'status': 'incomplete_harness',
+                'selected': names,
+                'removed': [],
+                'bytes': 0,
+            }
+        else:
+            try:
+                cache_results[group] = reclaim_completed(root, names)
+            except (OSError, ValueError) as error:
+                cache_failed = True
+                cache_results[group] = getattr(
+                    error, 'compile_cache_ledger', {
+                        'schema': 'completed-compile-cache-v1',
+                        'status': 'infrastructure_failure',
+                        'selected': names,
+                        'error': str(error),
+                    })
+                print(group + ': compilation cache reclamation failed: ' + str(error),
+                      file=sys.stderr)
+        print('COMPILE_CACHE_RECLAIM ' +
+              json.dumps({
+                  'group': group,
+                  'status': cache_results[group]['status'],
+                  'bytes': cache_results[group].get('bytes', 0),
+                  'removed': len(cache_results[group].get('removed', [])),
+              }),
+              flush=True)
+    (root / 'out/compile-cache-results.json').write_text(
+        json.dumps(
+            {
+                'schema': 'portable-compile-cache-results-v1',
+                'commit': head,
+                'groups': cache_results,
+            },
+            indent=2) + '\n')
     (root / "out" / "regression-results.json").write_text(json.dumps(results, indent=2) + "\n")
-    return 1 if failed else 0
+    return 2 if cache_failed else (1 if failed else 0)
 
 
 def main():

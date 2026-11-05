@@ -6,12 +6,14 @@
 """Exercise actual subprocess failures, provenance, logs, and the Bash gate."""
 
 import copy
+import errno
 import hashlib
 import importlib.util
 import io
 import json
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -20,6 +22,7 @@ from pathlib import Path
 from unittest import mock
 
 import check_results
+import compile_cache
 import harness_pass_probe
 import log_evidence
 import run_regressions
@@ -60,8 +63,8 @@ class ResultsTest(unittest.TestCase):
         # unittest cleanups run even when setUp fails before a test starts.
         self.temporary = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
-        for directory in ("logs", "out", "test_regress/t"):
+        self.root = Path(self.temporary.name).resolve()
+        for directory in ("logs", "out", "test_regress/t", "include"):
             (self.root / directory).mkdir(parents=True)
         for arguments in (("init", "--quiet"),
                           ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
@@ -69,6 +72,15 @@ class ResultsTest(unittest.TestCase):
             subprocess.run(["git", *arguments], cwd=self.root, check=True, capture_output=True)
         self.head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root,
                                             text=True).strip()
+        cache = {
+            'schema': 'portable-compile-cache-results-v1',
+            'commit': self.head,
+            'groups': {
+                name: compile_cache.reclaim_completed(self.root, names)
+                for name, names in GROUPS.items()
+            },
+        }
+        (self.root / 'out/compile-cache-results.json').write_text(json.dumps(cache))
         (self.root / "out/provenance.txt").write_text(self.head + "\n")
         (self.root / 'bin').mkdir()
         (self.root / 'bin/verilator_bin').write_bytes(b'fixture compiler')
@@ -109,7 +121,7 @@ class ResultsTest(unittest.TestCase):
         # These processes really exit with the selected status, just as the
         # regression harness does. No mocked Popen/wait masks an exit failure.
         (self.root / "test_regress/driver.py").write_text(
-            "import json, sys\n"
+            "import json, os, sys\n"
             "from pathlib import Path\n"
             "config = json.loads(Path('fixture-config.json').read_text())\n"
             "driver = next(arg for arg in sys.argv[1:] if arg.startswith('t/'))\n"
@@ -117,7 +129,8 @@ class ResultsTest(unittest.TestCase):
             "if sys.argv[1:] != result['arguments']:\n"
             "    print('Unexpected regression driver arguments: ' + repr(sys.argv[1:]))\n"
             "    sys.exit(98)\n"
-            "print(result['output'], end='')\n"
+            "print(result['output'], end='', flush=True)\n"
+            "if result['returncode'] < 0: os.kill(os.getpid(), -result['returncode'])\n"
             "sys.exit(result['returncode'])\n")
 
     def log(self, group):
@@ -315,6 +328,53 @@ class ResultsTest(unittest.TestCase):
                     self.assertFalse(self.results[group]["success"])
                     self.rejected()
             self.config[first]["output"] = original
+
+    def test_cache_failure_preserves_child_status_and_all_group_records(self):
+        group = next(iter(GROUPS))
+        driver = 't/t_' + GROUPS[group][0] + '.py'
+        reclaim = run_regressions.reclaim_completed
+
+        def fail_one(root, names):
+            if names == GROUPS[group]:
+                raise OSError(errno.ENOSPC, 'controlled cache failure')
+            return reclaim(root, names)
+
+        for child_status in (0, 19):
+            with self.subTest(child_status=child_status):
+                self.config[driver]['returncode'] = child_status
+                with mock.patch.object(run_regressions, 'reclaim_completed', side_effect=fail_one):
+                    self.assertEqual(self.run_fixture(), 2)
+                self.assertEqual(set(self.results), set(GROUPS))
+                self.assertEqual(self.results[group]['returncode'], child_status)
+                cache = json.loads((self.root / 'out/compile-cache-results.json').read_text())
+                self.assertEqual(cache['groups'][group]['status'], 'infrastructure_failure')
+                self.rejected()
+
+    def test_incomplete_or_signalled_harness_never_reclaims_cache(self):
+        group = next(iter(GROUPS))
+        names = GROUPS[group]
+        driver = 't/t_' + names[0] + '.py'
+        original = copy.deepcopy(self.config[driver])
+        for code, output in ((-signal.SIGTERM,
+                              original['output']), (0, pass_records(names[:-1]) +
+                                                    summary(len(names) - 1, extras='  Left 1')),
+                             (1, 'compiler stopped without a harness summary\n')):
+            with self.subTest(code=code, output=output[-100:]):
+                self.config[driver].update(returncode=code, output=output)
+                with mock.patch.object(run_regressions,
+                                       'reclaim_completed',
+                                       wraps=compile_cache.reclaim_completed) as reclaim:
+                    self.assertEqual(self.run_fixture(), 1)
+                self.assertNotIn(mock.call(self.root, names), reclaim.call_args_list)
+                self.assertEqual(self.results[group]['returncode'], code)
+                data = json.loads((self.root / 'out/compile-cache-results.json').read_text())
+                self.assertEqual(data['groups'][group]['status'], 'incomplete_harness')
+                self.assertEqual(data['groups'][group]['removed'], [])
+
+    def test_missing_cache_ledger_rejects_green_harness_records(self):
+        self.assertEqual(self.run_fixture(), 0)
+        (self.root / 'out/compile-cache-results.json').unlink()
+        self.rejected()
 
     def test_invalid_group_selection(self):
         for groups in ([], ["unknown"], ["fourstate", "fourstate"]):

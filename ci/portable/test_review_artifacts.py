@@ -17,6 +17,7 @@ import tarfile
 
 import log_evidence
 import review_artifacts as review
+import compile_cache
 from run_regressions import GROUPS
 from test_clocking_reporting import legacy_report, wave_report
 
@@ -32,7 +33,7 @@ class ArtifactsTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.head = 'a' * 40
         self.args = SimpleNamespace(expected_head=self.head,
                                     run_id=123,
@@ -45,6 +46,7 @@ class ArtifactsTest(unittest.TestCase):
             main = self.root / (name + '-main')
             (main / 'out').mkdir(parents=True)
             (main / 'logs').mkdir()
+            (main / 'include').mkdir()
             for relative in ('ci/portable/smoke.py', 'test_regress/vltest_generated_ids.py',
                              'test_regress/t/t_debug_emitv.out'):
                 destination = main / relative
@@ -67,6 +69,15 @@ class ArtifactsTest(unittest.TestCase):
                                    },
                                    summary_status='PASSED')
             write_json(main / 'out/regression-results.json', rows)
+            write_json(
+                main / 'out/compile-cache-results.json', {
+                    'schema': 'portable-compile-cache-results-v1',
+                    'commit': self.head,
+                    'groups': {
+                        group: compile_cache.reclaim_completed(main, names)
+                        for group, names in GROUPS.items()
+                    },
+                })
             ast = main / 'test_regress/obj_vlt/t_debug_emitv/Vfixture_widthcommit.tree.v'
             ast.parent.mkdir(parents=True)
             ast.write_bytes((review.ROOT / 'test_regress/t/t_debug_emitv.out').read_bytes())
@@ -335,6 +346,19 @@ class ArtifactsTest(unittest.TestCase):
                                and review.passed_counts(status, counts, len(selected))
                                and review.passed_names(text, selected))
             write_json(path, rows)
+
+    def test_cache_infrastructure_failure_rejects_green_model_records(self):
+        for name in ('mac', 'rocky'):
+            path = self.root / (name + '-main/out/compile-cache-results.json')
+            data = json.loads(path.read_text())
+            data['groups'][next(iter(GROUPS))]['status'] = 'infrastructure_failure'
+            write_json(path, data)
+        records = self.producer_records()
+        for record in records.values():
+            self.assertFalse(record['audit_integrity'])
+            self.assertEqual(record['actual_exit'], 2)
+            self.assertNotIn('core', record)
+        self.relay(records, 2)
 
     def test_regression_counters_cover_all_selected_groups(self):
         row = self.execute(1)
