@@ -8,6 +8,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import cache_evidence
 import clocking_legacy
 from run_regressions import GROUPS, parse_summary, passed_counts, passed_names, selection_revision
 
@@ -40,6 +41,10 @@ def check_results(root):
     selected_names = [name for names in GROUPS.values() for name in names]
     if len(selected_names) != len(set(selected_names)):
         raise SystemExit("Regression groups select duplicate test names")
+    try:
+        cache_evidence.validate(root, head, GROUPS)
+    except (OSError, ValueError) as error:
+        raise SystemExit('Incomplete compilation cache evidence: ' + str(error)) from error
     clocking_evidence(root, head)
     for group, result in results.items():
         selected = GROUPS[group]

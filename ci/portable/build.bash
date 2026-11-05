@@ -91,6 +91,8 @@ if [[ $platform == macos-arm64 ]]; then
 fi
 python3 ci/portable/test_flexfix.py
 python3 ci/portable/test_regression_results.py
+python3 ci/portable/test_compile_cache.py
+python3 ci/portable/test_cache_evidence.py
 python3 ci/portable/test_icarus_acceptance.py
 python3 ci/portable/test_icarus_sweep.py
 python3 ci/portable/test_queue_projection_review.py
