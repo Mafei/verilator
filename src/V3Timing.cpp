@@ -185,6 +185,11 @@ static void addFlags(AstNode* const nodep, uint8_t flags) { nodep->user2Or(flags
 // Check if a node has ALL of the expected flags set
 static bool hasFlags(AstNode* const nodep, uint8_t flags) { return !(~nodep->user2() & flags); }
 
+static AstNode* takeDeferredAssertFlush(AstNode* nodep) {
+    AstDeferredAssertFlush* const flushp = VN_CAST(nodep, DeferredAssertFlush);
+    return flushp ? flushp->unlinkFrBack() : nullptr;
+}
+
 // ######################################################################
 //  Detect nodes affected by timing and/or requiring a process
 
@@ -364,6 +369,9 @@ class TimingSuspendableVisitor final : public VNVisitor {
             }
             if (!constp->isZero()) {
                 // Remove AstWait before we track process as T_SUSPENDER
+                if (AstNode* const flushp = takeDeferredAssertFlush(nodep->stmtsp())) {
+                    VL_DO_DANGLING(pushDeletep(flushp), flushp);
+                }
                 if (AstNode* const stmtsp = nodep->stmtsp()) {
                     stmtsp->unlinkFrBackWithNext();
                     nodep->replaceWith(stmtsp);
@@ -1499,6 +1507,11 @@ class TimingControlVisitor final : public VNVisitor {
                            new AstLogAnd{flp, didNotInitp, firstIterp}};
         alwaysp->addStmtsp(new AstIf{flp, schedCondp, forkp->unlinkFrBack()});
     }
+    void visit(AstDeferredAssertFlush* nodep) override {
+        iterateChildren(nodep);
+        nodep->replaceWith(nodep->stmtsp()->unlinkFrBackWithNext());
+        VL_DO_DANGLING(pushDeletep(nodep), nodep);
+    }
     void visit(AstDisableFork* nodep) override {
         if (m_hasProcess) return;
         // never reached by any process; remove to avoid compilation error
@@ -1508,7 +1521,8 @@ class TimingControlVisitor final : public VNVisitor {
         if (m_hasProcess) {
             FileLine* const flp = nodep->fileline();
             AstCExpr* const exprp = new AstCExpr{flp, "vlProcess->completedFork()", 1};
-            AstWait* const waitp = new AstWait{flp, exprp, nullptr};
+            AstWait* const waitp
+                = new AstWait{flp, exprp, takeDeferredAssertFlush(nodep->nextp())};
             nodep->replaceWith(waitp);
         } else {
             // never reached by any process; remove to avoid compilation error
@@ -1520,6 +1534,7 @@ class TimingControlVisitor final : public VNVisitor {
         // Wait on changed events related to the vars in the wait statement
         UINFO(9, "control-visit " << nodep);
         FileLine* const flp = nodep->fileline();
+        AstNode* const flushp = takeDeferredAssertFlush(nodep->stmtsp());
         AstNode* const stmtsp = nodep->stmtsp();
         if (stmtsp) stmtsp->unlinkFrBackWithNext();
         AstNodeExpr* const condp = V3Const::constifyEdit(nodep->condp()->unlinkFrBack());
@@ -1536,6 +1551,7 @@ class TimingControlVisitor final : public VNVisitor {
                 addDebugInfo(foreverMethodp);
                 AstCAwait* const awaitp = new AstCAwait{flp, foreverMethodp};
                 nodep->replaceWith(awaitp);
+                if (flushp) VL_DO_DANGLING(flushp->deleteTree(), flushp);
                 if (stmtsp) VL_DO_DANGLING(stmtsp->deleteTree(), stmtsp);
                 VL_DO_DANGLING(condp->deleteTree(), condp);
             } else {
@@ -1550,7 +1566,7 @@ class TimingControlVisitor final : public VNVisitor {
                 new AstEventControl{flp,
                                     new AstSenTree{flp, new AstSenItem{flp, VEdgeType::ET_TRUE,
                                                                        condp->cloneTree(false)}},
-                                    nullptr}};
+                                    flushp}};
             if (stmtsp) AstNode::addNext<AstNode, AstNode>(ifp, stmtsp);
             nodep->replaceWith(ifp);
         } else {
@@ -1566,6 +1582,7 @@ class TimingControlVisitor final : public VNVisitor {
             AstLoop* const loopp = new AstLoop{flp};
             loopp->addStmtsp(new AstLoopTest{flp, loopp, new AstLogNot{flp, condp}});
             loopp->addStmtsp(controlp);
+            if (flushp) controlp->addStmtsp(flushp);
             if (stmtsp) AstNode::addNext<AstNode, AstNode>(loopp, stmtsp);
             nodep->replaceWith(loopp);
         }

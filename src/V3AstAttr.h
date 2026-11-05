@@ -825,6 +825,7 @@ public:
     bool isKnown() const { return m_e != BU_UNKNOWN; }
     bool trueKnown() const { return m_e == BU_TRUE; }
     void setTrueOrFalse(bool flag) { m_e = flag ? BU_TRUE : BU_FALSE; }
+    constexpr operator en() const { return m_e; }
 };
 constexpr bool operator==(const VBoolOrUnknown& lhs, const VBoolOrUnknown& rhs) {
     return lhs.m_e == rhs.m_e;
@@ -978,7 +979,7 @@ static constexpr bool validateArgsDescriptor(const char* descrp) {
     macro(COVERGROUP_LEND_WEIGHT,             "lendWeight",             false,  CLEAN,  false,      "rr") \
     macro(COVERGROUP_MERGED_COVERAGE,         "mergedCoverage",         false,  CLEAN,  false,      "r") \
     macro(COVERGROUP_RECORD_HIT,              "recordHit",              false,  CLEAN,  false,      "r") \
-    macro(COVERGROUP_REGISTER_BINS,           "registerBins",           false,  CLEAN,  false,      "rrrr") \
+    macro(COVERGROUP_REGISTER_BINS,           "registerBins",           false,  CLEAN,  false,      "rrrrr") \
     macro(COVERGROUP_SAMPLE,                  "sample",                 false,  CLEAN,  false,      "") \
     macro(COVERGROUP_SAMPLE_IFFS,             "sample",                 false,  CLEAN,  false,      "r") \
     macro(COVERGROUP_SELECT_ALL,              "selectAll",              false,  CLEAN,  false,      "") \

@@ -804,10 +804,12 @@ void AstBegin::dump(std::ostream& str) const {
     Super::dump(str);
     if (implied()) str << " [IMPLIED]";
     if (needProcess()) str << " [NPRC]";
+    if (disableWrapper()) str << " [DISABLEWRAP]";
 }
 void AstBegin::dumpJson(std::ostream& str) const {
     dumpJsonBoolFuncIf(str, implied);
     dumpJsonBoolFuncIf(str, needProcess);
+    dumpJsonBoolFuncIf(str, disableWrapper);
     dumpJsonGen(str);
 }
 const char* AstCAwait::broken() const {
@@ -1150,6 +1152,13 @@ bool AstClass::isCacheableChild(const AstNode* nodep) {
            || VN_IS(nodep, EnumItemRef)
            || (VN_IS(nodep, NodeFTask) && !VN_AS(nodep, NodeFTask)->isExternProto())
            || VN_IS(nodep, CFunc);
+}
+bool AstClass::isClassDerivedFrom(const AstClass* refClassp, const AstClass* baseClassp) {
+    if (refClassp == baseClassp) return true;
+    for (const AstClassExtends* const extp : refClassp->extendspList()) {
+        if (isClassDerivedFrom(extp->classp(), baseClassp)) return true;
+    }
+    return false;
 }
 bool AstClass::isClassExtendedFrom(const AstClass* refClassp, const AstClass* baseClassp) {
     // TAIL RECURSIVE
