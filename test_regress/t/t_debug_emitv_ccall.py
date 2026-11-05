@@ -51,7 +51,7 @@ for profile in ('two', 'four'):
     test.file_grep_not(dump, context + r'\([^;]*,\s*,')
     test.file_grep(dump,
                    wrapper + r'ccall_single[\w.]*\(\s*' + left + r',\s*[\w.]*ccall_single[\w.]*\)')
-    test.file_grep(dump, wrapper + r'ccall_empty[\w.]*\(\s*[\w.]*ccall_empty[\w.]*\)')
+    test.file_grep_count(dump, wrapper + r'ccall_empty_TOP[\w.]*\(\s*[\w.]*ccall_empty[\w.]*\)', 1)
     # Unlike a zero-input function, this task has no lowered return argument.
     test.file_grep(dump, wrapper + r'ccall_empty_task[\w.]*\(\s*\)')
 
