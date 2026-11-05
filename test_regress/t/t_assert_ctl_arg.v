@@ -138,7 +138,7 @@ module t (
     $assertcontrol(On, CONCURRENT);
 
     $write("*-* All Finished *-*\n");
-    $finish;
+    #1step $finish;
   end
 endmodule
 
