@@ -1436,7 +1436,9 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
     void visit(AstCCall* nodep) override {
         puts(nodep->funcp()->name());
         puts("(");
-        iterateAndNextConstNull(nodep->argsp());
+        // V3Task prepends a DPI context ScopeName, which intentionally emits no Verilog.
+        AstNode* const argsp = nodep->argsp();
+        iterateAndCommaConstNull(VN_IS(argsp, ScopeName) ? argsp->nextp() : argsp);
         puts(")");
     }
     void visit(AstArg* nodep) override {

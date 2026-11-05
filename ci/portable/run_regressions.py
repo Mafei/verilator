@@ -379,6 +379,7 @@ GROUPS = {
         "waiveroutput",
         "waiveroutput_multiline",
     ],
+    "emitv_ccall_20261105": ["debug_emitv_ccall"],
 }
 
 
