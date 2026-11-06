@@ -428,7 +428,7 @@ GROUPS = {
     "nba_capture_20261106": [
         "nba_event_capture", "fourstate_nba_event_capture", "nba_with_capture",
         "fourstate_nba_with_capture", "assignsel_clip_runtime", "fourstate_nba_clip_padding",
-        "fourstate_nba_bounds_sink"
+        "fourstate_nba_bounds_sink", "fourstate_nba_static_bounds_sink"
     ],
 }
 

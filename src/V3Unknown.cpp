@@ -127,12 +127,12 @@ class UnknownVisitor final : public VNVisitor {
                 elseStmtp = origStmtp->cloneTree(false);
                 AstVar* const varp = new AstVar{fl, VVarType::MODULETEMP, m_lvboundNames.get(prep),
                                                 prep->dtypep()};
-                if (m_ftaskp && !m_ftaskp->isStatic() && VN_IS(m_modp, Class)
-                    && VN_IS(origStmtp, AssignDly)) {
+                if (m_ftaskp && VN_IS(m_modp, Class) && VN_IS(origStmtp, AssignDly)) {
                     // A delayed discard write may outlive this task activation.
-                    // Keep its unobservable sink on the captured class instance.
+                    // Instance sinks follow captured this; static sinks move to the class package.
                     varp->varType(VVarType::MEMBER);
-                    varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
+                    varp->lifetime(m_ftaskp->isStatic() ? VLifetime::STATIC_EXPLICIT
+                                                        : VLifetime::AUTOMATIC_EXPLICIT);
                     m_modp->prependStmtsp(varp);
                 } else {
                     addVar(varp);
