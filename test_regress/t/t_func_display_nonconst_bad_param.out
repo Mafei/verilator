@@ -1,0 +1,8 @@
+%Error: t/t_func_display_nonconst_bad.v:23:26: Expecting expression to be constant, but can't determine constant for FUNCREF 'selected_bit'
+                                             : ... note: In instance 't'
+        t/t_func_display_nonconst_bad.v:17:34: ... Location of non-constant VARREF 'first': Language violation: reference to non-function-local variable
+        t/t_func_display_nonconst_bad.v:23:26: ... Called from 'selected_bit()' with parameters:
+   23 |   localparam int VALUE = selected_bit();
+      |                          ^~~~~~~~~~~~
+        ... See the manual at https://verilator.org/verilator_doc.html?v=latest for more assistance.
+%Error: Exiting due to

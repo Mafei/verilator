@@ -1910,6 +1910,7 @@ private:
         // functions and we want them to work if used with parameters
         checkNodeInfo(nodep, /*display:*/ true);
         iterateChildrenConst(nodep);
+        if (!optimizable()) return;
         if (m_params) {
             const AstConst* const textp = fetchConst(nodep->fmtp());
             switch (nodep->displayType()) {
