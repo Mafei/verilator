@@ -915,12 +915,16 @@ class ExpandVisitor final : public VNVisitor {
                 // The bit-select can refer to bits outside the width of nodep
                 // which we aren't allowed to assign to.  This is a mask of the
                 // valid range of nodep which we apply to the new shifted RHS.
-                V3Number cleanmask{nodep, destp->widthMin()};
+                // Keep physical padding clean without folding a logical-width all-ones mask.
+                const int storageWidth = destp->isQuad() ? VL_QUADSIZE : VL_IDATASIZE;
+                V3Number cleanmask{nodep, storageWidth};
                 cleanmask.setMask(destp->widthMin());
+                AstConst* const cleanmaskp = new AstConst{lfl, cleanmask};
+                cleanmaskp->dtypeSetBitUnsized(storageWidth, destp->widthMin(),
+                                               VSigning::UNSIGNED);
                 AstNodeExpr* const shiftedp = new AstShiftL{
                     lfl, rhsp, new AstConst{lfl, static_cast<uint32_t>(lsb)}, destp->width()};
-                AstNodeExpr* const cleanedp
-                    = new AstAnd{lfl, shiftedp, new AstConst{lfl, cleanmask}};
+                AstNodeExpr* const cleanedp = new AstAnd{lfl, shiftedp, cleanmaskp};
                 AstNodeExpr* const orp
                     = V3Const::constifyEditCpp(new AstOr{lfl, oldvalp, cleanedp});
                 insertBefore(nodep, new AstAssign{nfl, destp, orp});
