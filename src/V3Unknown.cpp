@@ -16,6 +16,7 @@
 // V3Unknown's Transformations:
 //
 // Each module:
+//   UnknownVisitor:
 //      TBD: Eliminate tristates by adding __in, __inen, __en wires in parallel
 //          Need __en in changed list if a signal is on the LHS of a assign
 //      Constants:
@@ -25,6 +26,14 @@
 //                              -> INITIAL(VARREF(_{numberedtemp}),
 //                                         OR(5'bx_1_x,AND(random,5'b0_1_x))
 //              OPTIMIZE: Must not collapse this initial back into the equation.
+//
+//   KnownVisitor:
+//      Variables and expressions:
+//          If is of a four-state dtype replace it with a two-state counterpart
+//      Complex dtypes:
+//          Substitute four-state subDTypes with their two-state counterpart
+//
+// Post V3Unknown phase there should be no four-state constructs in an AST
 //
 //*************************************************************************
 
@@ -118,7 +127,16 @@ class UnknownVisitor final : public VNVisitor {
                 elseStmtp = origStmtp->cloneTree(false);
                 AstVar* const varp = new AstVar{fl, VVarType::MODULETEMP, m_lvboundNames.get(prep),
                                                 prep->dtypep()};
-                addVar(varp);
+                if (m_ftaskp && VN_IS(m_modp, Class) && VN_IS(origStmtp, AssignDly)) {
+                    // A delayed discard write may outlive this task activation.
+                    // Instance sinks follow captured this; static sinks move to the class package.
+                    varp->varType(VVarType::MEMBER);
+                    varp->lifetime(m_ftaskp->isStatic() ? VLifetime::STATIC_EXPLICIT
+                                                        : VLifetime::AUTOMATIC_EXPLICIT);
+                    m_modp->prependStmtsp(varp);
+                } else {
+                    addVar(varp);
+                }
                 AstNode* const prepCopyp = prep->clonep();
                 prepCopyp->replaceWith(new AstVarRef{fl, varp, VAccess::WRITE});
                 VL_DO_DANGLING(pushDeletep(prepCopyp), prepCopyp);
@@ -151,11 +169,10 @@ class UnknownVisitor final : public VNVisitor {
     }
 
     static AstNodeExpr* indexForSelect(AstNodeExpr* const indexp) {
-        // The complete index is checked separately before this access. Model
-        // selections only need 32 address bits after that check, including when
-        // the source index is a wide signed expression. Four-state lowering
-        // still needs every index bit and its X/Z mask.
-        if (!v3Global.opt.fourstate() && indexp->width() > VL_IDATASIZE) {
+        // The full index, including an X/Z-derived invalid sentinel, remains in the
+        // bounds check. Four-state lowering has already run before V3Unknown; only
+        // this physical access is narrowed to the runtime's int-sized select index.
+        if (indexp->width() > VL_IDATASIZE) {
             AstSel* const selp = new AstSel{indexp->fileline(), indexp, 0, VL_IDATASIZE};
             selp->dtypeSetBitSized(VL_IDATASIZE, VSigning::fromBool(indexp->isSigned()));
             return selp;
@@ -653,11 +670,111 @@ public:
 const std::string UnknownVisitor::s_xrandPrefix = "__Vxrand";
 
 //######################################################################
-// Unknown class functions
+// Known visitor
+
+class KnownVisitor final : public VNVisitor {
+    static AstNodeDType* basicToTwostate(AstNodeDType* const dtypep) {
+        if (AstBasicDType* const basicp = VN_CAST(dtypep, BasicDType)) {
+            if (basicp->isIntegralOrPacked()) return basicp->findStatesCounterpart(false);
+        }
+        return nullptr;
+    }
+    static void setTwostateIfBasic(AstNode* const nodep) {
+        if (AstNodeDType* const dtypep = basicToTwostate(nodep->dtypep())) nodep->dtypep(dtypep);
+    }
+    template <typename T>
+    static void subDTypeUpdate(T* const nodep) {
+        if (AstNodeDType* const dtypep = basicToTwostate(nodep->subDTypep())) {
+            nodep->refDTypep(dtypep);
+        }
+    }
+
+    void visit(AstNodeArrayDType* const nodep) override {
+        subDTypeUpdate(nodep);
+        iterateChildren(nodep);
+    }
+    void visit(AstAssocArrayDType* const nodep) override {
+        subDTypeUpdate(nodep);
+        if (AstNodeDType* const dtypep = basicToTwostate(nodep->keyDTypep())) {
+            nodep->keyDTypep(dtypep);
+        }
+    }
+    void visit(AstWildcardArrayDType* const nodep) override { subDTypeUpdate(nodep); }
+    void visit(AstConstDType* const nodep) override { subDTypeUpdate(nodep); }
+    void visit(AstQueueDType* const nodep) override {
+        subDTypeUpdate(nodep);
+        iterateChildren(nodep);
+    }
+    void visit(AstDynArrayDType* const nodep) override { subDTypeUpdate(nodep); }
+    void visit(AstUnsizedArrayDType* const nodep) override { subDTypeUpdate(nodep); }
+    void visit(AstSampleQueueDType* const nodep) override {
+        if (AstNodeDType* const dtypep = basicToTwostate(nodep->subDTypep())) {
+            nodep->refDTypep(dtypep);
+            nodep->dtypep(dtypep);
+        }
+    }
+    void visit(AstEnumDType* const nodep) override {
+        subDTypeUpdate(nodep);
+        iterateChildren(nodep);
+    }
+    void visit(AstNodeUOrStructDType* const nodep) override {
+        if (nodep->isFourstate()) {
+            nodep->mimicsFourstate(true);
+            nodep->isFourstate(false);
+            subDTypeUpdate(nodep);
+        }
+        iterateChildren(nodep);
+    }
+    void visit(AstMemberDType* const nodep) override {
+        iterateChildren(nodep);
+        if (AstNodeDType* const dtypep = basicToTwostate(nodep->subDTypep())) {
+            nodep->refDTypep(dtypep);
+            nodep->dtypep(dtypep);
+        } else {
+            setTwostateIfBasic(nodep);
+        }
+    }
+    void visit(AstRefDType* const nodep) override {
+        if (AstNodeDType* const dtypep = nodep->refDTypep()) {
+            if (AstNodeDType* const newp = basicToTwostate(dtypep)) nodep->refDTypep(newp);
+        }
+        nodep->dtypep(nodep->subDTypep());
+    }
+    void visit(AstParamTypeDType* const nodep) override { setTwostateIfBasic(nodep); }
+    void visit(AstTypedef* const nodep) override { setTwostateIfBasic(nodep); }
+    void visit(AstVar* const nodep) override {
+        iterateChildren(nodep);
+        setTwostateIfBasic(nodep);
+    }
+    void visit(AstNodeExpr* const nodep) override {
+        iterateChildren(nodep);
+        setTwostateIfBasic(nodep);
+    }
+    void visit(AstNodeAssign* const nodep) override {
+        iterateChildren(nodep);
+        nodep->dtypeFrom(nodep->lhsp());
+    }
+    void visit(AstWith* const nodep) override {
+        iterateChildren(nodep);
+        nodep->dtypeFrom(nodep->exprp());
+    }
+    void visit(AstFunc* const nodep) override {
+        iterateChildren(nodep);
+        // VN_AS on purpose since fvarp should be either var or nullptr
+        if (const AstVar* const varp = VN_AS(nodep->fvarp(), Var)) nodep->dtypeFrom(varp);
+    }
+    void visit(AstNode* const nodep) override { iterateChildren(nodep); }
+
+public:
+    explicit KnownVisitor(AstNetlist* const netlistp) { iterate(netlistp); }
+    ~KnownVisitor() override = default;
+};
 
 void V3Unknown::unknownAll(AstNetlist* nodep) {
     UINFO(2, __FUNCTION__ << ":");
     { UnknownVisitor{nodep}; }  // Destruct before checking
+    { KnownVisitor{nodep}; }
+    v3Global.fourstateResolved(true);  // set fourstateResolved before checking
     V3Global::dumpCheckGlobalTree("unknown", 0, dumpTreeEitherLevel() >= 3);
 }
 

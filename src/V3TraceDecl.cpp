@@ -344,6 +344,8 @@ class TraceDeclVisitor final : public VNVisitor {
         if (m_traValueXZp) {
             valuep = new AstFourstateExpr{m_traVscp->fileline(), valuep,
                                           m_traValueXZp->cloneTree(false)};
+            // This late trace pair already contains lowered value and X/Z storage.
+            valuep->dtypeChgStates(false);
         }
         const bool validOffset = m_offset != std::numeric_limits<uint32_t>::max();
         AstTraceDecl* const newp

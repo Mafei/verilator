@@ -393,6 +393,27 @@ class ResultsTest(unittest.TestCase):
                     GROUPS["upstream"] = original
 
 
+class SelectionBaselineTest(unittest.TestCase):
+    """Reject silent removal or reordering beyond the original 438-case projection."""
+
+    def test_later_rejection_control_cannot_disappear(self):
+        groups = copy.deepcopy(run_regressions.GROUPS)
+        groups['upstream_daily_20261102'].remove('event_nba_notiming_bad')
+        with mock.patch.object(run_regressions, 'GROUPS', groups):
+            with self.assertRaisesRegex(ValueError, 'Nov6 original regression selection changed'):
+                run_regressions.selection_revision()
+
+    def test_later_controls_keep_their_original_order(self):
+        groups = copy.deepcopy(run_regressions.GROUPS)
+        names = groups['upstream_daily_20261102']
+        first = names.index('event_nba_dynsize_bad')
+        second = names.index('event_nba_notiming_bad')
+        names[first], names[second] = names[second], names[first]
+        with mock.patch.object(run_regressions, 'GROUPS', groups):
+            with self.assertRaisesRegex(ValueError, 'Nov6 original regression selection changed'):
+                run_regressions.selection_revision()
+
+
 class BashGateTest(unittest.TestCase):
     """Exercise the build's actual shell gate with each failing subprocess."""
 
