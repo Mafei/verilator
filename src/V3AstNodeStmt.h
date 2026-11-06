@@ -1017,6 +1017,42 @@ public:
     }
     bool off() const { return m_off; }
 };
+class AstNbaCommit final : public AstNodeStmt {
+    // Commit generic NBAs currently pending in the NBA queue 'queuep'.
+    // @astgen op1 := queuep : AstVarRef  // The VlNbaGenericQueue
+    // @astgen op2 := targetsp : List[AstVarRef]  // The variables updated - only for scheduling
+public:
+    AstNbaCommit(FileLine* fl, AstVarRef* queuep)
+        : ASTGEN_SUPER_NbaCommit(fl) {
+        this->queuep(queuep);
+    }
+    ASTGEN_MEMBERS_AstNbaCommit;
+    bool isPure() override { return false; }
+};
+class AstNbaEnqueue final : public AstNodeStmt {
+    // Enqueue a generic NBA to the NBA queue 'queuep', until its next commit (see V3Delayed): take
+    // a closure from 'poolp', set its members to 'argsp', and enqueue it to call 'funcp'.
+    // @astgen op1 := queuep : AstVarRef  // The VlNbaGenericQueue
+    // @astgen op2 := poolp : AstVarRef  // The VlClosurePool
+    // @astgen op3 := argsp : List[AstNodeExpr]  // The values of the members, in order
+    // @astgen ptr := m_funcp : AstCFunc  // The function called with the closure on commit
+public:
+    AstNbaEnqueue(FileLine* fl, AstVarRef* queuep, AstVarRef* poolp, AstCFunc* funcp)
+        : ASTGEN_SUPER_NbaEnqueue(fl)
+        , m_funcp{funcp} {
+        this->queuep(queuep);
+        this->poolp(poolp);
+    }
+    ASTGEN_MEMBERS_AstNbaEnqueue;
+    void dump(std::ostream& str) const override;
+    void dumpJson(std::ostream& str) const override;
+    bool isPure() override { return false; }
+    bool sameNode(const AstNode* samep) const override {
+        return funcp() == VN_DBG_AS(samep, NbaEnqueue)->funcp();
+    }
+    AstCFunc* funcp() const { return m_funcp; }
+    void funcp(AstCFunc* funcp) { m_funcp = funcp; }
+};
 class AstPExprClause final : public AstNodeStmt {
     const bool m_pass;  // Will be replaced by passing assertion clause, false for
                         // assertion failure clause
@@ -1636,15 +1672,24 @@ public:
 class AstAssignW final : public AstNodeAssign {
     // Like assign, but wire/assign's in verilog, the only setting of the specified variable
     // @astgen op4 := strengthSpecp : Optional[AstStrengthSpec]
+    bool m_declInit : 1;  // Lowered declaration initializer of the net
 public:
     AstAssignW(FileLine* fl, AstNodeExpr* lhsp, AstNodeExpr* rhsp,
                AstNode* timingControlp = nullptr)
-        : ASTGEN_SUPER_AssignW(fl, lhsp, rhsp, timingControlp) {}
+        : ASTGEN_SUPER_AssignW(fl, lhsp, rhsp, timingControlp)
+        , m_declInit{false} {}
     ASTGEN_MEMBERS_AstAssignW;
+    void dump(std::ostream& str) const override;
+    void dumpJson(std::ostream& str) const override;
     AstNodeAssign* cloneType(AstNodeExpr* lhsp, AstNodeExpr* rhsp) override {
         AstNode* const controlp = timingControlp() ? timingControlp()->cloneTree(false) : nullptr;
-        return new AstAssignW{fileline(), lhsp, rhsp, controlp};
+        AstAssignW* const clonep = new AstAssignW{fileline(), lhsp, rhsp, controlp};
+        clonep->m_declInit = m_declInit;
+        return clonep;
     }
+    // Set by the parser on the assign it creates for a net's declaration initializer
+    void declInit(bool set) { m_declInit = set; }
+    bool declInit() const { return m_declInit; }
     bool isTimingControl() const override {
         return timingControlp() || lhsp()->exists([](const AstNodeVarRef* refp) {
             return refp->access().isWriteOrRW() && refp->varp()->delayp();

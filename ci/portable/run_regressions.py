@@ -383,6 +383,48 @@ GROUPS = {
     ],
     "emitv_ccall_20261105": ["debug_emitv_ccall"],
     "pull_audit_20261105": ["fourstate_multi_unsup"],
+    "upstream_daily_20261106_new": [
+        "assigndly_dynamic_notiming",
+        "class_param_inherit_access_bad",
+        "class_param_inherit_access_pin_bad",
+        "class_param_inherit_bad",
+        "class_param_inherit_pin",
+        "class_param_inherit_pin_bad",
+        "class_param_inherit_scope",
+        "event_nba_notiming",
+        "event_nba_struct",
+        "force_release_comb_sel",
+        "force_release_wide_sel",
+        "func_typedef",
+        "lint_multidriven_pin_bad",
+        "nba_class",
+        "nba_closure_combine",
+        "nba_func_comb_unsup",
+        "nba_generic",
+        "nba_generic_func",
+        "nba_generic_vif",
+        "nba_generic_zerodly",
+    ],
+    "upstream_daily_20261106_changed": [
+        "array_pattern_packed",
+        "assignment_pin_bad",
+        "cover_toggle",
+        "force_immediate_release_port_net",
+        "inst_slice",
+        "lint_historical",
+        "lint_unused",
+        "lint_unused_bad",
+        "nba_hier",
+        "nba_noninlined_await_virtual",
+        "nba_shared_flag_reuse",
+        "order_blkandnblk_bad",
+        "procedure_always_nba",
+        "procedure_initial_nba",
+        "queue_class",
+        "scheduling_virt_iface_class",
+        "stream_unpacked_struct_port",
+        "unpacked_concat_bad2",
+    ],
 }
 
 
@@ -416,6 +458,10 @@ def selection_revision():
     if (removed != list(clocking_legacy.LEGACY_NAMES)
             or unchanged != [name for name in current if name in original]):
         raise ValueError('Original regression selection delta changed')
+    # Preserve the Nov6 merge baseline, including drivers added after the original 438.
+    if (len(current) < 564 or digest(current[:564])
+            != 'eccc9b91c1c4113668d7e27dd7115478a9d7d9d4962426cf766a8007b9455dba'):
+        raise ValueError('Nov6 original regression selection changed')
     return {
         'schema': 'clocking-regression-selection-v1',
         'original_revision': clocking_legacy.BASE_SHA,
