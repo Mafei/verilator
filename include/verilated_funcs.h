@@ -3530,6 +3530,23 @@ inline int _vl_insert_high(int rbits, int obits, int lsb) VL_PURE {
         std::min<int64_t>(std::numeric_limits<int>::max(), static_cast<int64_t>(lsb) + obits - 1));
 }
 
+// Insert a wide source into a scalar destination without discarding source bits
+// before low clipping. At most two destination words are needed; source reads
+// retain their original width and are bounded independently of destination size.
+template <typename T_Dest>
+inline void _vl_assignsel_scalar_W(int rbits, int obits, int lsb, T_Dest& lhsr,
+                                   WDataInP const rwp) VL_MT_SAFE {
+    const int high = _vl_insert_high(rbits, obits, lsb);
+    if (high < 0) return;
+    VlWide<VL_WQ_WORDS_E> value;
+    VL_SET_WQ(value, static_cast<QData>(lhsr));
+    const int64_t sourceWords = (static_cast<int64_t>(obits) + VL_SIZEBITS_E) / VL_EDATASIZE;
+    _vl_insert_clipped_W(value, high, lsb, rbits, [rwp, sourceWords](int64_t word) {
+        return word >= 0 && word < sourceWords ? rwp[word] : 0U;
+    });
+    lhsr = static_cast<T_Dest>(VL_SET_QW(value));
+}
+
 // EMIT_RULE: VL_ASSIGNRANGE:  rclean=dirty;
 inline void VL_ASSIGNSEL_II(int rbits, int obits, int lsb, CData& lhsr, IData rhs) VL_PURE {
     const int high = _vl_insert_high(rbits, obits, lsb);
@@ -3543,6 +3560,30 @@ inline void VL_ASSIGNSEL_II(int rbits, int obits, int lsb, IData& lhsr, IData rh
     const int high = _vl_insert_high(rbits, obits, lsb);
     if (high >= 0) _vl_insert_II(lhsr, rhs, high, lsb, rbits);
 }
+inline void VL_ASSIGNSEL_IQ(int rbits, int obits, int lsb, CData& lhsr, QData rhs) VL_PURE {
+    const int high = _vl_insert_high(rbits, obits, lsb);
+    if (high >= 0) _vl_insert_scalar(lhsr, rhs, high, lsb, rbits);
+}
+inline void VL_ASSIGNSEL_IQ(int rbits, int obits, int lsb, SData& lhsr, QData rhs) VL_PURE {
+    const int high = _vl_insert_high(rbits, obits, lsb);
+    if (high >= 0) _vl_insert_scalar(lhsr, rhs, high, lsb, rbits);
+}
+inline void VL_ASSIGNSEL_IQ(int rbits, int obits, int lsb, IData& lhsr, QData rhs) VL_PURE {
+    const int high = _vl_insert_high(rbits, obits, lsb);
+    if (high >= 0) _vl_insert_scalar(lhsr, rhs, high, lsb, rbits);
+}
+inline void VL_ASSIGNSEL_IW(int rbits, int obits, int lsb, CData& lhsr,
+                            WDataInP const rwp) VL_MT_SAFE {
+    _vl_assignsel_scalar_W(rbits, obits, lsb, lhsr, rwp);
+}
+inline void VL_ASSIGNSEL_IW(int rbits, int obits, int lsb, SData& lhsr,
+                            WDataInP const rwp) VL_MT_SAFE {
+    _vl_assignsel_scalar_W(rbits, obits, lsb, lhsr, rwp);
+}
+inline void VL_ASSIGNSEL_IW(int rbits, int obits, int lsb, IData& lhsr,
+                            WDataInP const rwp) VL_MT_SAFE {
+    _vl_assignsel_scalar_W(rbits, obits, lsb, lhsr, rwp);
+}
 inline void VL_ASSIGNSEL_QI(int rbits, int obits, int lsb, QData& lhsr, IData rhs) VL_PURE {
     const int high = _vl_insert_high(rbits, obits, lsb);
     if (high >= 0) _vl_insert_QQ(lhsr, rhs, high, lsb, rbits);
@@ -3551,8 +3592,10 @@ inline void VL_ASSIGNSEL_QQ(int rbits, int obits, int lsb, QData& lhsr, QData rh
     const int high = _vl_insert_high(rbits, obits, lsb);
     if (high >= 0) _vl_insert_QQ(lhsr, rhs, high, lsb, rbits);
 }
-// inline void VL_ASSIGNSEL_IIIW(int obits, int lsb, IData& lhsr, WDataInP const rwp)
-// VL_MT_SAFE { Illegal, as lhs width >= rhs width
+inline void VL_ASSIGNSEL_QW(int rbits, int obits, int lsb, QData& lhsr,
+                            WDataInP const rwp) VL_MT_SAFE {
+    _vl_assignsel_scalar_W(rbits, obits, lsb, lhsr, rwp);
+}
 inline void VL_ASSIGNSEL_WI(int rbits, int obits, int lsb, WDataOutP iowp, IData rhs) VL_MT_SAFE {
     const int high = _vl_insert_high(rbits, obits, lsb);
     if (high >= 0) _vl_insert_WI(iowp, rhs, high, lsb, rbits);

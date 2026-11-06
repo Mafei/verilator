@@ -425,6 +425,10 @@ GROUPS = {
         "stream_unpacked_struct_port",
         "unpacked_concat_bad2",
     ],
+    "nba_capture_20261106": [
+        "nba_event_capture", "fourstate_nba_event_capture", "nba_with_capture",
+        "fourstate_nba_with_capture", "assignsel_clip_runtime"
+    ],
 }
 
 

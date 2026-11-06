@@ -976,6 +976,10 @@ bool AstCMethodHard::getPurity() {
     for (AstNodeExpr* const argp : pinspList()) {
         if (!argp->isPure()) return false;
     }
+    // The method also evaluates its with lambda; cloning must not repeat side effects.
+    if (withp() && withp()->exists([](AstNode* const nodep) { return !nodep->isPure(); })) {
+        return false;
+    }
     return true;
 }
 int AstCMethodHard::instrCount() const {

@@ -160,11 +160,10 @@ class UnknownVisitor final : public VNVisitor {
     }
 
     static AstNodeExpr* indexForSelect(AstNodeExpr* const indexp) {
-        // The complete index is checked separately before this access. Model
-        // selections only need 32 address bits after that check, including when
-        // the source index is a wide signed expression. Four-state lowering
-        // still needs every index bit and its X/Z mask.
-        if (!v3Global.opt.fourstate() && indexp->width() > VL_IDATASIZE) {
+        // The full index, including an X/Z-derived invalid sentinel, remains in the
+        // bounds check. Four-state lowering has already run before V3Unknown; only
+        // this physical access is narrowed to the runtime's int-sized select index.
+        if (indexp->width() > VL_IDATASIZE) {
             AstSel* const selp = new AstSel{indexp->fileline(), indexp, 0, VL_IDATASIZE};
             selp->dtypeSetBitSized(VL_IDATASIZE, VSigning::fromBool(indexp->isSigned()));
             return selp;
