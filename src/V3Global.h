@@ -43,6 +43,7 @@ class V3HierGraph;
 class V3ImportContext;
 class V3ImportLexical;
 class V3LibMap;
+class V3SolverBackend;
 class V3ThreadPool;
 
 //######################################################################
@@ -88,6 +89,8 @@ class V3Global final {
     V3LibMap* m_libMapp = nullptr;
     V3ImportContext* m_importContextp = nullptr;  // Capture-only parser history
     V3ImportLexical* m_importLexicalp = nullptr;  // Immutable source views for name binding
+    // Constraint solver back-end, see V3SolverBackend.h, set via solverBackendp(V3SolverBackend*)
+    V3SolverBackend* m_solverBackendp = nullptr;
     VWidthMinUsage m_widthMinUsage
         = VWidthMinUsage::LINT_WIDTH;  // What AstNode::widthMin() is used for
 
@@ -207,6 +210,11 @@ public:
     void setUsesForce() { m_usesForce = true; }
     V3HierGraph* hierGraphp() const { return m_hierGraphp; }
     void hierGraphp(V3HierGraph* graphp) { m_hierGraphp = graphp; }
+    V3SolverBackend* solverBackendp() const { return m_solverBackendp; }
+    void solverBackendp(V3SolverBackend* backendp) {
+        UASSERT(!m_solverBackendp, "attempted to create multiple solver back-ends");
+        m_solverBackendp = backendp;
+    }
     bool useParallelBuild() const { return m_useParallelBuild; }
     void useParallelBuild(bool flag) { m_useParallelBuild = flag; }
     bool useRandSequence() const { return m_useRandSequence; }

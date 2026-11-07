@@ -1844,7 +1844,7 @@ class TaskVisitor final : public VNVisitor {
             cfuncp->scopeNamep(snp);
         }
 
-        // Create list of arguments and move to function
+        // Move arguments and local variables to function
         for (AstNode* const stmtp : nodep->stmtspList()) {
             if (AstVar* const portp = VN_CAST(stmtp, Var)) {
                 if (portp->isParam() && VN_IS(portp->valuep(), ConsArray)) {
@@ -1853,10 +1853,9 @@ class TaskVisitor final : public VNVisitor {
                     pushDeletep(portp);
                     portp->user2p(constPoolTable(portp));
                 } else {
+                    unlinkAndClone(nodep, portp, false);
+                    portp->funcLocal(true);
                     if (portp->isIO()) {
-                        // Move it to new function
-                        unlinkAndClone(nodep, portp, false);
-                        portp->funcLocal(true);
                         if (portp->valuep()) pushDeletep(portp->valuep()->unlinkFrBack());
                         cfuncp->addArgsp(portp);
                         // Pass inputs to DPI import wrappers by reference, unless fits in register
@@ -1867,8 +1866,7 @@ class TaskVisitor final : public VNVisitor {
                             }
                         }
                     } else {
-                        // "Normal" variable, mark inside function
-                        portp->funcLocal(true);
+                        cfuncp->addVarsp(portp);
                     }
                     AstVarScope* const newvscp
                         = new AstVarScope{portp->fileline(), m_scopep, portp};
@@ -1891,11 +1889,11 @@ class TaskVisitor final : public VNVisitor {
             AstBegin* const tempp
                 = new AstBegin{nodep->fileline(), "[EditWrapper]", bodysp, false};
             VL_DANGLING(bodysp);
-            // If we cloned due to recursion, now need to rip out the ports
+            // If we cloned due to recursion, now need to rip out the variables
             // (that remained in place) then got cloned
             for (AstNode* const stmtp : tempp->stmtspList()) {
-                if (AstVar* const portp = VN_CAST(stmtp, Var)) {
-                    if (portp->isIO()) VL_DO_DANGLING(pushDeletep(portp->unlinkFrBack()), portp);
+                if (AstVar* const varp = VN_CAST(stmtp, Var)) {
+                    VL_DO_DANGLING(pushDeletep(varp->unlinkFrBack()), varp);
                 }
             }
             if (tempp->stmtsp()) cfuncp->addStmtsp(tempp->stmtsp()->unlinkFrBackWithNext());

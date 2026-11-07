@@ -487,17 +487,17 @@ List Of Warnings
 
 .. option:: COMBDLY
 
-   Error issued when a non-blocking assignment `<=`, or a non-blocking event
-   trigger `->>`, is used in a combinational logic block. Using non-blocking
-   assignments in this way is bad practice, and may lead to the simulation not
-   matching synthesis. Verilator, like synthesis, will always convert these to
-   the blocking forms `=` and `->` and execute them as such. This may result in
-   race conditions and differ from other simulators.
+   Warns that a non-blocking assignment `<=`, or a non-blocking event trigger
+   `->>`, is used in a combinational logic block. Using non-blocking assignments
+   in this way is bad practice, and may lead to the simulation not matching
+   synthesis. Verilator, like synthesis, will always convert these to the
+   blocking forms `=` and `->` and execute them as such. This may result in race
+   conditions and differ from other simulators.
    `http://www.sunburst-design.com/papers/CummingsSNUG2000SJ_NBA.pdf
    <http://www.sunburst-design.com/papers/CummingsSNUG2000SJ_NBA.pdf>`_
 
-   This error can be disabled. Disabling it does not change execution, only
-   suppresses the error message.
+   Disabling this warning does not change execution, only suppresses the
+   warning message.
 
    Faulty example:
 
@@ -2662,6 +2662,10 @@ List Of Warnings
    name, or put the appropriate lint_off around the wire. Having unused
    signals in one place makes it easy to find what is unused and reduces
    the number of lint_off pragmas, reducing bugs.
+
+   Verilator intentionally does not consider a `$display("%p")` to consume
+   all members of a class/structure as this would otherwise hide that a
+   variable is unused functionally otherwise.
 
 
 .. option:: USEBEFOREDECL
