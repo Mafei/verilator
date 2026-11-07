@@ -431,6 +431,11 @@ GROUPS = {
         "fourstate_nba_bounds_sink", "fourstate_nba_static_bounds_sink"
     ],
     "simulate_display_20261106": ["func_display_nonconst_bad", "func_const", "func_const_bad"],
+    "upstream_daily_20261107": [
+        "class_copy_bad", "class_extern", "class_new_copy_polymorphism",
+        "constraint_arr_with_arrsize_unsup", "constraint_json_only", "lint_latch_bad",
+        "timing_split_finish", "timing_split_nested"
+    ],
 }
 
 
@@ -471,6 +476,9 @@ def selection_revision():
     if (len(current) < 610 or digest(current[:610])
             != '49cbe37203828ba127798e9d6f6cf1ea43d39da9817f0fa6f2c142b9cf80d459'):
         raise ValueError('Nov6 integrated regression selection changed')
+    if (len(current) < 613 or digest(current[:613])
+            != '75858628307e413df2ad3ae01c684883a9500a4813fc578eeb4ac7f4e8e50212'):
+        raise ValueError('Nov7 inherited regression selection changed')
     return {
         'schema': 'clocking-regression-selection-v1',
         'original_revision': clocking_legacy.BASE_SHA,

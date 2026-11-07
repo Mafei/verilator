@@ -5176,12 +5176,11 @@ VerilatedVar* VerilatedScope::varInsertMember(const char* namep, void* datap, vo
     return &(m_varsp->find(namep)->second);
 }
 
-VerilatedVar*
-VerilatedScope::forceableVarInsert(const char* namep, void* datap, bool isParam,
-                                   VerilatedVarType vltype, int vlflags, void* forceReadSignalDatap,
-                                   const char* const forceReadSignalName,
-                                   std::pair<VerilatedVar*, VerilatedVar*> forceControlSignals,
-                                   int udims, int pdims, ...) VL_MT_UNSAFE {
+VerilatedVar* VerilatedScope::forceableVarInsert(
+    const char* namep, void* datap, bool isParam, VerilatedVarType vltype, int vlflags,
+    void* forceReadSignalDatap, const char* const forceReadSignalName,
+    std::pair<VerilatedVar*, VerilatedVar*> forceControlSignals, int udims, int pdims,
+    ...) VL_MT_UNSAFE {
     if (!m_varsp) m_varsp = new VerilatedVarNameMap;
 
     // TODO: While the force read signal would be *expected* to have the same vltype and vlflags

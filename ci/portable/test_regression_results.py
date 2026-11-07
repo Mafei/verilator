@@ -414,6 +414,19 @@ class SelectionBaselineTest(unittest.TestCase):
                 run_regressions.selection_revision()
 
 
+class InheritedSelectionTest(unittest.TestCase):
+    """Keep PR60 controls present when extending today's selection."""
+
+    def test_pr60_controls_cannot_disappear_or_reorder(self):
+        for altered in ([], ["func_const", "func_display_nonconst_bad", "func_const_bad"]):
+            groups = copy.deepcopy(run_regressions.GROUPS)
+            groups['simulate_display_20261106'] = altered
+            with mock.patch.object(run_regressions, 'GROUPS', groups):
+                with self.assertRaisesRegex(ValueError,
+                                            'Nov7 inherited regression selection changed'):
+                    run_regressions.selection_revision()
+
+
 class BashGateTest(unittest.TestCase):
     """Exercise the build's actual shell gate with each failing subprocess."""
 

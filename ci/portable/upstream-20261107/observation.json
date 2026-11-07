@@ -1,0 +1,22 @@
+{
+  "schema": "verilator-upstream-observation-v1",
+  "observed_at": "2026-11-07T00:22:33Z",
+  "verified_at": "2026-11-07T00:26:49.190499+00:00",
+  "environment": {
+    "id": "ccarenv_b64_Y2NhcmVudl82MWJmOTU5NjI5YzQ4MTkxYTYxNmQ3MjVmNGEwM2RjNA",
+    "cwd": "/workspace/verilator",
+    "provider": "cloud",
+    "selected_saved_config": "554c7ce5-d35e-4e17-88d7-8dec6033062d~asenvcfg_44bc9c3278688191b954b1bc6176ea17",
+    "repo_id": 1408957805
+  },
+  "candidate_base": "d7b269b3cc7143722e0f370435bf51bbc777364e",
+  "merge_commit": "3e2684ce57e7593b3821cf7ea52fe8e8e00382b5",
+  "official_master": "9d9dd1c890b39b72494afb0ce89a6ccaf8590087",
+  "official_new_commits": 18,
+  "antmicro_dev_fourstate": "dbb8aedaa478389639295e40f16dbc7183d10b48",
+  "antmicro_feature_4_state_logic": "5e132f32db577b3d596b66ce6378ac224ffa38d3",
+  "delivery_unchanged": "d565afb615e3393970d6ce030d75df68b594e6b8",
+  "pending_golden_patch_sha256": "c3b79fec96c267d6d7b502e7f28b0837278e312c820ef5e8d849a868d60fc269",
+  "pending_golden_applied": false,
+  "acceptance": "HOLD"
+}
