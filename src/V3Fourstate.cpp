@@ -1304,6 +1304,7 @@ class FourstateVisitor final : public VNVisitor {
     V3UniqueNames m_pinHelpersNames;  // Unique names for pin conversion helpers
 
     AstNode* m_currentTmpSpotp = nullptr;  // Node after which put AstVar* for temporary variable
+    AstExprStmt* m_tmpExprp = nullptr;  // Owner of expression-local declarations
     bool m_tmpFuncLocal
         = false;  // Whether temporary variables shall be created as function locals
     AstNode* m_currentStmtp = nullptr;  // Current statement or declarative coverage anchor
@@ -1467,6 +1468,14 @@ class FourstateVisitor final : public VNVisitor {
         AstNodeStmt* stmtp() const { return m_stmtp; }
     };
 
+    void addTmpVar(AstVar* const varp) {
+        if (m_tmpExprp) {
+            m_tmpExprp->addVarsp(varp);
+        } else {
+            m_currentTmpSpotp->addHereThisAsNext(varp);
+        }
+    }
+
     // Takes expression or AstVar and creates a new temporary variable
     AstVar* createTmp(AstNode* const nodep) {
         UASSERT_OBJ(
@@ -1483,7 +1492,7 @@ class FourstateVisitor final : public VNVisitor {
         }
         AstVar* const varp = new AstVar{nodep->fileline(), VVarType::STMTTEMP,
                                         m_tmpNames.get(nodep), VFlagBitPacked{}, nodep->width()};
-        m_currentTmpSpotp->addHereThisAsNext(varp);
+        addTmpVar(varp);
         varp->funcLocal(m_tmpFuncLocal);
         varp->noSubst(true);
         m_tmpVarpsInUse.push_back(varp);
@@ -1891,7 +1900,7 @@ class FourstateVisitor final : public VNVisitor {
         varp->funcLocal(m_tmpFuncLocal);
         varp->noReset(true);
         varp->noSubst(true);
-        m_currentTmpSpotp->addHereThisAsNext(varp);
+        addTmpVar(varp);
         addPrecalculation(new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE},
                                         getFourstateExpressionValue(fromp, false)});
         AstVarRef* const refp = new AstVarRef{flp, varp, memberSelp->access()};
@@ -2220,6 +2229,9 @@ class FourstateVisitor final : public VNVisitor {
         }
 
         void liftExprStmtStatements(AstExprStmt* const exprStmtp) {
+            while (AstVar* const varp = exprStmtp->varsp()) {
+                m_fourstateVisitor.addTmpVar(varp->unlinkFrBack());
+            }
             AstNode* stmtsp = exprStmtp->stmtsp();
             if (!stmtsp) return;
             stmtsp = stmtsp->unlinkFrBackWithNext();
@@ -3593,6 +3605,8 @@ class FourstateVisitor final : public VNVisitor {
         // of one source statement in a fork. The C scope also protects jumps around locals.
         VL_RESTORER_CLEAR(m_tmpUnusedVarps);
         VL_RESTORER(m_tmpFuncLocal);
+        VL_RESTORER(m_tmpExprp);
+        m_tmpExprp = nullptr;
         m_tmpFuncLocal = true;
         AstNodeDType* const dtypep = getTwoStateDtype(nodep->rhsp()->dtypep());
         AstVar* const valueVarp
@@ -3602,8 +3616,9 @@ class FourstateVisitor final : public VNVisitor {
         xzVarp->funcLocal(true);
         valueVarp->noSubst(true);
         xzVarp->noSubst(true);
-        AstCLocalScope* const scopep = new AstCLocalScope{flp, valueVarp};
-        scopep->addStmtsp(xzVarp);
+        AstCLocalScope* const scopep = new AstCLocalScope{flp, nullptr};
+        scopep->addVarsp(valueVarp);
+        scopep->addVarsp(xzVarp);
         nodep->replaceWith(scopep);
         // A task's first statement can also be its declaration insertion anchor. Keep later
         // temporaries outside this new scope rather than restoring the relocated assignment.
@@ -3823,7 +3838,7 @@ class FourstateVisitor final : public VNVisitor {
                     m_tmpNames.get(nodep), getTwoStateDtype(delayp->dtypep())};
                 varp->funcLocal(m_tmpFuncLocal);
                 varp->noSubst(true);
-                m_currentTmpSpotp->addHereThisAsNext(varp);
+                addTmpVar(varp);
                 addPrecalculation(
                     new AstAssign{nodep->fileline(),
                                   new AstVarRef{nodep->fileline(), varp, VAccess::WRITE}, newp});
@@ -4082,7 +4097,7 @@ class FourstateVisitor final : public VNVisitor {
             = new AstVar{flp, VVarType::STMTTEMP, m_tmpNames.get(resultp), resultp->dtypep()};
         varp->funcLocal(true);
         varp->noSubst(true);
-        capturep->prependStmtsp(varp);
+        capturep->addVarsp(varp);
         resultp->unlinkFrBack();
         capturep->addStmtsp(new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE}, resultp});
         capturep->resultp(new AstVarRef{flp, varp, VAccess::READ});
@@ -4096,6 +4111,8 @@ class FourstateVisitor final : public VNVisitor {
         VL_RESTORER(m_tmpFuncLocal);
         m_tmpFuncLocal = true;
         AstExprStmt* const capturep = new AstExprStmt{flp, nullptr, originalp};
+        VL_RESTORER(m_tmpExprp);
+        m_tmpExprp = capturep;
         {
             StatementPlaceHolder placeholder{*this, flp};
             capturep->addStmtsp(placeholder.stmtp());
@@ -4116,16 +4133,6 @@ class FourstateVisitor final : public VNVisitor {
             pushDeletep(capturep);
             return resultp;
         }
-        // Branch lowering can use a temporary before its declaration was inserted.
-        // Move declarations ahead of all captures without moving any evaluation.
-        AstNode* varsp = nullptr;
-        for (AstNode *stmtp = capturep->stmtsp(), *nextp; stmtp; stmtp = nextp) {
-            nextp = stmtp->nextp();
-            if (AstVar* const varp = VN_CAST(stmtp, Var)) {
-                varsp = AstNode::addNext(varsp, varp->unlinkFrBack());
-            }
-        }
-        capturep->prependStmtsp(varsp);
         capturep->dtypeFrom(capturep->resultp());
         if (AstFourstateExpr* const valuePairp = VN_CAST(capturep->resultp(), FourstateExpr)) {
             // Each half owns all its captures and repeats only pure source reads.
@@ -4199,7 +4206,7 @@ class FourstateVisitor final : public VNVisitor {
         varp->funcLocal(m_tmpFuncLocal);
         varp->noReset(true);
         varp->noSubst(true);
-        m_currentTmpSpotp->addHereThisAsNext(varp);
+        addTmpVar(varp);
         addPrecalculation(new AstAssign{flp, new AstVarRef{flp, varp, VAccess::WRITE}, exprp});
         return new AstVarRef{flp, varp, VAccess::READ};
     }

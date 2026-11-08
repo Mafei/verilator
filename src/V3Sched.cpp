@@ -233,7 +233,7 @@ LogicClasses gatherLogicClasses(AstNetlist* netlistp) {
                 UASSERT_OBJ(!senTreep->sensesp()->nextp(), activep,
                             "combinational logic with additional sensitivities");
                 if (activep->isPostponed()) {
-                    UASSERT_OBJ(!activep->stmtsp()->nextp(), activep,
+                    UASSERT_OBJ(!activep->procsp()->nextp(), activep,
                                 "AlwaysPostponed must be alone under its active");
                     result.m_postponed.add(scopep, activep);
                 } else {
@@ -241,9 +241,9 @@ LogicClasses gatherLogicClasses(AstNetlist* netlistp) {
                 }
             } else {
                 UASSERT_OBJ(senTreep->hasClocked(), activep, "What else could it be?");
-                if (VN_IS(activep->stmtsp(), AlwaysObserved)) {
+                if (VN_IS(activep->procsp(), AlwaysObserved)) {
                     result.m_observed.add(scopep, activep);
-                } else if (VN_IS(activep->stmtsp(), AlwaysReactive)) {
+                } else if (VN_IS(activep->procsp(), AlwaysReactive)) {
                     result.m_reactive.add(scopep, activep);
                 } else {
                     result.m_clocked.add(scopep, activep);
@@ -288,7 +288,7 @@ public:
     }
 };
 
-AstIf* guardFinal(FileLine* flp, AstVarScope* requestedp, AstNode* bodyp) {
+AstIf* guardFinal(FileLine* flp, AstVarScope* requestedp, AstNodeStmt* bodyp) {
     return new AstIf{flp, new AstLogNot{flp, new AstVarRef{flp, requestedp, VAccess::READ}},
                      bodyp};
 }
@@ -305,7 +305,7 @@ void orderSequentially(AstCFunc* funcp, const LogicByScope& lbs,
         subFuncp->slow(funcp->slow());
         scopep->addBlocksp(subFuncp);
         // Call it from the top function
-        AstNode* callp = util::callVoidFunc(subFuncp);
+        AstNodeStmt* callp = util::callVoidFunc(subFuncp);
         if (finalRequestedp) callp = guardFinal(scopep->fileline(), finalRequestedp, callp);
         funcp->addStmtsp(callp);
         return subFuncp;
@@ -318,47 +318,32 @@ void orderSequentially(AstCFunc* funcp, const LogicByScope& lbs,
         // Create a sub-function per scope so we can V3Combine them later
         if (!scopep->user1p()) scopep->user1p(createNewSubFuncp(scopep));
         // Add statements to sub-function
-        for (AstNode* const logicp : activep->stmtspList()) {
-            auto* subFuncp = VN_AS(scopep->user1p(), CFunc);
-            if (AstNodeProcedure* const procp = VN_CAST(logicp, NodeProcedure)) {
-                if (AstNode* bodyp = procp->stmtsp()) {
-                    bodyp->unlinkFrBackWithNext();
-                    if (finalRequestedp) {
-                        AstFinal* const finalp = VN_CAST(procp, Final);
-                        UASSERT_OBJ(finalp, procp, "Non-final in final scheduling");
-                        if (finalp->finishExitEligible()) {
-                            auto* const exitp = new AstJumpBlock{procp->fileline(), bodyp};
-                            FinalFinishVisitor{exitp, finalRequestedp};
-                            bodyp = exitp;
-                        }
-                        bodyp = guardFinal(procp->fileline(), finalRequestedp, bodyp);
+        for (AstNodeProcedure* const procp : activep->procspList()) {
+            AstCFunc* subFuncp = VN_AS(scopep->user1p(), CFunc);
+            if (AstNodeStmt* bodyp = procp->stmtsp()) {
+                bodyp->unlinkFrBackWithNext();
+                if (finalRequestedp) {
+                    AstFinal* const finalp = VN_CAST(procp, Final);
+                    UASSERT_OBJ(finalp, procp, "Non-final in final scheduling");
+                    if (finalp->finishExitEligible()) {
+                        AstJumpBlock* const exitp = new AstJumpBlock{procp->fileline(), bodyp};
+                        FinalFinishVisitor{exitp, finalRequestedp};
+                        bodyp = exitp;
                     }
-                    // If the process is suspendable, we need a separate function (a coroutine)
-                    if (procp->isSuspendable()) {
-                        funcp->slow(false);
-                        subFuncp = createNewSubFuncp(scopep);
-                        subFuncp->name(subFuncp->name() + "__Vtiming__"
-                                       + cvtToStr(scopep->user2Inc()));
-                        subFuncp->rtnType("VlCoroutine");
-                        if (VN_IS(procp, Always)) {
-                            subFuncp->slow(false);
-                            FileLine* const flp = procp->fileline();
-                            AstNodeExpr* const condp = new AstCExpr{
-                                flp, "VL_LIKELY(!vlSymsp->_vm_contextp__->gotFinish())", 1};
-                            AstLoop* const loopp = new AstLoop{flp};
-                            loopp->addStmtsp(new AstLoopTest{flp, loopp, condp});
-                            loopp->addStmtsp(bodyp);
-                            bodyp = loopp;
-                        }
-                    }
-                    subFuncp->addStmtsp(bodyp);
-                    if (procp->needProcess()) subFuncp->setNeedProcess();
-                    // A coroutine holds a single process, so it is complete here
-                    if (procp->isSuspendable()) util::splitCheck(subFuncp);
+                    bodyp = guardFinal(procp->fileline(), finalRequestedp, bodyp);
                 }
-            } else {
-                logicp->unlinkFrBack();
-                subFuncp->addStmtsp(logicp);
+                // Suspendable always loops are already lowered to initial processes by Timing.
+                if (procp->isSuspendable()) {
+                    funcp->slow(false);
+                    subFuncp = createNewSubFuncp(scopep);
+                    subFuncp->name(subFuncp->name() + "__Vtiming__"
+                                   + cvtToStr(scopep->user2Inc()));
+                    subFuncp->rtnType("VlCoroutine");
+                }
+                subFuncp->addStmtsp(bodyp);
+                if (procp->needsVlProcess()) subFuncp->setNeedsVlProcess();
+                // A coroutine holds a single process, so it is complete here
+                if (procp->isSuspendable()) util::splitCheck(subFuncp);
             }
         }
         if (activep->backp()) activep->unlinkFrBack();
@@ -425,7 +410,7 @@ void createPostponed(AstNetlist* netlistp, const LogicClasses& logicClasses) {
 void createFinal(AstNetlist* netlistp, const LogicClasses& logicClasses) {
     AstCFunc* const funcp = netlistp->evalFuncp(VEval::FINAL);
     bool hasEligibleFinish = false;
-    logicClasses.m_final.foreachLogic([&](AstNode* nodep) {
+    logicClasses.m_final.foreachProcess([&](AstNodeProcedure* nodep) {
         if (const AstFinal* const finalp = VN_CAST(nodep, Final)) {
             hasEligibleFinish |= finalp->finishExitEligible();
         }
@@ -509,8 +494,8 @@ void createIcoRegion(AstNetlist* netlistp, AstCFunc* const initFuncp,
     // SystemC only: Any top level inputs feeding a combinational logic must be marked,
     // so we can make them sc_sensitive
     if (v3Global.opt.systemC()) {
-        logic.foreachLogic([](AstNode* logicp) {
-            logicp->foreach([](AstVarRef* refp) {
+        logic.foreachProcess([](AstNodeProcedure* procp) {
+            procp->foreach([](AstVarRef* refp) {
                 if (refp->access().isWriteOnly()) return;
                 AstVarScope* const vscp = refp->varScopep();
                 if (vscp->scopep()->isTop() && vscp->varp()->isNonOutput()) {
@@ -843,7 +828,7 @@ VirtIfaceTriggers::VscpTrigMap VirtIfaceTriggers::makeVscpToTrigMap(const Trigge
 void schedule(AstNetlist* netlistp) {
     const auto addSizeStat = [](const string& name, const LogicByScope& lbs) {
         uint64_t size = 0;
-        lbs.foreachLogic([&](AstNode* nodep) { size += nodep->nodeCount(); });
+        lbs.foreachProcess([&](AstNodeProcedure* procp) { size += procp->nodeCount(); });
         V3Stats::addStat("Scheduling, " + name, size);
     };
 
@@ -1066,45 +1051,14 @@ void schedule(AstNetlist* netlistp) {
                zeroDelayResumedVscp);
 
     // Step 17: Add neccessary evaluation before awaits
-    if (AstCCall* const readyp = timingKit.createReady(trigKit.vscp())) {
-        staticp->addStmtsp(readyp->makeStmt());
-        beforeTrigVisitor(netlistp, senExprBuilder, trigKit);
-    } else {
-        // beforeTrigVisitor clears Sentree pointers in AstCAwaits (as these sentrees will get
-        // deleted later) if there was no need to call it, SenTrees have to be cleaned manually
-        netlistp->foreach([](AstCAwait* const cAwaitp) { cAwaitp->clearSentreep(); });
-    }
-    if (AstVarScope* const trigAccp = trigKit.vscAccp()) {
-        // Copy trigger vector to accumulator at the end of static initialziation so,
-        // triggers fired during initialization persist to the first resume.
-        const AstUnpackArrayDType* const trigAccDTypep
-            = VN_AS(trigAccp->dtypep(), UnpackArrayDType);
-        UASSERT_OBJ(
-            trigAccDTypep->right() == 0, trigAccp,
-            "Expected that trigger vector and accumulator start elements enumeration from 0");
-        UASSERT_OBJ(trigAccDTypep->left() >= 0, trigAccp,
-                    "Expected that trigger vector and accumulator has no negative indexes");
-        FileLine* const flp = trigAccp->fileline();
-        AstVarScope* const vscp = netlistp->topScopep()->createTemp("__Vi", 32);
-        AstLoop* const loopp = new AstLoop{flp};
-        loopp->addStmtsp(
-            new AstAssign{flp,
-                          new AstArraySel{flp, new AstVarRef{flp, trigAccp, VAccess::WRITE},
-                                          new AstVarRef{flp, vscp, VAccess::READ}},
-                          new AstArraySel{flp, new AstVarRef{flp, actKit.m_vscp, VAccess::READ},
-                                          new AstVarRef{flp, vscp, VAccess::READ}}});
-        loopp->addStmtsp(util::incrementVar(vscp));
-        loopp->addStmtsp(new AstLoopTest{
-            flp, loopp,
-            new AstLte{flp, new AstVarRef{flp, vscp, VAccess::READ},
-                       new AstConst{flp, AstConst::WidthedValue{}, 32,
-                                    static_cast<uint32_t>(trigAccDTypep->left())}}});
-        staticp->addStmtsp(loopp);
-    }
+    beforeTrigVisitor(netlistp, senExprBuilder, trigKit);
 
     // Step 18: Clean up
     netlistp->clearStlFirstIterationp();
     netlistp->nbaQueuep(nullptr);  // Finished with this here
+    if (AstSenTree* const senTreesp = topScopep->senTreesp()) {
+        VL_DO_DANGLING(senTreesp->unlinkFrBackWithNext()->deleteTree(), senTreesp);
+    }
 
     if (v3Global.opt.stats()) {
         // A sample() call resolved to the union over its covergroup's constructions reads more

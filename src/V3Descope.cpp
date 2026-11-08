@@ -174,7 +174,7 @@ class DescopeVisitor final : public VNVisitor {
                     } else {
                         callp->dtypeSetVoid();
                     }
-                    AstNode* const returnp = new AstCReturn{funcp->fileline(), callp};
+                    AstCReturn* const returnp = new AstCReturn{funcp->fileline(), callp};
 
                     if (moreOfSame) {
                         AstIf* const ifp = new AstIf{
@@ -218,6 +218,17 @@ class DescopeVisitor final : public VNVisitor {
         VL_RESTORER(m_scopep);
         m_scopep = nodep;
         iterateChildren(nodep);
+    }
+    void visit(AstExprStmt* nodep) override {
+        iterateChildren(nodep);
+        // The result is emitted after the statement lambda. Keep its capture storage
+        // private to the enclosing function and visible to both expressions.
+        while (AstVar* const varp = nodep->varsp()) {
+            UASSERT_OBJ(m_funcp && varp->isFuncLocal() && varp->isTemp(), varp,
+                        "Expression capture storage must be function-local");
+            varp->name(m_sensitivityNames.get(varp->name()));
+            m_funcp->addVarsp(varp->unlinkFrBack());
+        }
     }
     void visit(AstVarScope* nodep) override {
         if (AstExprStmt* const exprp = VN_CAST(nodep->aboveLoopp(), ExprStmt)) {

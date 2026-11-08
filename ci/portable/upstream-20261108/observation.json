@@ -1,0 +1,26 @@
+{
+  "schema": "verilator-upstream-observation-v1",
+  "observed_at": "2026-11-08T00:02:28Z",
+  "recorded_at": "2026-11-08T00:17:57.835819+00:00",
+  "environment": {
+    "id": "ccarenv_b64_Y2NhcmVudl82MWJmOTU5NjI5YzQ4MTkxYTYxNmQ3MjVmNGEwM2RjNA",
+    "cwd": "/workspace/verilator",
+    "provider": "cloud",
+    "selected_saved_config": "554c7ce5-d35e-4e17-88d7-8dec6033062d~asenvcfg_44bc9c3278688191b954b1bc6176ea17",
+    "repo_id": 1408957805
+  },
+  "candidate_base": "58d0d2016c16fc520339a2824cdc907adeea4c4f",
+  "official_master": "3c54689240e96dbe5c551232dd3384326a87cbb2",
+  "official_new_commits": 25,
+  "antmicro_dev_fourstate": "dbb8aedaa478389639295e40f16dbc7183d10b48",
+  "antmicro_feature_4_state_logic": "5e132f32db577b3d596b66ce6378ac224ffa38d3",
+  "delivery_unchanged": "d565afb615e3393970d6ce030d75df68b594e6b8",
+  "pending_golden_patch_sha256": "c3b79fec96c267d6d7b502e7f28b0837278e312c820ef5e8d849a868d60fc269",
+  "pending_golden_applied": false,
+  "acceptance": "HOLD",
+  "current_selected_drivers": 637,
+  "current_groups": 56,
+  "inherited_621_selector_sha256": "19971aaf7c550a3744d9c75638bca7f3093aa74f7e2ce7c1f354dbbd0a144fa3",
+  "current_selector_sha256": "96006fd6b3e3679e6c8e43ab6922d78cf4058e5a5a1156bfd5a0304001e74695",
+  "pr_creation": "prohibited_by_current_instruction"
+}

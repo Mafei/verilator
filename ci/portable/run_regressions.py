@@ -436,6 +436,25 @@ GROUPS = {
         "constraint_arr_with_arrsize_unsup", "constraint_json_only", "lint_latch_bad",
         "timing_split_finish", "timing_split_nested"
     ],
+    # Official changes through 3c54689240e96dbe5c551232dd3384326a87cbb2.
+    "upstream_daily_20261108": [
+        "class_implements_param_bad",
+        "cover_fsm_compound_reset",
+        "cover_genfor",
+        "cover_genfor_default",
+        "sched_sense_const",
+        "unpacked_wide_reverse_copy",
+        "unpacked_wide_reverse_copy_noslice",
+        "class_implements_inherited",
+        "cover_fsm_negative_extract",
+        "disable_inside",
+        "for_comma",
+        "func_check",
+        "lint_misindent_bad",
+        "lint_width_cast",
+        "randsequence",
+        "stream_unpack",
+    ],
 }
 
 
@@ -479,6 +498,9 @@ def selection_revision():
     if (len(current) < 613 or digest(current[:613])
             != '75858628307e413df2ad3ae01c684883a9500a4813fc578eeb4ac7f4e8e50212'):
         raise ValueError('Nov7 inherited regression selection changed')
+    if (len(current) < 621 or digest(current[:621])
+            != '19971aaf7c550a3744d9c75638bca7f3093aa74f7e2ce7c1f354dbbd0a144fa3'):
+        raise ValueError('Nov8 inherited regression selection changed')
     return {
         'schema': 'clocking-regression-selection-v1',
         'original_revision': clocking_legacy.BASE_SHA,

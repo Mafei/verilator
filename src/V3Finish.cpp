@@ -239,8 +239,8 @@ class FinishVisitor final : public VNVisitor {
         return nodep;
     }
 
-    AstNode* newSourceExit(FileLine* flp, AstJumpBlock* blockp, const AstNode* afterp) {
-        AstNode* stmtsp = nullptr;
+    AstNodeStmt* newSourceExit(FileLine* flp, AstJumpBlock* blockp, const AstNode* afterp) {
+        AstNodeStmt* stmtsp = nullptr;
         // The local adjacent counters already execute before 'afterp'. A
         // remaining sibling is a barrier, even when an outer suffix is pure.
         if (!afterp->nextp()) {
@@ -260,13 +260,15 @@ class FinishVisitor final : public VNVisitor {
     AstJumpBlock* getExitBlock() {
         if (m_procp->user1p()) return VN_AS(m_procp->user1p(), JumpBlock);
         const AstCFunc* const funcp = VN_CAST(m_procp, CFunc);
-        AstNode* const bodyp = funcp ? funcp->stmtsp() : VN_AS(m_procp, NodeProcedure)->stmtsp();
+        AstNodeStmt* const bodyp
+            = funcp ? funcp->stmtsp() : VN_AS(m_procp, NodeProcedure)->stmtsp();
         UASSERT_OBJ(bodyp, m_procp, "Finish outside a source process body");
         VNRelinker relinker;
         bodyp->unlinkFrBackWithNext(&relinker);
         // A task may contain declarations after a finishing statement. Jump
         // out of their C++ scope rather than across their initialization.
-        AstNode* const scopedBodyp = funcp ? new AstCLocalScope{funcp->fileline(), bodyp} : bodyp;
+        AstNodeStmt* const scopedBodyp
+            = funcp ? new AstCLocalScope{funcp->fileline(), bodyp} : bodyp;
         AstJumpBlock* const blockp = new AstJumpBlock{m_procp->fileline(), scopedBodyp};
         relinker.relink(blockp);
         m_procp->user1p(blockp);

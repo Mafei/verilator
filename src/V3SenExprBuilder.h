@@ -268,6 +268,9 @@ private:
         switch (senItemp->edgeType()) {
         case VEdgeType::ET_CHANGED:
         case VEdgeType::ET_HYBRID: {
+            // If a change sense folded to a constant, run it once at time 0 only
+            if (VN_IS(senp, Const)) return {new AstConst{flp, AstConst::BitFalse{}}, true};
+            // Hybrid needs to run on startup
             const bool fireAtInit = senItemp->edgeType() == VEdgeType::ET_HYBRID;
             if (fourstateExpr) {
                 if (VN_IS(senp->dtypep()->skipRefp(), UnpackArrayDType)) {
