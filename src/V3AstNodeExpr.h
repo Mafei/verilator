@@ -1469,9 +1469,10 @@ class AstExprStmt final : public AstNodeExpr {
     // Perform a statement, often assignment inside an expression node,
     // the parent gets passed the 'resultp()'.
     // resultp is evaluated AFTER the statement(s).
-    // @astgen op1 := stmtsp : List[AstNodeStmt]
-    // @astgen op2 := resultp : AstNodeExpr
-    // @astgen op3 := varsp : List[AstVar]  // Expression-local capture storage
+    // Declarations precede all capture statements and result references during traversal.
+    // @astgen op1 := varsp : List[AstVar]  // Expression-local capture storage
+    // @astgen op2 := stmtsp : List[AstNodeStmt]
+    // @astgen op3 := resultp : AstNodeExpr
     // @astgen op4 := scopesp : List[AstVarScope]  // Cloned with sensitivity-local storage
 public:
     AstExprStmt(FileLine* fl, AstNodeStmt* stmtsp, AstNodeExpr* resultp)
