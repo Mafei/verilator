@@ -154,7 +154,10 @@ class ImportLexicalQualifier final : public VNVisitorConst {
         }
         if (const AstVar* const varp = VN_CAST(nodep, Var)) {
             m_declarations.insert(varp->name());
-            if (varp->isIO() || varp->isIfaceRef()) reason = "port/interface declaration";
+            // Parser-created function return variables carry OUTPUT direction but are not ports.
+            if ((varp->isIO() && !varp->isFuncReturn()) || varp->isIfaceRef()) {
+                reason = "port/interface declaration";
+            }
         }
         if (const AstNodeVarRef* const refp = VN_CAST(nodep, NodeVarRef)) {
             if (!refp->varp() || VN_IS(refp, VarXRef)) reason = "unbound/hierarchical VarRef";

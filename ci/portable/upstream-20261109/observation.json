@@ -73,5 +73,22 @@
       "status": "HOLD"
     },
     "selection_unit_subset": "InheritedSelectionTest (3) and BashGateTest (1) passed; full suite still running"
+  },
+  "followup": {
+    "parent": "c9d0773453e977e710a094674abb33fe39e92a57",
+    "regression": "package_import_lexical",
+    "observed": "t_package_import_lexical.v:30 got=3 expected=1; lexical_scope unsupported with port/interface declaration",
+    "cause": "New parser-created function return declaration has OUTPUT direction and now enters the early lexical qualifier.",
+    "fix": "Recognize funcReturn while keeping actual port/interface exclusions.",
+    "missing_tool": "sarif-tools==3.0.5 from python-dev-requirements.txt, added to existing CI venv install.",
+    "expectations_changed": false,
+    "acceptance": "HOLD; final-head validation pending",
+    "precommit_validation": {
+      "build_actual_exit": 0,
+      "lexical_and_import_controls": "3/3 passed, including unchanged package_import_lexical reproducer",
+      "sarif": "2 failed: actual commandLine includes the forced --no-skip-identical harness argument absent from upstream golden; SARIF HTML generation succeeds",
+      "golden_changed": false,
+      "status": "HOLD"
+    }
   }
 }

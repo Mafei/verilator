@@ -32,7 +32,8 @@ else
 fi
 python3 -m venv .ci-venv
 source .ci-venv/bin/activate
-python3 -m pip install --disable-pip-version-check distro
+# The selected SARIF regression drivers validate generated reports with the developer tool.
+python3 -m pip install --disable-pip-version-check distro sarif-tools==3.0.5
 python3 -m pip install --no-cache-dir --disable-pip-version-check --no-deps \
     --only-binary=:all: --require-hashes --target "$root/.ci-tools/solver" \
     -r ci/portable/solver-requirements.txt
