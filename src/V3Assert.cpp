@@ -106,30 +106,30 @@ class SeqEventLowerVisitor final : public VNVisitor {
         iterateChildren(nodep);
     }
     void visit(AstSenItem* nodep) override {
-        AstFuncRef* const funcrefp = VN_CAST(nodep->sensp(), FuncRef);
-        if (funcrefp && VN_IS(funcrefp->taskp(), Sequence)) {
+        AstSchemaRef* const schemaRefp = VN_CAST(nodep->sensp(), SchemaRef);
+        if (schemaRefp && VN_IS(schemaRefp->schemap(), Sequence)) {
             FileLine* const flp = nodep->fileline();
             AstVar* const eventp = new AstVar{flp, VVarType::MODULETEMP, m_names.get(nodep),
                                               m_modp->findBasicDType(VBasicDTypeKwd::EVENT)};
             eventp->lifetime(VLifetime::STATIC_EXPLICIT);
             m_modp->addStmtsp(eventp);
             v3Global.setHasEvents();
-            funcrefp->unlinkFrBack();
+            schemaRefp->unlinkFrBack();
             nodep->sensp(new AstVarRef{flp, eventp, VAccess::READ});
-            const bool automaticActual = funcrefp->exists([](const AstNodeVarRef* refp) {
+            const bool automaticActual = schemaRefp->exists([](const AstNodeVarRef* refp) {
                 return refp->varp() && refp->varp()->lifetime().isAutomatic();
             });
             if (automaticActual) {
                 nodep->v3error("Arguments to a sequence used as an event control must be"
                                " static (IEEE 1800-2023 9.4.2.4)");
-                VN_AS(funcrefp->taskp(), Sequence)->isReferenced(false);
-                VL_DO_DANGLING(pushDeletep(funcrefp), funcrefp);
+                VN_AS(schemaRefp->schemap(), Sequence)->isReferenced(false);
+                VL_DO_DANGLING(pushDeletep(schemaRefp), schemaRefp);
                 return;
             }
             AstFireEvent* const firep
                 = new AstFireEvent{flp, new AstVarRef{flp, eventp, VAccess::WRITE}, false};
             AstCover* const coverp
-                = new AstCover{flp, new AstPropSpec{flp, nullptr, nullptr, funcrefp}, firep,
+                = new AstCover{flp, new AstPropSpec{flp, nullptr, nullptr, schemaRefp}, firep,
                                VAssertType::CONCURRENT};
             coverp->isCoverSeq(true);
             coverp->isSeqEvent(true);
@@ -229,7 +229,7 @@ bool V3AssertCommon::refsSvaFormal(const AstNode* nodep) {
         const AstVar* const varp = refp->varp();
         if (!varp || !varp->isIO()) return false;
         const AstNode* const declp = varp->aboveLoopp();
-        return VN_IS(declp, Sequence) || VN_IS(declp, Property);
+        return VN_IS(declp, NodeSchema);
     });
 }
 
@@ -340,13 +340,34 @@ public:
 
 // Prepare one default sampled expression.
 class DefaultSampledValueVisitor final : public VNVisitor {
+    // STATE
+    bool m_defaulted = false;  // A reference below was replaced by its default
+
     // METHODS
-    static AstConst* newTypeDefault(AstNodeExpr* nodep) {
+    AstConst* newTypeDefault(AstNodeExpr* nodep) {
+        m_defaulted = true;
         AstConst* const constp
             = new AstConst{nodep->fileline(), AstConst::DTyped{}, nodep->dtypep()};
         if (nodep->dtypep()->isFourstate()) constp->num().setAllBitsX();
         constp->dtypeFrom(nodep);
         return constp;
+    }
+
+    void visitSelect(AstNodeExpr* nodep) {
+        // A select of a replaced value or index is itself the default of its type
+        bool setDefaulted;
+        {
+            VL_RESTORER(m_defaulted);
+            m_defaulted = false;
+            iterateChildren(nodep);
+            setDefaulted = m_defaulted;
+        }
+        if (setDefaulted) {
+            m_defaulted = true;  // Propagate up that replacement was made
+            nodep->replaceWith(newTypeDefault(nodep));
+            VL_DO_DANGLING(pushDeletep(nodep), nodep);
+            return;
+        }
     }
 
     // VISITORS
@@ -367,13 +388,8 @@ class DefaultSampledValueVisitor final : public VNVisitor {
         nodep->replaceWith(newTypeDefault(nodep));
         VL_DO_DANGLING(pushDeletep(nodep), nodep);
     }
-    void visit(AstArraySel* nodep) override {
-        iterateChildren(nodep);
-        // The default of an element of an array replaced by its default above
-        if (!VN_IS(nodep->fromp(), Const)) return;
-        nodep->replaceWith(newTypeDefault(nodep));
-        VL_DO_DANGLING(pushDeletep(nodep), nodep);
-    }
+    void visit(AstArraySel* nodep) override { visitSelect(nodep); }
+    void visit(AstSel* nodep) override { visitSelect(nodep); }
     void visit(AstNode* nodep) override { iterateChildren(nodep); }
 
 public:
@@ -863,7 +879,7 @@ class AssertVisitor final : public VNVisitor {
         } else if (refp) {
             // Match actuals to formal ports, including named/default arguments
             const V3TaskConnects tconnects
-                = V3Task::taskConnects(refp, refp->taskp()->stmtsp(), nullptr, false);
+                = V3Task::taskConnects(refp, refp->taskp()->declsp(), nullptr, false);
             for (const auto& tconnect : tconnects) {
                 AstVar* const portp = tconnect.first;
                 AstArg* const argp = tconnect.second;
@@ -1277,7 +1293,7 @@ class AssertVisitor final : public VNVisitor {
             if (m_ftaskp) {
                 varp->funcLocal(true);
                 varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
-                m_ftaskp->prependStmtsp(varp);
+                m_ftaskp->prependDeclsp(varp);
             } else {
                 m_modp->prependStmtsp(varp);
             }

@@ -266,9 +266,9 @@ public:
                     "Tried to build a port map while another exists");
         UASSERT_OBJ(m_currentFTaskRefPortpsNamesToVarps.empty(), ftaskp,
                     "Tried to build a port map while another exists");
-        for (AstNode* stmtp = ftaskp->stmtsp(); stmtp; stmtp = stmtp->nextp()) {
+        for (AstNode* stmtp = ftaskp->declsp(); stmtp; stmtp = stmtp->nextp()) {
             if (AstVar* const varp = VN_CAST(stmtp, Var)) {
-                if (varp->direction().isAny()
+                if (varp != ftaskp->fvarp() && varp->direction().isAny()
                     && !(varp->fourstateComplementp() || varp->isFourstateComplement())) {
                     m_currentFTaskRefPortps.push_back(varp);
                     m_currentFTaskRefPortpsNamesToVarps[varp->name()] = varp;
@@ -1471,6 +1471,8 @@ class FourstateVisitor final : public VNVisitor {
     void addTmpVar(AstVar* const varp) {
         if (m_tmpExprp) {
             m_tmpExprp->addVarsp(varp);
+        } else if (AstNodeFTask* const ftaskp = VN_CAST(m_currentTmpSpotp, NodeFTask)) {
+            ftaskp->addDeclsp(varp);
         } else {
             m_currentTmpSpotp->addHereThisAsNext(varp);
         }
@@ -1682,7 +1684,7 @@ class FourstateVisitor final : public VNVisitor {
                     "Split shall be called only on four-state variables");
         if (getValuePartVarp(varp)) return;
         m_varpsToRemove.push_back(varp);
-        if (AstNodeFTask* const ftaskp = VN_CAST(varp->backp(), NodeFTask)) {
+        if (AstNodeFTask* const ftaskp = VN_CAST(varp->aboveLoopp(), NodeFTask)) {
             if (ftaskp->fvarp() == varp) {
                 AstVar* const portEndp = getFTaskPortHelper(ftaskp).lastp();
                 AstVar* const returnValuep = new AstVar{varp->fileline(), VVarType::PORT,
@@ -1714,21 +1716,19 @@ class FourstateVisitor final : public VNVisitor {
                                     constp->cloneTree(false)};
                 AstAssign* const xzResetp
                     = new AstAssign{flp, new AstVarRef{flp, returnXzp, VAccess::WRITE}, constp};
+                // Ports belong to the declaration list; initialization remains executable.
                 if (portEndp) {
-                    portEndp->addNextHere(xzResetp);
-                    portEndp->addNextHere(valueResetp);
                     portEndp->addNextHere(returnXzp);
                     portEndp->addNextHere(returnValuep);
-                } else if (AstNode* const stmtp = ftaskp->stmtsp()) {
-                    stmtp->addHereThisAsNext(returnValuep);
-                    stmtp->addHereThisAsNext(returnXzp);
-                    stmtp->addHereThisAsNext(valueResetp);
-                    stmtp->addHereThisAsNext(xzResetp);
                 } else {
-                    ftaskp->addStmtsp(returnValuep);
-                    ftaskp->addStmtsp(returnXzp);
+                    ftaskp->addDeclsp(returnValuep);
+                    ftaskp->addDeclsp(returnXzp);
+                }
+                valueResetp->addNext(xzResetp);
+                if (AstNodeStmt* const stmtp = ftaskp->stmtsp()) {
+                    stmtp->addHereThisAsNext(valueResetp);
+                } else {
                     ftaskp->addStmtsp(valueResetp);
-                    ftaskp->addStmtsp(xzResetp);
                 }
                 FourstateLogicTypePropagator{ftaskp};
                 setValuePartVarp(varp, returnValuep);
@@ -2247,7 +2247,7 @@ class FourstateVisitor final : public VNVisitor {
 
         void fourstateExpressionFuncRefHandler(AstNodeFTaskRef* const funcRefp) {
             // Its ok to use this instead of output since we only need width which is the same
-            AstVar* const functionReturnVarp = VN_AS(VN_AS(funcRefp->taskp(), Func)->fvarp(), Var);
+            AstVar* const functionReturnVarp = VN_AS(funcRefp->taskp(), Func)->fvarp();
             AstVar* const resultValuep = m_fourstateVisitor.createTmp(functionReturnVarp);
             AstVar* const resultXzp = m_fourstateVisitor.createTmp(functionReturnVarp);
             AstNodeFTaskRef* const newCallp = funcRefp->cloneTree(false);
@@ -4841,7 +4841,7 @@ class FourstateVisitor final : public VNVisitor {
         VL_RESTORER_CLEAR(m_tmpUnusedVarps);
         VL_RESTORER(m_tmpFuncLocal);
         m_tmpFuncLocal = true;
-        m_currentTmpSpotp = nodep->stmtsp();
+        m_currentTmpSpotp = nodep;
         TmpVarsReleaser releaser{*this, nodep};
         // Make sure FTasks use only local variables - prevents using tmp
         // which may be used by a caller
@@ -4934,7 +4934,12 @@ public:
         // Split variables are obsolete. Audit only their lowered replacements, including
         // parameter initializers. Keep the originals alive until deferred deletion so
         // any missed reference is still diagnosed rather than dereferencing freed storage.
-        for (AstVar* const varp : m_varpsToRemove) pushDeletep(varp->unlinkFrBack());
+        for (AstVar* const varp : m_varpsToRemove) {
+            if (AstFunc* const funcp = VN_CAST(varp->aboveLoopp(), Func)) {
+                if (funcp->fvarp() == varp) funcp->clearReturnVarp();
+            }
+            pushDeletep(varp->unlinkFrBack());
+        }
         m_varpsToRemove.clear();
         { FourstateLogicTypePropagator{netlistp}; }
         netlistp->foreach([](const AstNodeExpr* const nodep) {

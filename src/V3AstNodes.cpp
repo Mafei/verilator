@@ -1956,6 +1956,15 @@ void AstForkItem::dumpJson(std::ostream& str) const {
     dumpJsonBoolFuncIf(str, disableWrapper);
     dumpJsonGen(str);
 }
+void AstFunc::initFvarp(AstVar* varp) {
+    // The function implicitly declares a variable with its name (IEEE 1800-2023 13.4.1)
+    varp->direction(VDirection::OUTPUT);
+    varp->lifetime(VLifetime::AUTOMATIC_EXPLICIT);
+    varp->funcLocal(true);
+    varp->funcReturn(true);
+    addDeclsp(varp);
+    fvarp(varp);
+}
 string AstGenBlock::dtypeNameInnerScope(const string& outer) const {
     // A named generate block is a scope (IEEE 1800-2023 27.6), so the types of distinct blocks,
     // as of the iterations of a loop, are named apart; an unnamed block, as around the 'if' of an
@@ -3287,22 +3296,24 @@ void AstNodeFTask::dumpJson(std::ostream& str) const {
 }
 bool AstNodeFTask::getPurityRecurse() const {
     if (this->dpiImport()) return this->dpiPure();
-    // Check the list of statements if it contains any impure statement
+    // Check the declarations and statements if they contain any impure node
     // or any write reference to a variable that isn't an automatic function local.
-    for (AstNode* const stmtp : this->stmtspList()) {
-        if (const AstVar* const varp = VN_CAST(stmtp, Var)) {
-            if (varp->isInoutOrRef()) return false;
+    for (AstNode* const listp : std::initializer_list<AstNode*>{this->declsp(), this->stmtsp()}) {
+        for (AstNode* itemp = listp; itemp; itemp = itemp->nextp()) {
+            if (const AstVar* const varp = VN_CAST(itemp, Var)) {
+                if (varp->isInoutOrRef()) return false;
+            }
+            if (!itemp->isPure()) return false;
+            if (itemp->exists([](AstNode* const nodep) {
+                    if (AstNodeVarRef* const varrefp = VN_CAST(nodep, VarRef)) {
+                        return (!varrefp->varp()->isFuncLocal()
+                                || varrefp->varp()->lifetime().isStatic())
+                               && varrefp->access().isWriteOrRW();
+                    }
+                    return !nodep->isPure();
+                }))
+                return false;
         }
-        if (!stmtp->isPure()) return false;
-        if (stmtp->exists([](AstNode* const nodep) {
-                if (AstNodeVarRef* const varrefp = VN_CAST(nodep, VarRef)) {
-                    return (!varrefp->varp()->isFuncLocal()
-                            || varrefp->varp()->lifetime().isStatic())
-                           && varrefp->access().isWriteOrRW();
-                }
-                return !nodep->isPure();
-            }))
-            return false;
     }
     return true;
 }
@@ -3922,6 +3933,7 @@ void AstSampled::dumpJson(std::ostream& str) const {
     dumpJsonBoolFuncIf(str, internal);
     dumpJsonGen(str);
 }
+std::string AstSchemaRef::name() const { return schemap()->name(); }
 AstActive* AstScope::comboActivep(bool create) {
     // Use an existing one, but not the active of an AlwaysPostponed, which must stay alone
     for (AstNode* const nodep : blockspList()) {
@@ -4739,6 +4751,9 @@ void AstVar::dump(std::ostream& str) const {
         str << " [orgKwd=" << fourstateOriginalDTypeKwd().ascii() << "]";
     }
     str << " " << varType();
+    if (forceRdVarp()) str << " forceRdVarp=" << nodeAddr(forceRdVarp());
+    if (forceEnVarp()) str << " forceEnVarp=" << nodeAddr(forceEnVarp());
+    if (forceValVarp()) str << " forceValVarp=" << nodeAddr(forceValVarp());
 }
 void AstVar::dumpJson(std::ostream& str) const {
     if (libInoutId()) dumpJsonNumFunc(str, libInoutId);

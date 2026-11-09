@@ -455,6 +455,30 @@ GROUPS = {
         "randsequence",
         "stream_unpack",
     ],
+    # Official changes through 73b52215fdb3d598041e73b673d9324bea58b2aa.
+    "upstream_daily_20261109": [
+        'assert_bang_in_seq', 'assert_consec_rep', 'assert_goto_rep', 'assert_nonconsec_rep',
+        'cast_lvalue_bad', 'cast_stream', 'cast_unpacked_struct', 'cast_unpacked_struct_bad',
+        'cast_unpacked_struct_fork', 'cast_unpacked_struct_param_bad', 'cast_unpacked_struct_sel',
+        'cast_unpacked_struct_unsup', 'class_lparam_struct_field_chain_bad',
+        'constraint_array_index', 'constraint_array_index_simple', 'constraint_foreach_classref',
+        'constraint_global_nested_randmode', 'constraint_global_randMode',
+        'constraint_global_random', 'constraint_mode_ctor', 'constraint_mode_static',
+        'constraint_shift_width', 'constraint_solve_before', 'constraint_unpacked_array',
+        'constraint_unsat', 'constraint_unsat_nowarn', 'constraint_unsat_protect_ids',
+        'cover_fsm_beginif', 'covergroup_auto_bin_max', 'flag_no_unlimited_stack',
+        'flag_unlimited_stack', 'fsm_register_wrapper', 'interface_array_loop',
+        'interface_virtual_sub_iface', 'json_only_tag', 'modport_export_task', 'past_funcs',
+        'property_accept_reject_on', 'property_pkg_temp', 'randc_constraint',
+        'randc_enum_constraint', 'randc_wide_constraint', 'randomize_array',
+        'randomize_module_var', 'randomize_prepost_nested', 'randomize_rand_mode_static',
+        'randomize_randmode_subobj', 'randomize_solve_before_foreach', 'randomize_this_inline',
+        'randomize_union', 'sarif', 'sarif_clean', 'sequence_first_match', 'sequence_ref_hier',
+        'sequence_sexpr_throughout', 'std_process_self', 'std_randomize_assoc',
+        'std_randomize_queue', 'stream_bad', 'stream_unpack_narrower', 'stream_unpacked_struct',
+        'tagged_case', 'tagged_if', 'tagged_union', 'timing_func_fork_bad',
+        'virtual_interface_member_trigger', 'vpi_comb_protect_ids', 'vpi_comb_trace', 'vpi_force'
+    ],
 }
 
 
@@ -501,6 +525,9 @@ def selection_revision():
     if (len(current) < 621 or digest(current[:621])
             != '19971aaf7c550a3744d9c75638bca7f3093aa74f7e2ce7c1f354dbbd0a144fa3'):
         raise ValueError('Nov8 inherited regression selection changed')
+    if (len(current) < 637 or digest(current[:637])
+            != '96006fd6b3e3679e6c8e43ab6922d78cf4058e5a5a1156bfd5a0304001e74695'):
+        raise ValueError('Nov9 inherited regression selection changed')
     return {
         'schema': 'clocking-regression-selection-v1',
         'original_revision': clocking_legacy.BASE_SHA,

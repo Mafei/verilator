@@ -1,0 +1,77 @@
+{
+  "observed_at": "2026-11-09T00:01:43.901022+00:00",
+  "base": "81ba20cd1e2d15eba171c45bde315fad2cb62806",
+  "official_master": "73b52215fdb3d598041e73b673d9324bea58b2aa",
+  "official_new_commits": 27,
+  "antmicro_dev_fourstate": "dbb8aedaa478389639295e40f16dbc7183d10b48",
+  "antmicro_feature_4_state_logic": "5e132f32db577b3d596b66ce6378ac224ffa38d3",
+  "delivery": "d565afb615e3393970d6ce030d75df68b594e6b8",
+  "actions_active_status_counts": {
+    "queued": 0,
+    "in_progress": 0,
+    "waiting": 0,
+    "pending": 0,
+    "requested": 0
+  },
+  "frozen_files": 65,
+  "prior_semantic_regressions": [
+    "fourstate_coverage",
+    "fourstate_wait_eval",
+    "fourstate_assoc_ref_bounds"
+  ],
+  "pr_action": "prohibited; no attempt",
+  "status": "HOLD",
+  "environment": {
+    "selected_saved_config": "554c7ce5-d35e-4e17-88d7-8dec6033062d~asenvcfg_44bc9c3278688191b954b1bc6176ea17",
+    "environment_id": "ccarenv_b64_Y2NhcmVudl82MWJmOTU5NjI5YzQ4MTkxYTYxNmQ3MjVmNGEwM2RjNA",
+    "hostname": "cb1c644314dc",
+    "repo_id": 1408957805,
+    "cwd": "/workspace/verilator"
+  },
+  "selected_drivers": 706,
+  "groups": 57,
+  "current_selector_sha256": "b4157e9bd8b268ed44c3b5a8ac740ddf7c8f3db90a69802f2eb181b7d851f000",
+  "inherited_637_selector_sha256": "96006fd6b3e3679e6c8e43ab6922d78cf4058e5a5a1156bfd5a0304001e74695",
+  "changed_dist_driver": "dist_warn_coverage",
+  "changed_mt_driver": "threads_group_workers_sparse; retained in the existing 18-driver vltmt selection",
+  "pending_golden_patch_sha256": "c3b79fec96c267d6d7b502e7f28b0837278e312c820ef5e8d849a868d60fc269",
+  "pending_golden_applied": false,
+  "merge_conflicts": [
+    "src/V3AstNodeOther.h",
+    "src/V3EmitCSyms.cpp",
+    "src/V3Task.cpp",
+    "src/V3Width.cpp",
+    "test_regress/t/t_constraint_json_only.out",
+    "test_regress/t/t_debug_emitv.out"
+  ],
+  "conflict_resolutions": {
+    "AstNodeFTask": "Retain importScopeId; use upstream declaration list and return-variable ownership, adapting four-state paired output lowering.",
+    "VPI_force": "Use upstream explicit force helper links and invariant checks; retain paired four-state residual insertion.",
+    "V3Task": "Use upstream co-cloned return-variable mapping and retain compiler local scopes.",
+    "V3Width": "Retain repeat-count capture alongside bit-stream temporaries; restore generators per module rather than per class.",
+    "golden": "Restore parent bytes for both conflicts and protected debug input."
+  },
+  "frozen_restores": [
+    "test_regress/t/t_constraint_json_only.out",
+    "test_regress/t/t_debug_emitv.out",
+    "test_regress/t/t_debug_emitv.v"
+  ],
+  "precommit_native": {
+    "scope": "dirty merge preview; not final-head acceptance",
+    "build": {
+      "actual_exit": 0,
+      "log_sha256": "6168f76901b2f75fa58b5869f76f6d0e63d82e5e8b3e2bd450b40c7a2d355301"
+    },
+    "controls": {
+      "passed": 11,
+      "failed": 3,
+      "failure_names": [
+        "fourstate_assoc_ref_bounds",
+        "fourstate_coverage",
+        "fourstate_wait_eval"
+      ],
+      "status": "HOLD"
+    },
+    "selection_unit_subset": "InheritedSelectionTest (3) and BashGateTest (1) passed; full suite still running"
+  }
+}

@@ -436,6 +436,16 @@ class InheritedSelectionTest(unittest.TestCase):
                                             'Nov8 inherited regression selection changed'):
                     run_regressions.selection_revision()
 
+    def test_nov8_controls_cannot_disappear_or_reorder(self):
+        original = GROUPS['upstream_daily_20261108']
+        for altered in (original[:-1], list(reversed(original))):
+            groups = copy.deepcopy(GROUPS)
+            groups['upstream_daily_20261108'] = altered
+            with mock.patch.object(run_regressions, 'GROUPS', groups):
+                with self.assertRaisesRegex(ValueError,
+                                            'Nov9 inherited regression selection changed'):
+                    run_regressions.selection_revision()
+
 
 class BashGateTest(unittest.TestCase):
     """Exercise the build's actual shell gate with each failing subprocess."""

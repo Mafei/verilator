@@ -871,7 +871,7 @@ class CoverageVisitor final : public VNVisitor {
                         pair.first->second = varp;
                         if (m_ftaskp) {
                             varp->funcLocal(true);
-                            m_ftaskp->prependStmtsp(varp);
+                            m_ftaskp->prependDeclsp(varp);
                         } else {
                             m_modp->prependStmtsp(varp);
                         }
@@ -1157,14 +1157,7 @@ class CoverageVisitor final : public VNVisitor {
     void visit(AstCastWrap* nodep) override { iterateChildren(nodep); }
 
     // VISITORS - BOTH
-    void visit(AstProperty* nodep) override {
-        VL_RESTORER(m_state);
-        VL_RESTORER(m_inToggleOff);
-        m_state.m_on = false;
-        m_inToggleOff = true;
-        iterateChildren(nodep);
-    }
-    void visit(AstSequence* nodep) override {
+    void visit(AstNodeSchema* nodep) override {
         VL_RESTORER(m_state);
         VL_RESTORER(m_inToggleOff);
         m_state.m_on = false;
