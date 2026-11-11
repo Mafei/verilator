@@ -493,7 +493,7 @@ class FourstateLogicTypePropagator final : public VNVisitor {
         iterateChildrenSeparately(nodep);
         setFourstate(nodep, false, m_fourstateInSubtree);
     }
-    void visit(AstMemberSel* const nodep) override {
+    void visit(AstMemberRef* const nodep) override {
         iterateChildrenSeparately(nodep);
         setFourstate(nodep, needsSplitting(nodep->varp()->dtypep()), m_fourstateInSubtree);
     }
@@ -1471,7 +1471,9 @@ class FourstateVisitor final : public VNVisitor {
     void addTmpVar(AstVar* const varp) {
         if (m_tmpExprp) {
             m_tmpExprp->addVarsp(varp);
-        } else if (AstNodeFTask* const ftaskp = VN_CAST(m_currentTmpSpotp, NodeFTask)) {
+        } else if (AstNodeFTask* const ftaskp
+                   = m_tmpFuncLocal ? VN_CAST(m_currentTmpSpotp, NodeFTask) : nullptr) {
+            // A module's insertion anchor can be a function without owning the temporary.
             ftaskp->addDeclsp(varp);
         } else {
             m_currentTmpSpotp->addHereThisAsNext(varp);
@@ -1883,7 +1885,7 @@ class FourstateVisitor final : public VNVisitor {
         return resultp;
     }
 
-    AstNodeExpr* getMemberReceiver(const AstMemberSel* const memberSelp) {
+    AstNodeExpr* getMemberReceiver(const AstMemberRef* const memberSelp) {
         AstNodeExpr* const fromp = memberSelp->fromp();
         if (fromp->isPure()) return getFourstateExpressionValue(fromp, false);
         if (AstNodeExpr* const cachedp = getExprValuep(fromp)) {
@@ -2986,9 +2988,9 @@ class FourstateVisitor final : public VNVisitor {
             m_resultp->dtypep(getTwoStateDtype(streamrp->dtypep()));
         }
 
-        void visit(AstMemberSel* const memberSelp) override {
+        void visit(AstMemberRef* const memberSelp) override {
             m_fourstateVisitor.splitVar(memberSelp->varp());
-            AstMemberSel* const newp = new AstMemberSel{
+            AstMemberRef* const newp = new AstMemberRef{
                 memberSelp->fileline(), m_fourstateVisitor.getMemberReceiver(memberSelp),
                 getSplittedValue(memberSelp->varp())};
             newp->name(memberSelp->name() + FOURSTATE_VALUE_SUFFIX);
@@ -3308,9 +3310,9 @@ class FourstateVisitor final : public VNVisitor {
             m_resultp->dtypep(getTwoStateDtype(streamrp->dtypep()));
         }
 
-        void visit(AstMemberSel* const memberSelp) override {
+        void visit(AstMemberRef* const memberSelp) override {
             m_fourstateVisitor.splitVar(memberSelp->varp());
-            AstMemberSel* const newp = new AstMemberSel{
+            AstMemberRef* const newp = new AstMemberRef{
                 memberSelp->fileline(), m_fourstateVisitor.getMemberReceiver(memberSelp),
                 getSplittedXZ(memberSelp->varp())};
             newp->name(memberSelp->name() + FOURSTATE_XZ_SUFFIX);
@@ -3855,7 +3857,7 @@ class FourstateVisitor final : public VNVisitor {
         StmtHelper stmtHelper{*this, nodep};
         lowerFourstateDelay(nodep);
     }
-    void visit(AstNodeIf* const nodep) override {
+    void visit(AstIf* const nodep) override {
         StmtHelper stmtHelper{*this, nodep};
         if (isFourstate(nodep->condp())) {
             AstNodeExpr* const condp = nodep->condp()->unlinkFrBack();
@@ -4796,7 +4798,7 @@ class FourstateVisitor final : public VNVisitor {
         // Follow only its storage base; index expressions can have their own writes.
         const AstNodeExpr* const targetp = nodep->outp()->getVAccessTargetRecurse();
         const AstNodeVarRef* const refp = VN_CAST(targetp, NodeVarRef);
-        const AstMemberSel* const memberp = VN_CAST(targetp, MemberSel);
+        const AstMemberRef* const memberp = VN_CAST(targetp, MemberRef);
         const bool fourstateOutput
             = needsSplitting(nodep->outp()->dtypep())
               || (refp && refp->access().isWriteOrRW() && needsSplitting(refp->varp()->dtypep()))

@@ -1,0 +1,422 @@
+[
+  {
+    "path": "test_regress/t/t_assignment_pin_bad.out",
+    "parent_sha256": "c4d83eec4de5339f2376a39f4939b31487306cfc427f560bf30fde7c2e4e3404"
+  },
+  {
+    "path": "test_regress/t/t_assignment_pin_bad.py",
+    "parent_sha256": "8e527f3260320c98b61ddeba3a4227df1d745807917a73960109ece9e268cf17"
+  },
+  {
+    "path": "test_regress/t/t_assignment_pin_bad.v",
+    "parent_sha256": "efe052048ac560ef4d8101a42576bbed549aac15979cf2cf099f86e57fa32291"
+  },
+  {
+    "path": "test_regress/t/t_assoc_ref_bounds.py",
+    "parent_sha256": "deb0b2e80b4b1e4ef8ae1ac34b6dadab802be76175b4376cd56ded4bec214389"
+  },
+  {
+    "path": "test_regress/t/t_assoc_ref_bounds.v",
+    "parent_sha256": "1e25d21dfc5254dd79352955a1829aa990fbfc134a559e4cd558bba40ecc0a64"
+  },
+  {
+    "path": "test_regress/t/t_constraint_json_only.out",
+    "parent_sha256": "b867ad4621c5cbd84aab51ec4a709e86c5523d3482f212ab40f0c6b25fed48a1"
+  },
+  {
+    "path": "test_regress/t/t_constraint_json_only.py",
+    "parent_sha256": "1376ca8056c8269b2b65e5407e148958c2192ce203953cefb17009c459035d95"
+  },
+  {
+    "path": "test_regress/t/t_constraint_json_only.v",
+    "parent_sha256": "633b1890d94a52b465fe338181fefce71902309848667cf72fa09cd7525f19a8"
+  },
+  {
+    "path": "test_regress/t/t_cover_fsm_compound_reset.out",
+    "parent_sha256": "51f65032993d3de41dc7d0bbb8fbf32b30d04a37bf7c2b5492d54d3a33c140d9"
+  },
+  {
+    "path": "test_regress/t/t_cover_fsm_compound_reset.py",
+    "parent_sha256": "83053aa041cdc8895d37e81f030a60864ffc8ee4e4cef2b24c7ac7749e4d451a"
+  },
+  {
+    "path": "test_regress/t/t_cover_fsm_compound_reset.v",
+    "parent_sha256": "217aee5fa9325fd7c11930595861d6ee86e2c0e19f5c799e5e2cbcfda0bfe474"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor.dat.out",
+    "parent_sha256": "234004a0301c70e66303512f3dd285bbeeee974aaefe8c1f51fba98dd3dbc9dd"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor.py",
+    "parent_sha256": "3791ac9fa5320124fad504d00930962426b9c712d2879f9d0567913e328413ee"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor.v",
+    "parent_sha256": "edfefd0513263027ea6bbbc73d832ea69993cd2f83aa30660b38825b0c3ee1f4"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor_default.dat.out",
+    "parent_sha256": "54a9376810c2b9f584de66347e38580aea19bb7d1c737ffbdb3a53a43f8f30c2"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor_default.py",
+    "parent_sha256": "bba59754e435bff6e6cec3978a87e601b8ac0c536434d12721702541be06e8db"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv.out",
+    "parent_sha256": "7bffb61f8b54fa17bc166f83d4e5361c37a3a6635daa4f279383abda6c541fb1"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv.py",
+    "parent_sha256": "cd0d315251ef9286847ca30068f0fbb7a2d7fb26c7f9dfd7d0cefa7fda7107f4"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv.v",
+    "parent_sha256": "8360a180c2ce280cf808a97070deafc1ec90c277c709e277c1b02a4415899775"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv_addrids.py",
+    "parent_sha256": "6bb140e6f5bcbe84f5084f8b74e00eed6c4b5eda66684ca0705729e52a802d1c"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv_args.py",
+    "parent_sha256": "0f7236fd6dc72a0a6d73d377e0c7743849943e00d67c8130983e8c2c633ecb19"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv_args.v",
+    "parent_sha256": "e5e90af4c4845acb4bb94c9a60abbaffc0f509baed473d48da1c5427bbbc0c52"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv_ccall.py",
+    "parent_sha256": "d0be9cad68f623e5b0e09aadcfd61a2d5bcb9753537025e0f8638f4feae55636"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv_ccall.v",
+    "parent_sha256": "be47b3b97ac8def01d76b431409bb10a36b6a24aef9749a227d1ef6b16d6785f"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv_ccall_c.cpp",
+    "parent_sha256": "24c8228d87d5ddb5061f8fa5f918846463d4ec18b25645bd044c82a836604167"
+  },
+  {
+    "path": "test_regress/t/t_event_nba_notiming_bad.out",
+    "parent_sha256": "56e8a3f13b301af9e499396a641e1fd21126577777201856f2ac3775080a2044"
+  },
+  {
+    "path": "test_regress/t/t_event_nba_notiming_bad.py",
+    "parent_sha256": "cbbf2a362fb577b40eb1fc6733270bee1b2c7c4db04230ab310ad6c5e734a969"
+  },
+  {
+    "path": "test_regress/t/t_event_nba_notiming_bad.v",
+    "parent_sha256": "6345fe0d268b044643b0fe0aeb6d2b84b766be55f01da3ad17680fd1370cbdff"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_arithmetics.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_arithmetics.v",
+    "parent_sha256": "c64ca4a737dec4866af224a8fd7e499ba3cdf2bbbf56eadf7159f55eeb06e77a"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_assoc_ref_bounds.py",
+    "parent_sha256": "9b9af173d445b6f2f49694798e0a113d58bbee57bf536703d9df1f8e3d87640d"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_comparison.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_comparison.v",
+    "parent_sha256": "045ee269460fd6ca2eb80c7903949355a467cf84b68e695c6f2d2d372c684bf0"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_complex_pin.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_complex_pin.v",
+    "parent_sha256": "150e7146e826954ced5c81152d7ca6a21d31347300857d3b57889555c19a88b0"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_concat.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_concat.v",
+    "parent_sha256": "937a4241c0434e301e21b504b231349f6a4ea6a5ede745c7112d2a8fd1694f6e"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_coverage.out",
+    "parent_sha256": "9c78b0d608ab47fed2e4252722ae2bcb52c455a9394b29eedd8bbd39d7ad3d81"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_coverage.py",
+    "parent_sha256": "2550e8d225a3c38d2fa3e4131c41cb7080ec006bd6922b1fa12bb9dacaff1836"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_coverage.v",
+    "parent_sha256": "fce7b1ad2c6e0d149f998dc47a8efc37cb8fe9e6ed1c21540ad8188aab20fe40"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_demo_json.out",
+    "parent_sha256": "5fabb17c141516c8760cc7a1ee9e30f016ec6e2c54c85635d97191a2775ae45e"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_demo_json.py",
+    "parent_sha256": "31fee04693996f0ac5b4afca870a8770cb4de18ae6f28395a0a53c7497402158"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_eqwild.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_eqwild.v",
+    "parent_sha256": "49941d7ebf70c824961b5aa12b50395ecf3cabfa9242a0e235f1393407dba6b2"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_logand.out",
+    "parent_sha256": "42a53f0df4cdad92e0e732e15cd0a86c25ce4f986a323b17ea891d93bf733111"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_logand.py",
+    "parent_sha256": "e39d590e863d356af09b4af8d28435092becb89caeea4207ee1bc72f0238ae49"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_logand.v",
+    "parent_sha256": "b431add5719100d1d536afee0f1087443b3969be4df0cd0ec689ed2f1bd0474d"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_logor.out",
+    "parent_sha256": "610173cac3fe39cc4651841936b9db04225067d9ff0efbd8c092896f7e9c4a59"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_logor.py",
+    "parent_sha256": "e39d590e863d356af09b4af8d28435092becb89caeea4207ee1bc72f0238ae49"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_logor.v",
+    "parent_sha256": "b0d82f0ff84a850e850dc7583f6f87318527c7fcd0c7448e805d2285fd2e433c"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_neqwild.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_neqwild.v",
+    "parent_sha256": "51d25f0cd3312d2e247a8618a7d2a3af3ae43c36cf082dfb24272f4f594149af"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_pin_output.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_pin_output.v",
+    "parent_sha256": "df22217592f5e1fee8c90acbc74e2b21a5a596d7807ef3a2462b82ca7474895d"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_redand.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_redand.v",
+    "parent_sha256": "add63c7c21ea62a654e120e181257822af81bcb4c3b24caad97df2646fb9b911"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_redor.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_redor.v",
+    "parent_sha256": "ee04aefd0173f1937ce671f863ac15c54e6a377b58f6f5a7581fadd42cb46ef5"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_redxor.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_redxor.v",
+    "parent_sha256": "dcd0e519e501fbe28b35b8aaf0ce828bf42436869324edda2770ee600925fb70"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_replicate.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_replicate.v",
+    "parent_sha256": "fb776f34f80ffeb1bbee09b5eef91ee2dda8390fa7e4b251e9e9daf5e8fdcb2c"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_pair.py",
+    "parent_sha256": "a96c425592cee1d91fdb9890d2e28d50db923dd797aba1e4efa888fdb564a539"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_pair.v",
+    "parent_sha256": "859e0c7073992707f8ea8ead1ad029359fba33ecb9bef94a058251200b07c45f"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup.py",
+    "parent_sha256": "34c2e58cc5b4fc96e6f5e3a2d28794be9add9b956f7649cbb877b6dd31139dff"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup.v",
+    "parent_sha256": "00e3386411ea799945abaa25f7c64cff720b8a16b8f8c029e2f36974852a682b"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_1.out",
+    "parent_sha256": "2251a55ae095235bbe7389294b527ab99e422cc65571679c04b5b0bc9fe8888c"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_10.out",
+    "parent_sha256": "19e8d5bce6a01722ce0c6cd9dc2466ebb239e090a751bc66cad1d3c16c5bf064"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_11.out",
+    "parent_sha256": "af8d07eb7cd0ebe38ecf4a0c21105c3221d7debde1836b527da4daff9ba782f7"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_12.out",
+    "parent_sha256": "28542fdb93e06011f400ccdb649a37e7fe9026fc914a0728d4a380e961f2fdf4"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_13.out",
+    "parent_sha256": "7dc3361ef74e0087ecc7b2aaf385774909b2b3e74a8cd8f7a22188f35ae7ccd6"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_14.out",
+    "parent_sha256": "05aaef17318b8f164635547af8dfd9dc7a8453e192e3f4149d1ae9a5e665d2fd"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_15.out",
+    "parent_sha256": "84d81c6ca043d0ec155e46be69a40f2b419768c34119d48cdfa896c767647730"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_16.out",
+    "parent_sha256": "d1d259959861a555618d731e0d20603ee588f55501d894b2218ba4c3b818e155"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_17.out",
+    "parent_sha256": "a1ed64d1eb49b48f0ff72239299ee31ac35b55da2d662ca3d054a4fee92fd1d8"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_2.out",
+    "parent_sha256": "743b8d08058c9c1991109b3ae7648d13120f186b4a85f36a843f57082b3887f8"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_3.out",
+    "parent_sha256": "aab841fe22d63700940e2541d590ea9bdd25212942e13ab5c1b8574d790fd1d7"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_4.out",
+    "parent_sha256": "46aa5f407c2eaeee3839ee97ea14218196b5581e62d869e329948b98c9839907"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_5.out",
+    "parent_sha256": "750b83e6d396bd836dcdd278cda38a17348119c38b6ac5f3c1e1965b2834f9c2"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_6.out",
+    "parent_sha256": "ec97bff328ff9bd4b4fdcdd6a687597f497042ac3f063801539b8fdafeacbc01"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_7.out",
+    "parent_sha256": "c25bc417e1fe4d865e763a4a560e423a268fc7c9c7ebde838930abf3b33cad00"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_8.out",
+    "parent_sha256": "dc81ffb1b6a766d4907c76b0cdc9c26507ef7d7782c2ea76cfe2482ac343859b"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_resolve_unsup_9.out",
+    "parent_sha256": "7cb902f42dbeb2166938cfcb79a02879eb3777b83e86f3b92b97ac49ea8b159c"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_shift.py",
+    "parent_sha256": "7b85108de093e3866d7376180abf1a1bd74ac1c2cb9f94d933d0248f0bb7aa95"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_shift.v",
+    "parent_sha256": "3132235a8a85e2c731ae5e37e5723990919cb9f3c8617413dfb0a7e05aaa021e"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_wait_eval.py",
+    "parent_sha256": "8f60f6df138f094e549b135c8c7dae29a62e4cf6308393d56e8b994c96bca029"
+  },
+  {
+    "path": "test_regress/t/t_fourstate_wait_eval.v",
+    "parent_sha256": "c13cabbf16550a456738031c27c35ca498110f6bc1aa58b1626261336dc20109"
+  },
+  {
+    "path": "test_regress/t/t_inst_output_value_bad.out",
+    "parent_sha256": "3a555a69d962d78c61b921b483d028bc00a86a567663cfc461a713cfb5d173e7"
+  },
+  {
+    "path": "test_regress/t/t_inst_output_value_bad.py",
+    "parent_sha256": "ed90b7e10de63ea7609609450359d6aab20f2e89525d35c6b59e2042d63a4ec2"
+  },
+  {
+    "path": "test_regress/t/t_inst_output_value_bad.v",
+    "parent_sha256": "d6f76a0bd42ce8caf9236cc8269821f9426eee9ac74125a692e50e16c9ebd265"
+  },
+  {
+    "path": "test_regress/t/t_opt_merge_cond_no_motion.py",
+    "parent_sha256": "21c7f625eb489f3b6a6adb397f7895becb3de63c9f891f17efc3989b64de5f3e"
+  },
+  {
+    "path": "test_regress/t/t_port_repeat_same_unsup.out",
+    "parent_sha256": "23d5d54460631c75f61b309ba519cc57ea07216935b2f10b7c845213b42e3e75"
+  },
+  {
+    "path": "test_regress/t/t_port_repeat_same_unsup.py",
+    "parent_sha256": "7ed479dd5dbf9d2ef493ccb1536e7fdab24880b93f0759822da90426d2091d72"
+  },
+  {
+    "path": "test_regress/t/t_port_repeat_same_unsup.v",
+    "parent_sha256": "10f11a76f2cc7145bb2a235bf172b4a834e49281452c833d60ecef7a61e72ceb"
+  },
+  {
+    "path": "test_regress/t/t_sarif.out",
+    "parent_sha256": "2f40e783ffc7d2a4044e6216ed9fbf827fbfc9487d73993e432deb85720fe6ae"
+  },
+  {
+    "path": "test_regress/t/t_sarif.py",
+    "parent_sha256": "32fa9b039ec9c167923390bb2b34386447fabe739853cbda18a0678a6099f758"
+  },
+  {
+    "path": "test_regress/t/t_sarif.sarif.out",
+    "parent_sha256": "fc2872114fb4d4aaf9e2af2bf9c6a108c4ba8b1515267f8053f90a0fd22c1e28"
+  },
+  {
+    "path": "test_regress/t/t_sarif.v",
+    "parent_sha256": "ae882d07721a5b9e249ccd4ac19359706446342175a10677f55e991bfd7cb29b"
+  },
+  {
+    "path": "test_regress/t/t_sarif_clean.out",
+    "parent_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "test_regress/t/t_sarif_clean.py",
+    "parent_sha256": "ceb7a3f5ca5a1c8c2e5db5a1386b77674b2c12c4afe8c79d7515646cef5d27bb"
+  },
+  {
+    "path": "test_regress/t/t_sarif_clean.sarif.out",
+    "parent_sha256": "470aebd867d161890c2cc0311ad7b974ae45086f4aaad0999acd76aecec10bb7"
+  },
+  {
+    "path": "test_regress/t/t_sarif_clean.v",
+    "parent_sha256": "07efe6053d84deb36682bd6c88b8f28e5dda8a45c8d7a1cef7191de1295fa641"
+  },
+  {
+    "path": "test_regress/t/t_sarif_output.py",
+    "parent_sha256": "3857b2bcece38cf47ded42c6598e665a942c337828d68e52b03f38a7f3840c27"
+  },
+  {
+    "path": "test_regress/t/t_timing_debug2.out",
+    "parent_sha256": "e1e6e1fc8f0343e7e69b8b18ec764ea1479d953b4b0f45156635160e67065c25"
+  },
+  {
+    "path": "test_regress/t/t_timing_debug2.py",
+    "parent_sha256": "23bb8dedb05dff65775fe1fdae73b86a6fbbcf73562cf9ad0eb18fe7c0ade64b"
+  }
+]

@@ -30,7 +30,7 @@ VL_DEFINE_DEBUG_FUNCTIONS;
 namespace {
 bool isSourceScope(const AstNode* nodep) {
     return VN_IS(nodep, NodeModule) || VN_IS(nodep, NodeFTask) || VN_IS(nodep, NodeBlock)
-           || VN_IS(nodep, GenBlock) || VN_IS(nodep, NodeForeach);
+           || VN_IS(nodep, GenBlock) || VN_IS(nodep, Foreach);
 }
 
 class ImportScopeMembers final : public VNVisitorConst {
@@ -90,7 +90,7 @@ class ImportIteratorCheck final : public VNVisitorConst {
     const V3ImportLexical& m_context;
     const std::set<std::string>& m_importNames;
     const std::set<std::string>& m_declarations;
-    void visit(AstNodeForeach* nodep) override {
+    void visit(AstForeach* nodep) override {
         for (AstNode* p = nodep->headerp()->elementsp(); p; p = p->nextp()) {
             if (m_importNames.count(p->name()) || m_declarations.count(p->name())
                 || m_context.unitDeclarationVisible(p->name(), UINT32_MAX)) {
@@ -137,18 +137,16 @@ class ImportLexicalQualifier final : public VNVisitorConst {
             || VN_IS(nodep, ClassOrPackageRef) || VN_IS(nodep, Dot) || VN_IS(nodep, MethodCall)
             || VN_IS(nodep, Class) || VN_IS(nodep, Iface) || VN_IS(nodep, Cell)
             || VN_IS(nodep, IfaceRefDType) || VN_IS(nodep, IfaceGenericDType)
-            || VN_IS(nodep, Clocking) || VN_IS(nodep, ClockingItem)
-            || VN_IS(nodep, Constraint) || VN_IS(nodep, With) || VN_IS(nodep, Disable)
-            || VN_IS(nodep, PatMember) || VN_IS(nodep, Text) || VN_IS(nodep, DefParam)
-            || VN_IS(nodep, Bind) || VN_IS(nodep, RandSequence) || VN_IS(nodep, CExpr)
-            || VN_IS(nodep, CStmt) || VN_IS(nodep, DpiExport)
-            || VN_IS(nodep, PackageExport) || VN_IS(nodep, AssignW)
+            || VN_IS(nodep, Clocking) || VN_IS(nodep, ClockingItem) || VN_IS(nodep, Constraint)
+            || VN_IS(nodep, With) || VN_IS(nodep, Disable) || VN_IS(nodep, PatternItem)
+            || VN_IS(nodep, Text) || VN_IS(nodep, DefParam) || VN_IS(nodep, Bind)
+            || VN_IS(nodep, RandSequence) || VN_IS(nodep, CExpr) || VN_IS(nodep, CStmt)
+            || VN_IS(nodep, DpiExport) || VN_IS(nodep, PackageExport) || VN_IS(nodep, AssignW)
             || VN_IS(nodep, Pull) || VN_IS(nodep, Implicit) || VN_IS(nodep, Port)
             || VN_IS(nodep, WithParse) || VN_IS(nodep, CoverWith) || VN_IS(nodep, CoverCrossWith)
             || VN_IS(nodep, Covergroup) || VN_IS(nodep, CoverpointRef)
             || VN_IS(nodep, NodeFuncCovItem) || VN_IS(nodep, SystemCSection)
-            || VN_IS(nodep, AssertCtl)
-            || VN_IS(nodep, PackageExportStarStar)) {
+            || VN_IS(nodep, AssertCtl) || VN_IS(nodep, PackageExportStarStar)) {
             reason = "unclosed query role: "s + nodep->typeName();
             return;
         }
@@ -229,7 +227,7 @@ class ImportLexicalAnnotator final : public VNVisitor {
             VL_RESTORER(m_view);
             const ImportScopeMembers members{nodep};
             const bool needsSymbol = VN_IS(nodep, NodeModule) || VN_IS(nodep, NodeFTask)
-                                     || VN_IS(nodep, NodeForeach) || !nodep->name().empty()
+                                     || VN_IS(nodep, Foreach) || !nodep->name().empty()
                                      || !members.declarations.empty() || !members.imports.empty();
             const uint32_t scope = static_cast<uint32_t>(m_context.m_scopes.size());
             m_context.m_scopes.push_back(V3ImportLexical::Scope{false, needsSymbol, {}});
@@ -311,7 +309,7 @@ uint32_t V3ImportLexical::scopeId(const AstNode* nodep) {
     if (const AstNodeFTask* const p = VN_CAST(nodep, NodeFTask)) return p->importScopeId();
     if (const AstNodeBlock* const p = VN_CAST(nodep, NodeBlock)) return p->importScopeId();
     if (const AstGenBlock* const p = VN_CAST(nodep, GenBlock)) return p->importScopeId();
-    if (const AstNodeForeach* const p = VN_CAST(nodep, NodeForeach)) return p->importScopeId();
+    if (const AstForeach* const p = VN_CAST(nodep, Foreach)) return p->importScopeId();
     return 0;
 }
 
@@ -320,7 +318,8 @@ void V3ImportLexical::scopeId(AstNode* nodep, uint32_t id) {
     else if (AstNodeFTask* const p = VN_CAST(nodep, NodeFTask)) p->importScopeId(id);
     else if (AstNodeBlock* const p = VN_CAST(nodep, NodeBlock)) p->importScopeId(id);
     else if (AstGenBlock* const p = VN_CAST(nodep, GenBlock)) p->importScopeId(id);
-    else if (AstNodeForeach* const p = VN_CAST(nodep, NodeForeach)) p->importScopeId(id);
+    else if (AstForeach* const p = VN_CAST(nodep, Foreach))
+        p->importScopeId(id);
     else nodep->v3fatalSrc("Not a lexical source scope");
 }
 

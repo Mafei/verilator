@@ -396,7 +396,7 @@ class FinalLocalBodyVisitor final : public VNVisitorConst {
     void visit(AstNewDynamic*) override { m_blocked = true; }
     void visit(AstUnlinkedRef*) override { m_blocked = true; }
     void visit(AstParseRef*) override { m_blocked = true; }
-    void visit(AstMemberSel*) override { m_blocked = true; }
+    void visit(AstMemberRef*) override { m_blocked = true; }
     void visit(AstSystemT*) override { m_blocked = true; }
     void visit(AstSystemF*) override { m_blocked = true; }
     void visit(AstVar*) override { m_blocked = true; }

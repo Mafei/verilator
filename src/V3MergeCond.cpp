@@ -40,7 +40,7 @@
 //      'lhs = cond & value' is actually 'lhs = cond ? value : 1'd0'
 //      'lhs = cond' is actually 'lhs = cond ? 1'd1 : 1'd0'.
 //
-//  Also merges consecutive AstNodeIf statements with the same condition.
+//  Also merges consecutive AstIf statements with the same condition.
 //
 //  Because this optimization has notable performance impact, we go further
 //  and perform code motion to try to move mergeable conditionals next to each
@@ -76,10 +76,10 @@
 
 #include "V3MergeCond.h"
 
-#include "V3AstUserAllocator.h"
 #include "V3DupFinder.h"
 #include "V3Hasher.h"
 #include "V3Stats.h"
+#include "V3VNUserAllocator.h"
 
 #include <queue>
 #include <set>
@@ -154,8 +154,8 @@ struct StmtProperties final {
     }
 };
 
-// We store the statement properties in user3 via AstUser3Allocator
-using StmtPropertiesAllocator = AstUser3Allocator<AstNodeStmt, StmtProperties>;
+// We store the statement properties in user3 via VNUser3Allocator
+using StmtPropertiesAllocator = VNUser3Allocator<AstNodeStmt, StmtProperties>;
 
 //######################################################################
 // Code motion analysis and implementation
@@ -187,7 +187,7 @@ class CodeMotionAnalysisVisitor final : public VNVisitorConst {
             if (AstCond* const conditionalp = extractCondFromRhs(assignp->rhsp())) {
                 conditionp = conditionalp->condp();
             }
-        } else if (const AstNodeIf* const ifp = VN_CAST(nodep, NodeIf)) {
+        } else if (const AstIf* const ifp = VN_CAST(nodep, If)) {
             conditionp = ifp->condp();
         }
         while (AstCCast* const castp = VN_CAST(conditionp, CCast)) conditionp = castp->lhsp();
@@ -308,7 +308,7 @@ class CodeMotionAnalysisVisitor final : public VNVisitorConst {
             analyzeStmt(stmtp, /*tryCondMatch:*/ !singletonListStart);
         } else if (AstVarRef* const vrefp = VN_CAST(nodep, VarRef)) {
             analyzeVarAccess(vrefp->varp(), vrefp->access());
-        } else if (AstMemberSel* const memberp = VN_CAST(nodep, MemberSel)) {
+        } else if (AstMemberRef* const memberp = VN_CAST(nodep, MemberRef)) {
             // Different class handles may refer to the same object. Track the
             // selected member as well as evaluating its receiver below.
             analyzeVarAccess(memberp->varp(), memberp->access());
@@ -700,9 +700,9 @@ class MergeCondVisitor final : public VNVisitor {
             UASSERT_OBJ(m_mgLastp && m_mgLastp->nextp() == nextp, m_mgFirstp,
                         "Cheap statement should not be at the front of the list");
         }
-        // If the list contains a single AstNodeIf, we will want to merge its branches.
-        // If so, keep hold of the AstNodeIf in this variable.
-        AstNodeIf* recursivep = nullptr;
+        // If the list contains a single AstIf, we will want to merge its branches.
+        // If so, keep hold of the AstIf in this variable.
+        AstIf* recursivep = nullptr;
         // Merge if list is longer than one node
         if (m_mgFirstp != m_mgLastp) {
             UINFO(6, "MergeCond - First: " << m_mgFirstp << " Last: " << m_mgLastp);
@@ -746,8 +746,8 @@ class MergeCondVisitor final : public VNVisitor {
                     // Cleanup
                     VL_DO_DANGLING(rhsp->deleteTree(), rhsp);
                 } else {
-                    AstNodeIf* const ifp = VN_AS(currp, NodeIf);
-                    UASSERT_OBJ(ifp, currp, "Must be AstNodeIf");
+                    AstIf* const ifp = VN_AS(currp, If);
+                    UASSERT_OBJ(ifp, currp, "Must be AstIf");
                     // Move branch contents under new if
                     if (AstNodeStmt* const listp = ifp->thensp()) {
                         resultp->addThensp(listp->unlinkFrBackWithNext());
@@ -768,8 +768,8 @@ class MergeCondVisitor final : public VNVisitor {
             // Merge the branches of the resulting AstIf after re-analysis
             if (resultp->thensp()) m_workQueuep->push(resultp->thensp());
             if (resultp->elsesp()) m_workQueuep->push(resultp->elsesp());
-        } else if (AstNodeIf* const ifp = VN_CAST(m_mgFirstp, NodeIf)) {
-            // There was nothing to merge this AstNodeIf with, so try to merge its branches.
+        } else if (AstIf* const ifp = VN_CAST(m_mgFirstp, If)) {
+            // There was nothing to merge this AstIf with, so try to merge its branches.
             // No re-analysis is required for this, so do it directly below
             recursivep = ifp;
         }
@@ -820,7 +820,7 @@ class MergeCondVisitor final : public VNVisitor {
                 AstVar* varp = nullptr;
                 if (const AstVarRef* const refp = VN_CAST(nodep, VarRef)) {
                     varp = refp->varp();
-                } else if (const AstMemberSel* const memberp = VN_CAST(nodep, MemberSel)) {
+                } else if (const AstMemberRef* const memberp = VN_CAST(nodep, MemberRef)) {
                     varp = memberp->varp();
                 } else {
                     return;
@@ -923,7 +923,7 @@ class MergeCondVisitor final : public VNVisitor {
         }
     }
 
-    void visit(AstNodeIf* nodep) override {
+    void visit(AstIf* nodep) override {
         // Check if mergeable
         if (!checkOrMakeMergeable(nodep)) {
             // If not mergeable, try to merge the branches

@@ -91,7 +91,7 @@ class UnknownVisitor final : public VNVisitor {
 
         // Scan back to put the condlvalue above all selects (IE top of the lvalue)
         while (VN_IS(prep->backp(), NodeSel) || VN_IS(prep->backp(), Sel)
-               || VN_IS(prep->backp(), MemberSel) || VN_IS(prep->backp(), StructSel)) {
+               || VN_IS(prep->backp(), MemberRef) || VN_IS(prep->backp(), StructSel)) {
             prep = VN_AS(prep->backp(), NodeExpr);
         }
         if (VN_IS(prep->backp(), AssignForce) || VN_IS(prep->backp(), Release)) {
@@ -140,8 +140,15 @@ class UnknownVisitor final : public VNVisitor {
                     addVar(varp);
                 }
                 AstNode* const prepCopyp = prep->clonep();
-                prepCopyp->replaceWith(new AstVarRef{fl, varp, VAccess::WRITE});
+                // As written by the original, e.g. read-write as a library call's inout argument
+                prepCopyp->replaceWith(new AstVarRef{fl, varp, prep->getVAccessRecurse()});
                 VL_DO_DANGLING(pushDeletep(prepCopyp), prepCopyp);
+                // Start from the default value (IEEE 1800-2023 7.4.6), not what an earlier
+                // execution left, as an inout argument reads it, and push_back() extends it
+                elseStmtp = AstNode::addNext<AstNodeStmt, AstNodeStmt>(
+                    new AstAssign{fl, new AstVarRef{fl, varp, VAccess::WRITE},
+                                  new AstCReset{fl, varp, false}},
+                    elseStmtp);
             }
             AstIf* const newp = new AstIf{fl, condp, origStmtp, elseStmtp};
             replaceHandle.relink(newp);
@@ -585,7 +592,7 @@ class UnknownVisitor final : public VNVisitor {
                 const AstVar* sourcep = nullptr;
                 if (const AstNodeVarRef* const refp = VN_CAST(targetp, NodeVarRef)) {
                     sourcep = refp->varp();
-                } else if (const AstMemberSel* const selp = VN_CAST(targetp, MemberSel)) {
+                } else if (const AstMemberRef* const selp = VN_CAST(targetp, MemberRef)) {
                     sourcep = selp->varp();
                 }
                 if (sourcep

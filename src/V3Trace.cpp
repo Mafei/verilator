@@ -1216,7 +1216,7 @@ class TraceVisitor final : public VNVisitor {
                 // If so, all funcs might share the same activity code
                 TraceActivityVertex* const activityVtxp
                     = getActivityVertexp(nodep, callp->funcp()->slow());
-                for (AstNode* nextp = nodep; nextp; nextp = nextp->nextp()) {
+                for (AstNode* const nextp : VNList<AstNode>{nodep}) {
                     // Only consecutive calls share activity. An intervening await may
                     // suspend until tracing has cleared the preceding call's flag.
                     AstStmtExpr* const stmtp = VN_CAST(nextp, StmtExpr);
@@ -1313,7 +1313,7 @@ class TraceVisitor final : public VNVisitor {
             }
         }
     }
-    void visit(AstMemberSel* nodep) override {
+    void visit(AstMemberRef* nodep) override {
         if (m_cfuncp && m_finding && nodep->access().isWriteOrRW()) {
             AstIfaceRefDType* const dtypep
                 = VN_CAST(nodep->fromp()->dtypep()->skipRefp(), IfaceRefDType);

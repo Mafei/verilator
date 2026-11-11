@@ -302,7 +302,7 @@ public:
     void emitVarResetScopeHash();
     void emitChangeDet();
     void putCommaIterateNext(AstNode* nodep, bool comma = false) {
-        for (AstNode* subnodep = nodep; subnodep; subnodep = subnodep->nextp()) {
+        for (AstNode* const subnodep : VNList<AstNode>{nodep}) {
             if (comma) puts(", ");
             iterateConst(subnodep);
             comma = true;
@@ -393,7 +393,7 @@ public:
 
     void emitNodesWithText(AstNode* nodesp, bool useSelfForThis, bool tracking,
                            const std::string& separator) {
-        for (AstNode* nodep = nodesp; nodep; nodep = nodep->nextp()) {
+        for (AstNode* const nodep : VNList<AstNode>{nodesp}) {
             if (const AstText* const textp = VN_CAST(nodep, Text)) {
                 const std::string text
                     = VSelfPointerText::replaceThis(useSelfForThis, textp->text());
@@ -655,10 +655,10 @@ public:
             // anything
             AstNode* fromp = nodep->lhsp();
             // Fork needs to use a member select.  Nothing else should be possible before VarRef.
-            if (AstMemberSel* const sfromp = VN_CAST(fromp, MemberSel)) {
+            if (AstMemberRef* const memberRefp = VN_CAST(fromp, MemberRef)) {
                 // Fork-DynScope generated pointer to previously automatic variable
-                AstVar* const memberVarp = sfromp->varp();
-                fromp = sfromp->fromp();
+                AstVar* const memberVarp = memberRefp->varp();
+                fromp = memberRefp->fromp();
                 if (AstNullCheck* const sfromp = VN_CAST(fromp, NullCheck)) fromp = sfromp->lhsp();
                 AstNodeVarRef* const fromVarRefp = VN_AS(fromp, NodeVarRef);
                 emitVarReset(
@@ -784,7 +784,7 @@ public:
                    && !VN_IS(nodep->rhsp(), VarRef)  //
                    && !VN_IS(nodep->rhsp(), ConsArray)  //
                    && !VN_IS(nodep->rhsp(), AssocSel)  //
-                   && !VN_IS(nodep->rhsp(), MemberSel)  //
+                   && !VN_IS(nodep->rhsp(), MemberRef)  //
                    && !VN_IS(nodep->rhsp(), StructSel)  //
                    && !VN_IS(nodep->rhsp(), ArraySel)  //
                    && !VN_IS(nodep->rhsp(), ExprStmt)) {
@@ -1482,7 +1482,7 @@ public:
         }
         puts("}\n");
     }
-    void visit(AstNodeIf* nodep) override {
+    void visit(AstIf* nodep) override {
         putns(nodep, "if (");
         if (!nodep->branchPred().unknown()) {
             puts(nodep->branchPred().ascii());
@@ -1499,7 +1499,7 @@ public:
         if (!nodep->elsesp()) {
             puts("\n");
         } else {
-            if (VN_IS(nodep->elsesp(), NodeIf) && !nodep->elsesp()->nextp()) {
+            if (VN_IS(nodep->elsesp(), If) && !nodep->elsesp()->nextp()) {
                 puts(" else ");
                 iterateAndNextConstNull(nodep->elsesp());
             } else {
@@ -1771,7 +1771,7 @@ public:
     void visit(AstMatchMasked* nodep) override {
         emitOpName(nodep, nodep->emitC(), nodep->lhsp(), nodep->matchp(), nullptr);
     }
-    void visit(AstMemberSel* nodep) override {
+    void visit(AstMemberRef* nodep) override {
         const AstVar* const varp = nodep->varp();
         const bool dereferenceCovergroupRef
             = varp->covergroupRefMember() && nodep->access().isReadOrRW();
@@ -1780,7 +1780,7 @@ public:
         putnbs(nodep, "->");
         if (varp->isIfaceRef()) {
             // varp is the __Viftop companion (e.g. "tx__Viftop"); use the
-            // MemberSel name which matches the cell's C++ member (e.g. "tx").
+            // MemberRef name which matches the cell's C++ member (e.g. "tx").
             puts(nodep->nameProtect());
         } else {
             puts(varName(varp));

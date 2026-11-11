@@ -162,7 +162,7 @@ class SplitVisitor final : public VNVisitor {
     // Iterate the given list of statements, building the dependency graph
     void scanBlock(AstNode* stmtsp) {
         if (m_noSplitWhy) return;
-        for (AstNode* stmtp = stmtsp; stmtp; stmtp = stmtp->nextp()) {
+        for (AstNode* const stmtp : VNList<AstNode>{stmtsp}) {
             // Skip comments. They have no dependencies at all, so would always
             // form an independent component, and hence a split block, of their
             // own, which would be subsequently deleted as it does nothing.
@@ -225,9 +225,7 @@ class SplitVisitor final : public VNVisitor {
     // Take the statements of the given list, and return them distributed into one list per color.
     static std::vector<AstNodeStmt*> splitStatements(AstNode* stmtsp, uint32_t numColors) {
         std::vector<AstNodeStmt*> result{numColors, nullptr};
-        for (AstNode *stmtp = stmtsp, *nextp = nullptr; stmtp; stmtp = nextp) {
-            nextp = stmtp->nextp();  // 'stmtp' is unlinked below
-
+        for (AstNode* const stmtp : VNList<AstNode>{stmtsp}) {
             // Comments are dropped if the block is split
             if (VN_IS(stmtp, Comment)) continue;
 
@@ -370,7 +368,7 @@ class SplitVisitor final : public VNVisitor {
         iterate(nodep->lhsp());
     }
 
-    void visit(AstMemberSel* nodep) override {
+    void visit(AstMemberRef* nodep) override {
         // A variable selected through a handle can be the same as one accessed otherwise, which
         // is not known here, so the accesses must be kept in order
         if (m_graphp) m_noSplitWhy = "Handle";

@@ -479,6 +479,20 @@ GROUPS = {
         'tagged_case', 'tagged_if', 'tagged_union', 'timing_func_fork_bad',
         'virtual_interface_member_trigger', 'vpi_comb_protect_ids', 'vpi_comb_trace', 'vpi_force'
     ],
+    # Official changes through bb49431e58b6514655b8a58104b809c7f6d256bf.
+    "upstream_daily_20261111": [
+        'bind_dot_unsup', 'bind_list_unsup', 'class_param_typedef6', 'constraint_assoc_arr_basic',
+        'cover_fsm_two_proc_multi', 'defparam', 'defparam_multi', 'defparam_nfound_bad',
+        'defparam_nodot', 'emit_memb_limit_force', 'emit_memb_limit_force_protect_ids',
+        'emit_memb_limit_nontriv', 'emit_memb_limit_nontriv_disabled',
+        'emit_memb_limit_nontriv_large', 'emit_memb_limit_nontriv_single', 'enum_item_ref_scale',
+        'event_control_expr_noinl', 'event_control_expr_unsup', 'func_recurse_depth', 'hier_block',
+        'hier_block_param_empty', 'if_deep_chain', 'interface_generic_bad4',
+        'interface_generic_positional', 'interface_typedef_bad', 'lint_defparam_bad',
+        'param_type_cast_deep', 'past', 'preproc', 'preproc_comments', 'preproc_defines',
+        'preproc_dump_defines', 'sched_split_debug', 'sched_split_debug_on', 'string',
+        'trace_ena_cc', 'wrapper_dup_name_bad'
+    ],
 }
 
 
@@ -528,6 +542,9 @@ def selection_revision():
     if (len(current) < 637 or digest(current[:637])
             != '96006fd6b3e3679e6c8e43ab6922d78cf4058e5a5a1156bfd5a0304001e74695'):
         raise ValueError('Nov9 inherited regression selection changed')
+    if (len(current) < 706 or digest(current[:706])
+            != 'b4157e9bd8b268ed44c3b5a8ac740ddf7c8f3db90a69802f2eb181b7d851f000'):
+        raise ValueError('Nov11 inherited regression selection changed')
     return {
         'schema': 'clocking-regression-selection-v1',
         'original_revision': clocking_legacy.BASE_SHA,

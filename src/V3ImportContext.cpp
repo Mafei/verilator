@@ -38,7 +38,7 @@ class ImportContextCaptureVisitor final : public VNVisitorConst {
         // distinguish from an eligible unqualified name use.
         const bool scope = VN_IS(nodep, NodeModule) || VN_IS(nodep, NodeFTask)
                            || VN_IS(nodep, NodeBlock) || VN_IS(nodep, GenBlock)
-                           || VN_IS(nodep, NodeForeach);
+                           || VN_IS(nodep, Foreach);
         if (scope) {
             VL_RESTORER(m_scope);
             VL_RESTORER(m_parentScope);

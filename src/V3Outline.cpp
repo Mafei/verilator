@@ -43,10 +43,10 @@
 
 #include "V3Outline.h"
 
-#include "V3AstUserAllocator.h"
 #include "V3EmitCBase.h"
 #include "V3Sched.h"
 #include "V3Stats.h"
+#include "V3VNUserAllocator.h"
 
 #include <algorithm>
 #include <limits>
@@ -133,7 +133,7 @@ class OutlineVisitor final : public VNVisitor {
     };
 
     // STATE
-    AstUser1Allocator<AstNodeStmt, StmtInfo> m_info;
+    VNUser1Allocator<AstNodeStmt, StmtInfo> m_info;
     const size_t m_limit = static_cast<size_t>(v3Global.opt.outputSplitCFuncs());
     AstCFunc* m_funcp = nullptr;  // Current coroutine
     size_t m_funcNum = 0;  // Number of functions outlined from the current coroutine
@@ -179,7 +179,7 @@ class OutlineVisitor final : public VNVisitor {
     size_t reduce(AstNodeStmt* stmtp) {
         size_t size = m_info(stmtp).m_size;
         std::vector<AstNode*> listps;  // Statement lists directly under 'stmtp'
-        if (AstNodeIf* const ifp = VN_CAST(stmtp, NodeIf)) {
+        if (AstIf* const ifp = VN_CAST(stmtp, If)) {
             listps = {ifp->thensp(), ifp->elsesp()};
         } else if (AstLoop* const loopp = VN_CAST(stmtp, Loop)) {
             listps = {loopp->stmtsp()};
@@ -190,7 +190,7 @@ class OutlineVisitor final : public VNVisitor {
         std::vector<AstNodeStmt*> largeps;  // Statements larger than the limit
         for (AstNode* const listp : listps) {
             StmtRange run{nullptr, nullptr, 0};
-            for (AstNode* nodep = listp; nodep; nodep = nodep->nextp()) {
+            for (AstNode* const nodep : VNList<AstNode>{listp}) {
                 AstNodeStmt* const subp = VN_CAST(nodep, NodeStmt);  // Else a declaration
                 if (subp && m_info(subp).m_size > m_limit) largeps.push_back(subp);
                 if (subp && m_info(subp).m_movable && m_info(subp).m_size <= m_limit) {
@@ -263,7 +263,7 @@ class OutlineVisitor final : public VNVisitor {
         m_count = 0;
         m_targetDepth = std::numeric_limits<int>::max();
         iterateAndNextNull(funcp->stmtsp());
-        for (AstNode* nodep = funcp->stmtsp(); nodep; nodep = nodep->nextp()) {
+        for (AstNode* const nodep : funcp->stmtspList()) {
             AstNodeStmt* const stmtp = VN_CAST(nodep, NodeStmt);  // Else a declaration
             if (stmtp && m_info(stmtp).m_size > m_limit) reduce(stmtp);
         }
@@ -286,13 +286,12 @@ class OutlineVisitor final : public VNVisitor {
     explicit OutlineVisitor(AstNetlist* netlistp) {
         // Gather the coroutines first, as outlining adds functions
         std::vector<AstCFunc*> funcps;
-        for (AstNode* modp = netlistp->modulesp(); modp; modp = modp->nextp()) {
-            for (AstNode* nodep = VN_AS(modp, NodeModule)->stmtsp(); nodep;
-                 nodep = nodep->nextp()) {
+        for (AstNodeModule* const modp : netlistp->modulespList()) {
+            for (AstNode* const nodep : modp->stmtspList()) {
                 AstScope* scopep = VN_CAST(nodep, Scope);
                 if (AstTopScope* const topp = VN_CAST(nodep, TopScope)) scopep = topp->scopep();
                 if (!scopep) continue;
-                for (AstNode* blockp = scopep->blocksp(); blockp; blockp = blockp->nextp()) {
+                for (AstNode* const blockp : scopep->blockspList()) {
                     AstCFunc* const funcp = VN_AS(blockp, CFunc);
                     if (funcp->isCoroutine()) funcps.push_back(funcp);
                 }

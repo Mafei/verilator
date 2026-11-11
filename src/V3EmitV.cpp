@@ -70,8 +70,8 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         }
         return false;
     }
-    void iterateAndCommaConstNull(AstNode* nodep) {
-        for (; nodep; nodep = nodep->nextp()) {
+    void iterateAndCommaConstNull(AstNode* nodesp) {
+        for (AstNode* const nodep : VNList<AstNode>{nodesp}) {
             iterateConst(nodep);
             if (nodep->nextp()) puts(", ");
         }
@@ -84,7 +84,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         m_packedps.clear();
     }
     void emitNodesWithText(AstNode* nodesp, bool tracking, const std::string& separator) {
-        for (AstNode* nodep = nodesp; nodep; nodep = nodep->nextp()) {
+        for (AstNode* const nodep : VNList<AstNode>{nodesp}) {
             if (const AstText* const textp = VN_CAST(nodep, Text)) {
                 if (tracking) {
                     puts(textp->text());
@@ -146,7 +146,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         puts(nodep->prettyName());
         puts("(");
         bool first = true;
-        for (AstNode* itemp = nodep->declsp(); itemp; itemp = itemp->nextp()) {
+        for (AstNode* const itemp : nodep->declspList()) {
             AstVar* const portp = VN_AS(itemp, Var);
             UASSERT_OBJ(portp->isIO(), portp, "Non-port in a DPI import prototype");
             if (portp->isFuncReturn()) continue;
@@ -357,7 +357,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
     void visit(AstAlias* nodep) override {
         putbs("alias ");
         iterateConst(nodep->itemsp());
-        for (AstNode* itemp = nodep->itemsp()->nextp(); itemp; itemp = itemp->nextp()) {
+        for (AstNode* const itemp : VNList<AstNode>{nodep->itemsp()->nextp()}) {
             putfs(nodep, " = ");
             iterateConst(itemp);
         }
@@ -630,7 +630,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
             putbs(", ");
         }
         putsQuoted(text);
-        for (AstNode* expp = exprsp; expp; expp = expp->nextp()) {
+        for (AstNode* const expp : VNList<AstNode>{exprsp}) {
             puts(", ");
             iterateConstNull(expp);
         }
@@ -770,13 +770,11 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         iterateAndNextConstNull(nodep->condp());
         puts(")) break;\n");
     }
-    void visit(AstNodeIf* nodep) override {
+    void visit(AstIf* nodep) override {
         putfs(nodep, "");
-        if (const AstIf* const ifp = VN_CAST(nodep, If)) {
-            if (ifp->priorityPragma()) puts("priority ");
-            if (ifp->uniquePragma()) puts("unique ");
-            if (ifp->unique0Pragma()) puts("unique0 ");
-        }
+        if (nodep->priorityPragma()) puts("priority ");
+        if (nodep->uniquePragma()) puts("unique ");
+        if (nodep->unique0Pragma()) puts("unique0 ");
         puts("if (");
         iterateAndNextConstNull(nodep->condp());
         puts(") begin\n");
@@ -1023,7 +1021,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         emitVerilogFormat(nodep, nodep->emitVerilog(), nodep->lhsp(), nodep->rhsp(), nodep->thsp(),
                           nodep->fhsp());
     }
-    void visit(AstMemberSel* nodep) override {
+    void visit(AstMemberRef* nodep) override {
         iterateConst(nodep->fromp());
         puts(".");
         puts(nodep->prettyName());
@@ -1088,7 +1086,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
     }
     void visit(AstSel* nodep) override {
         const bool svSelectable = VN_IS(nodep->fromp(), VarRef) || VN_IS(nodep->fromp(), VarXRef)
-                                  || VN_IS(nodep->fromp(), MemberSel)
+                                  || VN_IS(nodep->fromp(), MemberRef)
                                   || VN_IS(nodep->fromp(), StructSel)
                                   || VN_IS(nodep->fromp(), ArraySel) || VN_IS(nodep->fromp(), Sel);
         if (!svSelectable) {
@@ -1259,7 +1257,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         // A specialization's name is mangled, so only the generic carries the '#()' header
         if (nodep->name() == nodep->origName()) {
             bool first = true;
-            for (const AstNode* stmtp = nodep->membersp(); stmtp; stmtp = stmtp->nextp()) {
+            for (const AstNode* const stmtp : nodep->memberspList()) {
                 if (const AstParamTypeDType* const ptp = VN_CAST(stmtp, ParamTypeDType)) {
                     if (!ptp->isGParam()) continue;
                     puts(first ? " #(" : ", ");
@@ -1295,7 +1293,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         }
         puts(";\n");
 
-        for (AstNode* itemp = nodep->membersp(); itemp; itemp = itemp->nextp()) {
+        for (AstNode* const itemp : nodep->memberspList()) {
             // Type parameters are emitted in the #() header, not the body
             if (!VN_IS(itemp, ParamTypeDType)) iterateConst(itemp);
         }
@@ -1455,7 +1453,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
             putfs(nodep, nodep->prettyName());
         }
         puts("(");
-        iterateAndNextConstNull(nodep->argsp());
+        iterateAndCommaConstNull(nodep->argsp());
         puts(")");
         iterateConstNull(nodep->withp());
     }
@@ -1498,7 +1496,7 @@ class EmitVBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
         if (!VN_IS(nodep->propp(), SchemaRef)) {
             // Same dumping as in AstSenTree
             putfs(nodep, "@(");
-            for (AstNode* expp = nodep->sensesp(); expp; expp = expp->nextp()) {
+            for (AstNode* const expp : VNList<AstNode>{nodep->sensesp()}) {
                 iterateConst(expp);
                 if (expp->nextp()) putqs(expp->nextp(), " or ");
             }
