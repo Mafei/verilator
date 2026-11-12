@@ -453,7 +453,7 @@ class WidthSelVisitor final : public VNVisitor {
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
         } else {  // nullptr=bad extract, or unknown node type
             nodep->v3error("Illegal bit or array select; type already selected, or bad dimension: "
-                           << "data type is" << fromdata.m_errp->prettyDTypeNameQ());
+                           << "data type is " << fromdata.m_errp->prettyDTypeNameQ());
             // How to recover?  We'll strip a dimension.
             nodep->replaceWith(fromp);
             VL_DO_DANGLING(pushDeletep(nodep), nodep);
@@ -512,9 +512,8 @@ class WidthSelVisitor final : public VNVisitor {
                                "First value of [a:b] isn't a constant, maybe you want +: or -:");
         checkConstantOrReplace(nodep->rightp(),
                                "Second value of [a:b] isn't a constant, maybe you want +: or -:");
-        AstNodeExpr* const msbp = nodep->leftp()->unlinkFrBack();
-        AstNodeExpr* const lsbp = nodep->rightp()->unlinkFrBack();
-        IndexDiagnostic diagnostic{lsbp};
+        AstNodeExpr* msbp = nodep->leftp()->unlinkFrBack();
+        AstNodeExpr* lsbp = nodep->rightp()->unlinkFrBack();
         int32_t msb = VN_AS(msbp, Const)->toSInt();
         int32_t lsb = VN_AS(lsbp, Const)->toSInt();
         const int32_t elem = (msb > lsb) ? (msb - lsb + 1) : (lsb - msb + 1);
@@ -551,8 +550,10 @@ class WidthSelVisitor final : public VNVisitor {
                         << "] Slice range has ascending bit ordering, perhaps you wanted [" << lsb
                         << ":" << msb << "]");
                 std::swap(msb, lsb);
+                std::swap(msbp, lsbp);  // Select starts at the new lsb
             }
             const int elwidth = adtypep->width() / fromRange.elements();
+            IndexDiagnostic diagnostic{lsbp};
             diagnostic.fromRange(fromRange);
             diagnostic.multiply(elwidth);
             AstSel* const newp
@@ -577,7 +578,9 @@ class WidthSelVisitor final : public VNVisitor {
                         << "] Slice range has ascending bit ordering, perhaps you wanted [" << lsb
                         << ":" << msb << "]");
                 std::swap(msb, lsb);
+                std::swap(msbp, lsbp);  // Select starts at the new lsb
             }
+            IndexDiagnostic diagnostic{lsbp};
             diagnostic.fromRange(fromRange);
             AstSel* const newp = new AstSel{nodep->fileline(), fromp, newSubLsbOf(lsbp, fromRange),
                                             msb + 1 - lsb};
@@ -596,7 +599,9 @@ class WidthSelVisitor final : public VNVisitor {
                         << "] Slice range has ascending bit ordering, perhaps you wanted [" << lsb
                         << ":" << msb << "]");
                 std::swap(msb, lsb);
+                std::swap(msbp, lsbp);  // Select starts at the new lsb
             }
+            IndexDiagnostic diagnostic{lsbp};
             diagnostic.fromRange(fromRange);
             AstSel* const newp = new AstSel{nodep->fileline(), fromp, newSubLsbOf(lsbp, fromRange),
                                             msb + 1 - lsb};

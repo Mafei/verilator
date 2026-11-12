@@ -2950,7 +2950,7 @@ class ConstVisitor final : public VNVisitor {
                     // commented out to not fail v3error-coverage-checks.
                     // else {
                     // nodep->v3error("Stream block size must be constant (got " <<
-                    // streamp->rhsp()->prettyTypeName() << ")");
+                    // streamp->rhsp()->prettyTypeNameQ() << ")");
                     // }
                     int srcElementBits = 0;
                     if (const AstNodeDType* const elemDtp = srcDTypep->subDTypep()) {
@@ -3018,9 +3018,9 @@ class ConstVisitor final : public VNVisitor {
             const AstNode* errorp = simvis.whyNotNodep();
             if (!errorp) errorp = nodep;
             nodep->v3error("Expecting expression to be constant, but can't determine constant for "
-                           << nodep->prettyTypeName() << '\n'
+                           << nodep->prettyTypeNameQ() << '\n'
                            << errorp->warnOther() << "... Location of non-constant "
-                           << errorp->prettyTypeName() << ": " << simvis.whyNotMessage());
+                           << errorp->prettyTypeNameQ() << ": " << simvis.whyNotMessage());
             VL_DO_DANGLING(replaceZero(nodep), nodep);
         } else {
             // Fetch the result
@@ -3888,7 +3888,7 @@ class ConstVisitor final : public VNVisitor {
                 // commented out to not fail v3error-coverage-checks.
                 // else {
                 //    nodep->v3error("Stream block size must be constant (got " <<
-                //    streamp->rhsp()->prettyTypeName() << ")");
+                //    streamp->rhsp()->prettyTypeNameQ() << ")");
                 // }
                 int srcElementBits = 0;
                 if (const AstNodeDType* const elemDtp = srcDTypep->subDTypep()) {
@@ -4798,7 +4798,7 @@ class ConstVisitor final : public VNVisitor {
                 return;
             } else {
                 nodep->v3error("Expecting expression to be constant, but can't convert a "
-                               << nodep->prettyTypeName() << " to constant.");
+                               << nodep->prettyTypeNameQ() << " to constant.");
             }
         } else {
             if (nodep->isTimingControl()) m_hasJumpDelay = true;

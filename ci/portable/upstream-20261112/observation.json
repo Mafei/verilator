@@ -1,0 +1,257 @@
+{
+  "observed_at": "2026-11-12T00:04:29.715850+00:00",
+  "base": "6cfeb4c299b873e66aee075a1f408016fdc0a0bf",
+  "official_master": "2fda3d0f3fad360e525b2bfd5bf49209f94191c4",
+  "official_new_commits": 21,
+  "antmicro_dev_fourstate": "dbb8aedaa478389639295e40f16dbc7183d10b48",
+  "antmicro_feature_4_state_logic": "5e132f32db577b3d596b66ce6378ac224ffa38d3",
+  "delivery": "d565afb615e3393970d6ce030d75df68b594e6b8",
+  "protected_files": 108,
+  "prior_failed_drivers": [
+    "assignment_pin_bad",
+    "constraint_json_only",
+    "cover_fsm_compound_reset",
+    "cover_genfor",
+    "cover_genfor_default",
+    "debug_emitv",
+    "event_nba_notiming_bad",
+    "fourstate_assoc_ref_bounds",
+    "fourstate_complex_pin",
+    "fourstate_coverage",
+    "fourstate_demo_json",
+    "fourstate_resolve_unsup",
+    "fourstate_wait_eval",
+    "inst_output_value_bad",
+    "opt_merge_cond_no_motion",
+    "port_repeat_same_unsup",
+    "sarif",
+    "sarif_clean",
+    "timing_debug2",
+    "cover_fsm_two_proc_multi"
+  ],
+  "selected_saved_config": "554c7ce5-d35e-4e17-88d7-8dec6033062d~asenvcfg_44bc9c3278688191b954b1bc6176ea17",
+  "hostname": "4f0e6381e8cd",
+  "tracked_tree_initial": "clean",
+  "active_builds_initial": 0,
+  "active_actions_initial": 0,
+  "pr_action": "prohibited; not attempted",
+  "status": "HOLD",
+  "environment_id": "ccarenv_b64_Y2NhcmVudl82MWJmOTU5NjI5YzQ4MTkxYTYxNmQ3MjVmNGEwM2RjNA",
+  "source_config_id": "2ee074c5-c18d-4e8a-9e86-6d95637f650a~cecfg_6ac6e78dc6ec819ba6ac8c928fd549c8",
+  "source_config_version_id": "2ee074c5-c18d-4e8a-9e86-6d95637f650a~cecfgver_6ac6e9a1f418819b85abfcf46e80320e",
+  "observations_current": true,
+  "observed_phase": "running",
+  "connectivity": "connected",
+  "failure": null,
+  "restored_frozen_files": [
+    "test_regress/t/t_cover_fsm_compound_reset.out",
+    "test_regress/t/t_cover_fsm_compound_reset.v",
+    "test_regress/t/t_cover_fsm_two_proc_multi.out",
+    "test_regress/t/t_cover_fsm_two_proc_multi.v",
+    "test_regress/t/t_debug_emitv.out",
+    "test_regress/t/t_debug_emitv.v"
+  ],
+  "new_driver_routing": {
+    "vlt": [
+      "alias_supply_const",
+      "constraint_rand_array_index",
+      "cover_fsm_beginif_branch",
+      "cover_fsm_beginif_expr",
+      "cover_fsm_compound_reset_branch",
+      "cover_fsm_concat_reg",
+      "cover_fsm_if_unknown_enum_multi_bad",
+      "cover_fsm_nonenum_unsupported_bad",
+      "cover_fsm_policy_accept_multi",
+      "cover_fsm_transition_shapes_multi",
+      "cover_line_cc",
+      "covergroup_autobins_bad",
+      "covergroup_default_bbox",
+      "covergroup_default_bins",
+      "covergroup_iff_illegal",
+      "covergroup_iff_illegal_default",
+      "covergroup_iff_unsup",
+      "covergroup_ignore_bins",
+      "covergroup_ignore_default_bad",
+      "dynarray_index_cast",
+      "func_recurse",
+      "gen_implicit_port",
+      "inside_unpacked_param",
+      "lint_implicit_gen_bad",
+      "lint_realcvt_bad",
+      "order_pipeline_scale",
+      "property_sexpr_parse_unsup",
+      "property_untyped",
+      "queue_method_bad",
+      "select_runtime_range",
+      "trace_complex_default_cc_fst",
+      "trace_complex_default_cc_saif",
+      "trace_complex_default_cc_vcd",
+      "trace_complex_params_cc_fst",
+      "trace_complex_params_cc_saif",
+      "trace_complex_params_cc_vcd",
+      "vlcov_hier_report_runtime"
+    ],
+    "vltmt": [
+      "dpi_threads",
+      "func_recurse_hier"
+    ],
+    "unrun_systemc": [
+      "trace_complex_default_sc_fst",
+      "trace_complex_default_sc_vcd",
+      "trace_complex_params_sc_fst",
+      "trace_complex_params_sc_vcd"
+    ],
+    "systemc_reason": "Existing native/portable runner has no configured SystemC; no new dependency or runner exception. Original VLT743 and MT18 selections retained."
+  },
+  "pending_golden_patch_sha256": "c3b79fec96c267d6d7b502e7f28b0837278e312c820ef5e8d849a868d60fc269",
+  "pending_golden_applied": false,
+  "prior_ci": {
+    "run_id": 42930734168,
+    "head": "6cfeb4c299b873e66aee075a1f408016fdc0a0bf",
+    "status": "failure",
+    "platform_counts": "723 passed / 20 failed, producer diagnostics in actual summary log only",
+    "complete_platform_logs": "Transport closed; not retried this round",
+    "artifact_materialization": "core ZIP normal materialization failed previously; not retried this round",
+    "independent_acceptance": false
+  },
+  "stopped_previews": [
+    {
+      "receipt": "merged-preview-build.finished.json",
+      "actual_exit": -15,
+      "reason": "Stopped owned process after source conflict resolver failed a boundary check; no acceptance claim."
+    },
+    {
+      "receipt": "resolved-preview-build.finished.json",
+      "actual_exit": -15,
+      "reason": "Stopped owned process after source conflict resolver failed a boundary check; no acceptance claim."
+    }
+  ],
+  "selected_drivers": 780,
+  "groups": 59,
+  "current_selector_sha256": "86d962b34ae3b435c425501fed60e3ca57a4dc6b5eddc1dbd42b6e39f54949a7",
+  "inherited_743_selector_sha256": "cb17832438b5e020800760551d1ae4180af45959c3dd216346119edc41961fe5",
+  "multithread_selected": 20,
+  "inherited_multithread_18_sha256": "35c8c6b43e5fe51aa3d0fc866f0f8ed51331c11bb8848e0a73b2138634ba113c",
+  "merge_conflicts": [
+    "src/V3AstAttr.h",
+    "src/V3AstNodes.cpp",
+    "src/V3Width.cpp",
+    "src/V3WidthSel.cpp",
+    "test_regress/t/t_debug_emitv.out"
+  ],
+  "conflict_resolutions": {
+    "VCMethod": "Use upstream pretty descriptions and element-access predicate; retain ARRAY_AT_WRITE_BOUNDED descriptor and include it in element-access classification.",
+    "AstNodes": "Use the new shared predicate, which now covers the custom bounded write method.",
+    "Width": "Retain actual-coordinate width/minimum-width semantics; use upstream quoted type diagnostics.",
+    "WidthSel": "Use upstream mutable bound pointers and swap them for reversed ranges; capture existing four-state diagnostic widths from the selected lower bound after the swap.",
+    "golden": "Restore all six changed frozen files, including source inputs, to their parent bytes."
+  },
+  "acceptance_classification_changed": false,
+  "selection_units": {
+    "passed": 9,
+    "failed": 0,
+    "log_sha256": "4d762f9eec5edbd6f4e945020fbdbd961294ee0458f1e632033f783029081522"
+  },
+  "precommit_build": {
+    "scope": "dirty merge preview, not final-head acceptance",
+    "receipt": {
+      "schema": "native-process-wait4-v1",
+      "observer_pid": 1479,
+      "pid": 1595,
+      "proc_identity": {
+        "pid": 1595,
+        "state": "R",
+        "start_ticks": 29605,
+        "clock_ticks_per_second": 100
+      },
+      "utc_started": "2026-11-12T00:07:38.765174+00:00",
+      "cwd": "/workspace/verilator",
+      "argv": [
+        "make",
+        "-j4",
+        "verilator_bin"
+      ],
+      "log": "/workspace/scratch/verilator-20261112-native/conflict-resolved-build.log",
+      "disk_guard_bytes": 268435456,
+      "initial_available_bytes": 28198158336,
+      "timeout_seconds": 1800.0,
+      "utc_finished": "2026-11-12T00:12:14.544472+00:00",
+      "elapsed_seconds": 275.78000834700003,
+      "wait4_pid": 1595,
+      "raw_wait_status": 0,
+      "actual_exit": 0,
+      "exited_normally": true,
+      "exit_status": 0,
+      "signal": null,
+      "termination_reason": null,
+      "kill_sent": false,
+      "minimum_available_bytes": 28193361920,
+      "final_available_bytes": 28193325056,
+      "log_bytes": 164247,
+      "log_sha256": "30bfa176d90a998d2cd147a5a70d02431884d79a2e9d9e7ac1f2b8459f25564a",
+      "rusage": {
+        "user_seconds": 928.566912,
+        "system_seconds": 77.365251,
+        "max_rss_raw": 1113792,
+        "max_rss_unit": "KiB"
+      }
+    }
+  },
+  "final_head_validation": "pending",
+  "static_checks": {
+    "lint_py": {
+      "schema": "native-process-wait4-v1",
+      "observer_pid": 2141,
+      "pid": 2148,
+      "proc_identity": {
+        "pid": 2148,
+        "state": "R",
+        "start_ticks": 40465,
+        "clock_ticks_per_second": 100
+      },
+      "utc_started": "2026-11-12T00:09:27.366716+00:00",
+      "cwd": "/workspace/verilator",
+      "argv": [
+        "make",
+        "lint-py"
+      ],
+      "log": "/workspace/scratch/verilator-20261112-native/candidate-lint-py.log",
+      "disk_guard_bytes": 268435456,
+      "initial_available_bytes": 28195893248,
+      "timeout_seconds": 600.0,
+      "utc_finished": "2026-11-12T00:10:19.528623+00:00",
+      "elapsed_seconds": 52.161948123,
+      "wait4_pid": 2148,
+      "raw_wait_status": 512,
+      "actual_exit": 2,
+      "exited_normally": true,
+      "exit_status": 2,
+      "signal": null,
+      "termination_reason": null,
+      "kill_sent": false,
+      "minimum_available_bytes": 28194607104,
+      "final_available_bytes": 28194607104,
+      "log_bytes": 4255,
+      "log_sha256": "809399f95eb54f61eb74c556dc382122670e47e9e58043807559589d85f35632",
+      "rusage": {
+        "user_seconds": 39.586948,
+        "system_seconds": 1.801521,
+        "max_rss_raw": 216204,
+        "max_rss_unit": "KiB"
+      }
+    },
+    "lint_result": "mypy and Ruff passed; existing finish_cov_tail_common.py:110 R0914 (23/15) fails",
+    "cppcheck": "not run: executable unavailable",
+    "selection_units": {
+      "passed": 9,
+      "failed": 0,
+      "log_sha256": "4d762f9eec5edbd6f4e945020fbdbd961294ee0458f1e632033f783029081522"
+    },
+    "thread_native_receipt_unit": {
+      "passed": 1,
+      "failed": 0,
+      "log_sha256": "1f595a73b2ed09c1daaeb8becdd5972805c2e54d319d1d1379fd724d863b04e4"
+    },
+    "format": "clang-format21 applied to changed compiler hunks; frozen inputs preserved"
+  }
+}

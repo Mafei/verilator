@@ -493,6 +493,22 @@ GROUPS = {
         'preproc_dump_defines', 'sched_split_debug', 'sched_split_debug_on', 'string',
         'trace_ena_cc', 'wrapper_dup_name_bad'
     ],
+    # Official changes through 2fda3d0f3fad360e525b2bfd5bf49209f94191c4.
+    "upstream_daily_20261112": [
+        'alias_supply_const', 'constraint_rand_array_index', 'cover_fsm_beginif_branch',
+        'cover_fsm_beginif_expr', 'cover_fsm_compound_reset_branch', 'cover_fsm_concat_reg',
+        'cover_fsm_if_unknown_enum_multi_bad', 'cover_fsm_nonenum_unsupported_bad',
+        'cover_fsm_policy_accept_multi', 'cover_fsm_transition_shapes_multi', 'cover_line_cc',
+        'covergroup_autobins_bad', 'covergroup_default_bbox', 'covergroup_default_bins',
+        'covergroup_iff_illegal', 'covergroup_iff_illegal_default', 'covergroup_iff_unsup',
+        'covergroup_ignore_bins', 'covergroup_ignore_default_bad', 'dynarray_index_cast',
+        'func_recurse', 'gen_implicit_port', 'inside_unpacked_param', 'lint_implicit_gen_bad',
+        'lint_realcvt_bad', 'order_pipeline_scale', 'property_sexpr_parse_unsup',
+        'property_untyped', 'queue_method_bad', 'select_runtime_range',
+        'trace_complex_default_cc_fst', 'trace_complex_default_cc_saif',
+        'trace_complex_default_cc_vcd', 'trace_complex_params_cc_fst',
+        'trace_complex_params_cc_saif', 'trace_complex_params_cc_vcd', 'vlcov_hier_report_runtime'
+    ],
 }
 
 
@@ -545,6 +561,9 @@ def selection_revision():
     if (len(current) < 706 or digest(current[:706])
             != 'b4157e9bd8b268ed44c3b5a8ac740ddf7c8f3db90a69802f2eb181b7d851f000'):
         raise ValueError('Nov11 inherited regression selection changed')
+    if (len(current) < 743 or digest(current[:743])
+            != 'cb17832438b5e020800760551d1ae4180af45959c3dd216346119edc41961fe5'):
+        raise ValueError('Nov12 inherited regression selection changed')
     return {
         'schema': 'clocking-regression-selection-v1',
         'original_revision': clocking_legacy.BASE_SHA,

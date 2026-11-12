@@ -26,6 +26,7 @@ import compile_cache
 import harness_pass_probe
 import log_evidence
 import run_regressions
+import run_thread_controls
 from test_clocking_reporting import legacy_report
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
@@ -455,6 +456,23 @@ class InheritedSelectionTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,
                                             'Nov11 inherited regression selection changed'):
                     run_regressions.selection_revision()
+
+    def test_nov11_controls_cannot_disappear_or_reorder(self):
+        original = GROUPS['upstream_daily_20261111']
+        for altered in (original[:-1], list(reversed(original))):
+            groups = copy.deepcopy(GROUPS)
+            groups['upstream_daily_20261111'] = altered
+            with mock.patch.object(run_regressions, 'GROUPS', groups):
+                with self.assertRaisesRegex(ValueError,
+                                            'Nov12 inherited regression selection changed'):
+                    run_regressions.selection_revision()
+
+    def test_multithread_controls_preserve_inherited_eighteen(self):
+        names = run_thread_controls.NAMES
+        self.assertGreaterEqual(len(names), 18)
+        self.assertEqual(
+            hashlib.sha256(('\n'.join(names[:18]) + '\n').encode()).hexdigest(),
+            '35c8c6b43e5fe51aa3d0fc866f0f8ed51331c11bb8848e0a73b2138634ba113c')
 
 
 class BashGateTest(unittest.TestCase):
