@@ -253,5 +253,16 @@
       "log_sha256": "1f595a73b2ed09c1daaeb8becdd5972805c2e54d319d1d1379fd724d863b04e4"
     },
     "format": "clang-format21 applied to changed compiler hunks; frozen inputs preserved"
+  },
+  "followup": {
+    "parent": "34a3cb5fa14704df42506ef1a37c799ee1c0817f",
+    "run_id": 43125720979,
+    "failure": "test_flexfix.py omitted the upstream-required lexer-prefix argument; both platform actual logs show IndexError before compiler build.",
+    "fix": "Pass each real Makefile lexer prefix; retain all original GNU-header signature assertions and add the flex2.6.5 C-only debug-symbol/boundary assertions.",
+    "before_actual_exit": 1,
+    "after_actual_exit": 0,
+    "native_compiler_source_unchanged": true,
+    "protected_input_or_golden_changed": false,
+    "acceptance_classification_changed": false
   }
 }
