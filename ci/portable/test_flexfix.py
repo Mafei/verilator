@@ -21,11 +21,10 @@ for lexer in ('V3Lexer', 'V3PreLex'):
             runpy.run_path('src/flexfix', run_name='__main__')
         assert result.getvalue() == source, (lexer, system, result.getvalue())
 
-# Flex 2.6.5 changes the C preprocessor lexer's debug symbol. The C++ lexer
-# and identifiers containing that spelling must remain unchanged.
-source = 'int yyflexdebug;\nint not_yyflexdebug;\n'
-for lexer, expected in [('V3Lexer', source),
-                        ('V3PreLex', 'int yy_flex_debug;\nint not_yyflexdebug;\n')]:
+# Flex owns the debug-symbol mapping. Preserve both spellings and longer
+# identifiers for both lexer prefixes, including flex 2.6.9 output.
+source = 'int yyflexdebug;\nint yy_flex_debug;\nint not_yyflexdebug;\n'
+for lexer in ('V3Lexer', 'V3PreLex'):
     result = io.StringIO()
     with (
             patch.object(sys, 'argv', ['src/flexfix', lexer]),
@@ -33,4 +32,4 @@ for lexer, expected in [('V3Lexer', source),
             redirect_stdout(result),
     ):
         runpy.run_path('src/flexfix', run_name='__main__')
-    assert result.getvalue() == expected, (lexer, result.getvalue())
+    assert result.getvalue() == source, (lexer, result.getvalue())

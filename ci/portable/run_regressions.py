@@ -509,6 +509,35 @@ GROUPS = {
         'trace_complex_default_cc_vcd', 'trace_complex_params_cc_fst',
         'trace_complex_params_cc_saif', 'trace_complex_params_cc_vcd', 'vlcov_hier_report_runtime'
     ],
+    # Official changes through bbc576467c572e4816705e535399c128869c5068.
+    "upstream_daily_20261113": [
+        'array_in_struct_noslice', 'array_packed_size', 'array_packed_size_bad',
+        'array_pattern_2d_noslice', 'case_huge', 'clocking_virtual_bad', 'comb_input_0',
+        'comb_input_1', 'comb_input_2', 'concat_unpack_noslice', 'dfg_break_cycles',
+        'dpi_accessors', 'dpi_export', 'dpi_export_scope_flat', 'dpi_qw', 'enum_public',
+        'flag_cxx_modules', 'flag_cxx_modules_chain', 'flag_cxx_modules_cmake',
+        'flag_cxx_modules_header', 'flag_cxx_modules_legacy', 'flag_cxx_modules_lib',
+        'flag_cxx_modules_moduleonly', 'flag_cxx_modules_msvc', 'flag_cxx_modules_msvc_make_unsup',
+        'flag_cxx_modules_msvc_opt', 'flag_cxx_modules_path', 'flag_cxx_modules_scan_bad',
+        'force_mid', 'func_inline_combine', 'inst_slice_noslice', 'inst_tree_inl0_pub1',
+        'interface_nested_array_select', 'interface_nested_port_array',
+        'interface_nested_port_array_noinl', 'lint_didnotconverge_bad', 'math_nonintegral_bad',
+        'math_signed7', 'mem_slice_noslice', 'opt_coalesce', 'opt_coalesce_cycle_bad',
+        'opt_coalesce_off', 'opt_coalesce_port_const', 'opt_coalesce_port_inline',
+        'opt_coalesce_port_keep', 'opt_coalesce_port_keep_off', 'opt_coalesce_port_share',
+        'opt_coalesce_scope', 'opt_dedupe_domains_scale', 'opt_dedupe_seq_logic',
+        'opt_life_nested_scale', 'opt_split', 'opt_table_packed_array', 'opt_table_struct',
+        'param_implicit_string', 'param_public', 'public_clk', 'public_seq', 'split_table',
+        'timing_dpi_always_unsup', 'timing_dpi_c_wait', 'timing_dpi_call_tasks',
+        'timing_dpi_finish', 'timing_dpi_func_bad', 'timing_dpi_func_bad_protect',
+        'timing_dpi_func_bad_split', 'timing_dpi_func_nested_bad',
+        'timing_dpi_func_nested_bad_split', 'timing_dpi_models_repro', 'timing_dpi_multi_export',
+        'timing_dpi_ping', 'timing_dpi_process_kill1', 'timing_dpi_process_kill2',
+        'timing_dpi_process_kill3', 'timing_dpi_scope', 'timing_dpi_thread_leak', 'unpacked_slice',
+        'unpacked_slice_noslice', 'vpi_const_type', 'vpi_escape', 'vpi_hierarchy_clear',
+        'vpi_memory', 'vpi_module', 'vpi_module_empty', 'vpi_package', 'vpi_put_value_array',
+        'vpi_time_cb', 'vpi_unimpl', 'vpi_zero_time_cb'
+    ],
 }
 
 
@@ -564,6 +593,9 @@ def selection_revision():
     if (len(current) < 743 or digest(current[:743])
             != 'cb17832438b5e020800760551d1ae4180af45959c3dd216346119edc41961fe5'):
         raise ValueError('Nov12 inherited regression selection changed')
+    if (len(current) < 780 or digest(current[:780])
+            != '86d962b34ae3b435c425501fed60e3ca57a4dc6b5eddc1dbd42b6e39f54949a7'):
+        raise ValueError('Nov13 inherited regression selection changed')
     return {
         'schema': 'clocking-regression-selection-v1',
         'original_revision': clocking_legacy.BASE_SHA,

@@ -474,6 +474,23 @@ class InheritedSelectionTest(unittest.TestCase):
             hashlib.sha256(('\n'.join(names[:18]) + '\n').encode()).hexdigest(),
             '35c8c6b43e5fe51aa3d0fc866f0f8ed51331c11bb8848e0a73b2138634ba113c')
 
+    def test_nov12_controls_cannot_disappear_or_reorder(self):
+        original = GROUPS['upstream_daily_20261112']
+        for altered in (original[:-1], list(reversed(original))):
+            groups = copy.deepcopy(GROUPS)
+            groups['upstream_daily_20261112'] = altered
+            with mock.patch.object(run_regressions, 'GROUPS', groups):
+                with self.assertRaisesRegex(ValueError,
+                                            'Nov13 inherited regression selection changed'):
+                    run_regressions.selection_revision()
+
+    def test_multithread_controls_preserve_inherited_twenty(self):
+        names = run_thread_controls.NAMES
+        self.assertGreaterEqual(len(names), 20)
+        self.assertEqual(
+            hashlib.sha256(('\n'.join(names[:20]) + '\n').encode()).hexdigest(),
+            '543c8542a57d6a9dd4f06803c4167f20e30f2739a10cb140523dc9f0e392377b')
+
 
 class BashGateTest(unittest.TestCase):
     """Exercise the build's actual shell gate with each failing subprocess."""

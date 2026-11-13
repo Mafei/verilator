@@ -5,15 +5,26 @@
 // This file ONLY is placed under the Creative Commons Public Domain.
 // SPDX-FileCopyrightText: 2026 Wilson Snyder
 // SPDX-License-Identifier: CC0-1.0
+
 #include "verilated.h"
 
-#include "Vt_flag_cflags_modules.h"
-import std; //this is a C++23 std module, if GNU or LLVM maybe need give compilation product, ok, perfect
+#include VM_PREFIX_INCLUDE
+
+#ifdef _MSC_VER
+import t_flag_cxx_modules_msvc;
+#else
+import std;
+#endif
+
 int main(int argc, char** argv) {
     VerilatedContext context;
     context.commandArgs(argc, argv);
-    Vt_flag_cflags_modules top{&context};
+    VM_PREFIX top{&context};
     top.eval();
+#ifdef _MSC_VER
+    return module_value() == 42 ? 0 : 1;
+#else
     std::cout << "C++23 std module OK" << std::endl;
     return 0;
+#endif
 }

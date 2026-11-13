@@ -17,7 +17,7 @@ NAMES = ("threads_counter_2", "threads_nondeterminism", "fourstate_mt_trace", "t
          "opt_combine_dpi", "threads_group_workers", "threads_group_workers_bad",
          "threads_group_workers_count_bad", "threads_group_workers_hier",
          "threads_group_workers_listed", "threads_group_workers_sparse", "dpi_threads",
-         "func_recurse_hier")
+         "func_recurse_hier", "gantt_numa_default_threads")
 
 
 def main():
