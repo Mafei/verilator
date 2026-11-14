@@ -538,6 +538,18 @@ GROUPS = {
         'vpi_memory', 'vpi_module', 'vpi_module_empty', 'vpi_package', 'vpi_put_value_array',
         'vpi_time_cb', 'vpi_unimpl', 'vpi_zero_time_cb'
     ],
+    # Official changes through ade77b9ca179b5531dbd5d3c90d904e1d5fa9f8c.
+    "upstream_daily_20261114": [
+        'clocking_drive_cycle_nolocalize', 'cover_branch_only', 'cover_fsm_empty_reset',
+        'cover_fsm_empty_reset_fold', 'cover_fsm_reset', 'cover_fsm_reset_all',
+        'cover_hier_inline', 'cover_hier_noinline', 'cover_line_cc_vlt', 'cover_line_expr_cc',
+        'cover_line_only', 'cover_line_trace', 'cover_line_wide_ternary',
+        'cover_per_instance_inline', 'cover_per_instance_noinline', 'cover_per_instance_user',
+        'cover_sys_line_expr', 'opt_branch_pred', 'opt_split_assert', 'pattern_no_apostrophe',
+        'uniqueif_cover', 'uniqueif_fail1', 'uniqueif_fail2', 'uniqueif_fail3',
+        'uniqueif_fail3_cover', 'uniqueif_fail4', 'uniqueif_fail4_cover',
+        'virtual_interface_param', 'wrapper_context'
+    ],
 }
 
 
@@ -596,6 +608,9 @@ def selection_revision():
     if (len(current) < 780 or digest(current[:780])
             != '86d962b34ae3b435c425501fed60e3ca57a4dc6b5eddc1dbd42b6e39f54949a7'):
         raise ValueError('Nov13 inherited regression selection changed')
+    if (len(current) < 869 or digest(current[:869])
+            != 'a9368370ff2f988b8ba9002b6f84f47673b40195301ab57ffd1d83264b51a79e'):
+        raise ValueError('Nov14 inherited regression selection changed')
     return {
         'schema': 'clocking-regression-selection-v1',
         'original_revision': clocking_legacy.BASE_SHA,

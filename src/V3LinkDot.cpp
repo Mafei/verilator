@@ -5016,7 +5016,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
                             newp = refp;
                         }
                     } else {
-                        if (staticAccess && !varp->lifetime().isStatic() && !varp->isParam()) {
+                        if (staticAccess && !varp->lifetime().isStatic()) {
                             // TODO bug4077
                             // nodep->v3error("Static access to non-static member variable "
                             //                << varp->prettyNameQ() << endl);

@@ -239,7 +239,7 @@ class UnknownVisitor final : public VNVisitor {
     }
     void visit(AstVar* nodep) override {
         VL_RESTORER(m_allowXUnique);
-        if (nodep->isParam()) {
+        if (nodep->isParam() || nodep->constPoolEntry()) {
             m_allowXUnique = false;
         } else if (m_modp && m_modp->isTop() && nodep->isPrimaryInish()
                    && v3Global.opt.fourstateApi()) {
