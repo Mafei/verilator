@@ -32,7 +32,9 @@ nested conditional captures from one continuous assignment must not be reused
 by another process whose descriptors remain observable after evaluation.
 The V3Width driven-port distinction and the existing output-lvalue check are
 both retained.  Source-final termination and zero-delay sensitivities are
-carried through the upstream ProcessList scheduling API.
+carried through the upstream ProcessList scheduling API.  Missing packed input
+pins subject to pull1 receive ones only on the value port; their split XZ
+ports receive a zero mask, matching the known pull value on every bit.
 
 The added SV probes check twelve widths, 1-to-X and 0-to-Z transitions,
 coroutine resumes, aliases, opposite XZ histories and cross-word packed slices.
@@ -50,6 +52,9 @@ the 22 multithread controls remain selected.  Focused checks run additionally,
 without replacing the original selection or the original Strict18, finish9 and
 fixed128 acceptance.  Their actual logs, solver child receipts, compiler/solver
 identities, coverage point counts and trace evidence are collected separately.
+``verify_rtmd_protection.py`` hashes all 2,057 paths before either target build;
+the focused archive retains that receipt.  The actual shell gate is exercised
+with focused-collector exits 0, 7 and 143 while original collectors still run.
 Skipped tests and missing evidence are not passes.  Packed pull checks test
 individual bits and explicit-drive controls; untested Z is excluded.  The pinned
 Icarus supplemental observation preserves the original fixed128 invocation and

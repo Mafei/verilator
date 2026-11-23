@@ -23,10 +23,10 @@ def main():
         'parent_pid': os.getppid(),
         'utc_started': datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
-    child = subprocess.Popen(command)
-    receipt['child_pid'] = child.pid
-    (directory / (name + '.started.json')).write_text(json.dumps(receipt, indent=2) + '\n')
-    result = child.wait()
+    with subprocess.Popen(command) as child:
+        receipt['child_pid'] = child.pid
+        (directory / (name + '.started.json')).write_text(json.dumps(receipt, indent=2) + '\n')
+        result = child.wait()
     receipt['actual_exit'] = result
     receipt['utc_finished'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     (directory / (name + '.finished.json')).write_text(json.dumps(receipt, indent=2) + '\n')

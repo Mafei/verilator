@@ -10,7 +10,6 @@
 import json
 from pathlib import Path
 import vltest_bootstrap
-from fourstate_resolve_oracle import check_trace
 from fourstate_rtmd_trace_common import saif_records, declarations, check_vcd, check_fst
 
 test.scenarios('vlt')
@@ -33,7 +32,8 @@ for width in widths_list:
             chars = []
             for bit in reversed(range(width)):
                 index = (bit + phase) % len(states)
-                if kind == 'b': index = 3 - index
+                if kind == 'b':
+                    index = 3 - index
                 chars.append(states[index])
             rows.append((stamp, ''.join(chars)))
         expected[f't.{kind}{width}'] = rows
@@ -44,7 +44,7 @@ for profile in ('vcd', 'fst'):
         check_fst(test, trace, expected, widths)
     else:
         check_vcd(test, trace, expected, widths)
-        decls = declarations(Path(trace).read_text())
+        decls = declarations(Path(trace).read_text(encoding='utf-8'))
         for width in widths_list:
             a, alias, b = [decls[f't.{kind}{width}']['code'] for kind in ('s', 'alias', 'b')]
             if a != alias or a == b:
@@ -52,7 +52,7 @@ for profile in ('vcd', 'fst'):
 previous = {}
 checked = 0
 for close_time, filename in ((26, 'short.saif'), (39, 'long.saif')):
-    actual = saif_records(Path(test.obj_dir + '/' + filename).read_text())
+    actual = saif_records(Path(test.obj_dir + '/' + filename).read_text(encoding='utf-8'))
     for name, rows in expected.items():
         for bit in range(widths[name]):
             key = name + (f'[{bit}]' if widths[name] > 1 else '')
@@ -65,18 +65,21 @@ for close_time, filename in ((26, 'short.saif'), (39, 'long.saif')):
                 wanted['TC'] += int(char != prev)
                 prev = char
             got = actual.get(key)
-            if got != wanted: test.error(f'{filename}: {key}: {got}, expected {wanted}')
-            if close_time == 26: previous[key] = got['TC'] if got else None
-            elif got and got['TC'] != previous[key]: test.error('Close-time residence changed TC')
+            if got != wanted:
+                test.error(f'{filename}: {key}: {got}, expected {wanted}')
+            if close_time == 26:
+                previous[key] = got['TC'] if got else None
+            elif got and got['TC'] != previous[key]:
+                test.error('Close-time residence changed TC')
             checked += 1
-Path(test.obj_dir + '/storage-oracle.json').write_text(
-    json.dumps(
-        {
-            'expected_histories': expected,
-            'saif_bit_records_checked': checked,
-            'verified_constructed_counterexamples': 16,
-            'close_times': [26, 39]
-        },
-        indent=2) + '\n')
+Path(test.obj_dir + '/storage-oracle.json').write_text(json.dumps(
+    {
+        'expected_histories': expected,
+        'saif_bit_records_checked': checked,
+        'verified_constructed_counterexamples': 16,
+        'close_times': [26, 39]
+    },
+    indent=2) + '\n',
+                                                       encoding='utf-8')
 print(f'RTMD runtime oracle: histories={len(expected)}, SAIF bit records={checked}')
 test.passes()

@@ -285,7 +285,11 @@ public:
             }
             AstConst* const constp
                 = new AstConst{pinp->fileline(), AstConst::DTyped{}, pinVarp->dtypep()};
-            if (drive.isSetTrue()) constp->num().setAllBits1();
+            // A pulled value is known on every bit. Its separate XZ port must
+            // receive a zero mask even when the value port is pulled high.
+            if (drive.isSetTrue() && !pinVarp->isFourstateComplement()) {
+                constp->num().setAllBits1();
+            }
             pinp->exprp(constp);
         }
         const AstVarRef* const connectRefp = VN_CAST(pinp->exprp(), VarRef);

@@ -34,6 +34,9 @@ def main():  # pylint: disable=too-many-locals,too-many-branches,too-many-statem
     root = Path(__file__).resolve().parents[2]
     output = root / 'out/rtmd-focus'
     output.mkdir(parents=True, exist_ok=True)
+    protection = root / 'out/rtmd-protection.json'
+    if protection.is_file():
+        shutil.copy2(protection, output / 'protected-paths-receipt.json')
     solver = shutil.which('z3')
     provenance = {
         'head':

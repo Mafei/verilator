@@ -3,13 +3,10 @@
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
 """Report original trace values separately from protected declaration/golden failures."""
 import json
-import shutil
-import subprocess
 import sys
-from pathlib import Path
 
 
-def audit_original(root, obj, profile):
+def audit_original(root, obj, profile):  # pylint: disable=too-many-locals
     """Derive the original fixture's complete histories without changing its golden."""
     sys.path.insert(0, str(root / 'test_regress/t'))
     from fourstate_resolve_oracle import check_trace  # pylint: disable=import-outside-toplevel
@@ -18,11 +15,14 @@ def audit_original(root, obj, profile):
     if not wave.is_file():
         return {'status': 'NOT_RUN_OR_NO_WAVE'}
 
-    class Probe:
+    class Probe:  # pylint: disable=too-few-public-methods
         """Use the original character-vector checker without rewriting a file."""
         trace_filename = str(wave)
 
+        obj_dir = str(obj)
+
         def error(self, message):
+            """Fail the independent observation without changing original acceptance."""
             raise ValueError(message)
 
     expected = {}
@@ -33,9 +33,8 @@ def audit_original(root, obj, profile):
     expected['t.foo'] = [(0, '0' * 14), (10, '0' * 13 + '1'), (20, '0' * 14)]
     try:
         if profile == 'fst':
-            from fourstate_rtmd_trace_common import check_fst
+            from fourstate_rtmd_trace_common import check_fst  # pylint: disable=import-outside-toplevel
             probe = Probe()
-            probe.obj_dir = str(obj)
             fst_proof = check_fst(probe, str(wave), expected, {
                 n: len(rows[0][1])
                 for n, rows in expected.items()
@@ -59,6 +58,7 @@ def audit_original(root, obj, profile):
         'known_structure_delta':
         'RTMD preserves source range [0:0] on s0; legacy golden declares a scalar'
     }
-    if profile == 'fst': proof['fst_audit'] = fst_proof
+    if profile == 'fst':
+        proof['fst_audit'] = fst_proof
     (obj / 'independent-histories.json').write_text(json.dumps(proof, indent=2) + '\n')
     return proof

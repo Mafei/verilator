@@ -11,7 +11,7 @@ from pathlib import Path
 PIN = 'f45ffabed3212a106f01cb362ef42c5d293f4513'
 
 
-def main():
+def main():  # pylint: disable=too-many-locals,too-many-statements
     """Preserve the original exit and never classify unsupported as a runtime pass."""
     args = sys.argv[1:]
     root = Path(args[args.index('--verilator-root') + 1]).resolve()

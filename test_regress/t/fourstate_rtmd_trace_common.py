@@ -6,6 +6,7 @@
 # or the Perl Artistic License Version 2.0.
 # SPDX-FileCopyrightText: 2026 Mafei
 # SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+"""Independently check complete RTMD histories and SAIF residence times."""
 
 import hashlib
 import json
@@ -33,6 +34,7 @@ def histories():
 
 
 def declarations(contents):
+    """Read VCD metadata without normalizing structural differences."""
     scopes = []
     result = {}
     for line in contents.splitlines():
@@ -52,6 +54,7 @@ def declarations(contents):
 
 
 def saif_records(contents):
+    """Read hierarchical SAIF counters for each independently named bit."""
     # Parse S-expressions, keeping hierarchy: identical net names in different
     # instances must never overwrite one another in the oracle.
     stack = [[]]
@@ -84,7 +87,8 @@ def saif_records(contents):
     return result
 
 
-def check_fst(test, path, expected, widths):
+def check_fst(test, path, expected, widths):  # pylint: disable=too-many-locals
+    """Decode an actual FST and compare every expected value and timestamp."""
     # Header offset follows fstcpp_file.h: 9-byte block header, eight 64-bit fields.
     data = Path(path).read_bytes()
     if len(data) < 74 or data[0] != 0 or int.from_bytes(data[73:74], 'big', signed=True) != -12:
@@ -93,7 +97,8 @@ def check_fst(test, path, expected, widths):
                             capture_output=True,
                             text=True,
                             check=False)
-    Path(test.obj_dir + '/fst-decoded.log').write_text(result.stdout + result.stderr)
+    Path(test.obj_dir + '/fst-decoded.log').write_text(result.stdout + result.stderr,
+                                                       encoding='utf-8')
     if result.returncode or result.stderr.strip():
         test.error(f'FST decoding failed: exit={result.returncode}: {result.stderr[:500]}')
     samples = {name: {} for name in expected}
@@ -120,7 +125,8 @@ def check_fst(test, path, expected, widths):
             json.dumps({
                 'actual': actual,
                 'expected': expected
-            }, indent=2) + '\n')
+            }, indent=2) + '\n',
+            encoding='utf-8')
         test.error(f'FST complete value/time histories differ: {bad}')
     attrs = subprocess.run(['wavecat', '--attrs', path],
                            capture_output=True,
@@ -141,17 +147,21 @@ def check_fst(test, path, expected, widths):
 
 
 def check_vcd(test, path, expected, widths):
+    """Compare VCD histories using the retained independent character oracle."""
 
-    class View:
+    class View:  # pylint: disable=too-few-public-methods
+        """Adapt a trace path without mutating the harness property."""
         trace_filename = path
 
         def error(self, message):
+            """Keep all failures visible to the regression driver."""
             test.error(message)
 
     check_trace(View(), expected, widths)
 
 
-def run(test, profile):
+def run(test, profile):  # pylint: disable=too-many-locals
+    """Compile and execute the SV probe, then verify its actual trace bytes."""
     test.top_filename = 't/t_fourstate_rtmd_trace.v'
     test.compile(make_main=False,
                  make_top_shell=False,
@@ -164,7 +174,7 @@ def run(test, profile):
     widths = {name: len(rows[0][1]) for name, rows in expected.items()}
     proof = {'profile': profile, 'histories': expected, 'finish_time_ps': 44}
     if profile == 'saif':
-        contents = Path(test.trace_filename).read_text()
+        contents = Path(test.trace_filename).read_text(encoding='utf-8')
         if not re.search(r'\(DURATION 44\)', contents):
             test.error('RTMD SAIF duration differs')
         actual = saif_records(contents)
@@ -188,7 +198,7 @@ def run(test, profile):
         proof['fst_audit'] = check_fst(test, test.trace_filename, expected, widths)
     else:
         check_vcd(test, test.trace_filename, expected, widths)
-        decls = declarations(Path(test.trace_filename).read_text())
+        decls = declarations(Path(test.trace_filename).read_text(encoding='utf-8'))
         for width in WIDTHS:
             a, alias, opposite = [
                 decls.get(f't.w{width}.{n}') for n in ('a', 'real_alias', 'opposite')
@@ -203,6 +213,7 @@ def run(test, profile):
         proof['declarations'] = {name: decls.get(name) for name in expected}
     data = Path(test.trace_filename).read_bytes()
     proof['trace_sha256'] = hashlib.sha256(data).hexdigest()
-    Path(test.obj_dir + '/rtmd_trace_proof.json').write_text(json.dumps(proof, indent=2) + '\n')
+    Path(test.obj_dir + '/rtmd_trace_proof.json').write_text(json.dumps(proof, indent=2) + '\n',
+                                                             encoding='utf-8')
     print(f'RTMD trace oracle: profile={profile} histories={len(expected)}')
     test.passes()

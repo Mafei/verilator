@@ -5,6 +5,8 @@
 // SPDX-License-Identifier: CC0-1.0
 
 `timescale 1ps/1ps
+`define stop $stop
+`define checkh(gotv,expv) do if ((gotv) !== (expv)) begin $write("%%Error: %s:%0d: got='h%x exp='h%x\n", `__FILE__, `__LINE__, (gotv), (expv)); `stop; end while (0)
 module t;
   bit phase;
   bit sample;
@@ -35,8 +37,10 @@ module pull_bits #(parameter W = 1)(input bit phase, input bit sample);
   pull_zero #(W) c0(.i({W{~phase}}), .o(explicit_down));
   always @(posedge sample) begin
     for (int b = 0; b < W; b++) begin
-      if (up[b] !== 1'b1 || down[b] !== 1'b0
-          || explicit_up[b] !== phase || explicit_down[b] !== ~phase) $stop;
+      `checkh(up[b], 1'b1);
+      `checkh(down[b], 1'b0);
+      `checkh(explicit_up[b], phase);
+      `checkh(explicit_down[b], ~phase);
     end
     samples = samples + 1;
     if (samples == 4) $display("PULL_BITS width=%0d samples=4 per_bit=1 controls=1", W);
@@ -55,8 +59,10 @@ module pull_packed(input bit phase, input bit sample);
   always @(posedge sample) begin
     for (int a = 0; a < 2; a++) begin
       for (int b = 0; b < 17; b++) begin
-        if (up[a][b] !== 1'b1 || down[a][b] !== 1'b0
-            || explicit_up[a][b] !== phase || explicit_down[a][b] !== ~phase) $stop;
+        `checkh(up[a][b], 1'b1);
+        `checkh(down[a][b], 1'b0);
+        `checkh(explicit_up[a][b], phase);
+        `checkh(explicit_down[a][b], ~phase);
       end
     end
     samples = samples + 1;

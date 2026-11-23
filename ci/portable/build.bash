@@ -10,6 +10,7 @@ root=$(pwd)
 platform=${1:?platform}
 mkdir -p out logs .ci-tools-src
 exec > >(tee logs/build.log) 2>&1
+python3 ci/portable/verify_rtmd_protection.py
 if [[ $platform == rocky8-x86_64 ]]; then
     [[ $(uname -m) == x86_64 ]]
     source /etc/os-release
@@ -102,6 +103,7 @@ python3 ci/portable/test_finish_acceptance.py
 python3 ci/portable/test_finish_wave_evidence.py
 python3 ci/portable/test_review_artifacts.py
 python3 ci/portable/test_build_status.py
+python3 ci/portable/test_rtmd_gate.py
 python3 ci/portable/test_clocking_reporting.py
 python3 ci/portable/test_clocking_legacy.py
 python3 ci/portable/test_clocking_wave.py
