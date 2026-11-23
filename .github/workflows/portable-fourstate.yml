@@ -123,13 +123,6 @@ jobs:
             --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
             --platform macos-arm64 --producer-root "$(pwd -P)" \
             --prior-result "$PRODUCER_PRIOR_RESULT" --output out/producer-core-review.json
-      - name: Upload focused RTMD evidence
-        if: ${{ !cancelled() && hashFiles('out/rtmd-focus/results.json') != '' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: rtmd-focus-macos-${{ github.run_id }}-attempt${{ github.run_attempt }}
-          path: out/rtmd-focus/
-          if-no-files-found: error
       - name: Upload macos main artifact (primary)
         id: upload_main_primary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -518,13 +511,6 @@ jobs:
         env:
           PRODUCER_PRIOR_RESULT: ${{ job.status }}
         run: bash ci/portable/rocky_audit.bash producer
-      - name: Upload focused RTMD evidence
-        if: ${{ !cancelled() && hashFiles('out/rtmd-focus/results.json') != '' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: rtmd-focus-rocky8-${{ github.run_id }}-attempt${{ github.run_attempt }}
-          path: out/rtmd-focus/
-          if-no-files-found: error
       - name: Upload rocky8 main artifact (primary)
         id: upload_main_primary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
