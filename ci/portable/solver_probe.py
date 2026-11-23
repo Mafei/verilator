@@ -22,6 +22,9 @@ def main():
         _, status = os.waitpid(monitor, 0)
         result = os.waitstatus_to_exitcode(status)
         return result if result >= 0 else 128 - result
+    # The harness also closes the model's controlling PTY. Its SIGHUP must not
+    # interrupt the wait operation after a completed SMT transaction.
+    os.setsid()
     directory = Path(sys.argv[1])
     command = sys.argv[2:]
     directory.mkdir(parents=True, exist_ok=True)
@@ -36,7 +39,12 @@ def main():
     with subprocess.Popen(command) as child:
         receipt['child_pid'] = child.pid
         (directory / (name + '.started.json')).write_text(json.dumps(receipt, indent=2) + '\n')
-        result = child.wait()
+        try:
+            result = child.wait(timeout=930)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            result = child.wait()
+            receipt['observer_timeout'] = True
     receipt['actual_exit'] = result
     receipt['utc_finished'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     (directory / (name + '.finished.json')).write_text(json.dumps(receipt, indent=2) + '\n')
