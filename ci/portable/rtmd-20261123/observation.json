@@ -1,0 +1,20 @@
+{
+  "observed_utc": "2026-11-22T00:37:39.388816+00:00",
+  "old_local_state": "unrecoverable in current environment; not restored; no original merge/index/log/manifest132 available",
+  "published_baseline": "c06bd21d0122fc7fdb2b145e7087b7e9e06f9df7",
+  "original_checkout_head": "d565afb615e3393970d6ce030d75df68b594e6b8",
+  "original_checkout_status": "",
+  "new_worktree": "/workspace/verilator-rebuild-20261122T0036Z",
+  "new_branch": "fourstate-rebuild-20261122T0036Z",
+  "official": "005ee501bacae492dbee6e60e07d982bd6041841",
+  "antmicro_dev": "dbb8aedaa478389639295e40f16dbc7183d10b48",
+  "antmicro_feature": "5e132f32db577b3d596b66ce6378ac224ffa38d3",
+  "delivery": "d565afb615e3393970d6ce030d75df68b594e6b8",
+  "official_unintegrated_count": 99,
+  "upstream_merge_base": "ade77b9ca179b5531dbd5d3c90d904e1d5fa9f8c",
+  "protected_count": 2057,
+  "published_manifest118_verified": true,
+  "old_manifest132_recovered": false,
+  "ci_permission_review": "Only upstream .github changes are pr-open-comment.md and claude-review.yml. Claude review restricted to official repository, post depends on non-skipped review; inactive in this fork. No secrets/permissions/budget provisioned. Portable workflow contents:read, original runner/timeout preserved.",
+  "saved_cloud_environment": "verilator (verified; complete configuration identifiers retained in private task evidence)"
+}

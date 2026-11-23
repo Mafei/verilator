@@ -1,7 +1,7 @@
 name: Portable four-state builds
 on:
   push:
-    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014, fourstate-sync-20261014-followup, fourstate-sync-20261015, fourstate-sync-20261017, fourstate-sv-icarus-20261026, fourstate-sv-icarus-20261026-public, fourstate-real-dynamic-format-20261027, fourstate-ancestor-context-20261027-public, fourstate-context-integration-20261027, fourstate-upstream-context-20261027, fourstate-output-port-alias-20261027, fourstate-upstream-output-20261027, fourstate-finish-coverage-20261027-public, fourstate-upstream-subst-20261027, fourstate-upstream-20261028, fourstate-purity-20261028, fourstate-purity-command-20261028, fourstate-select-guard-20261028, fourstate-lambda-int-20261028, fourstate-queue-contract-20261028, fourstate-mixed-packed-net-20261028, fourstate-upstream-20261029, fourstate-upstream-20261030, fourstate-upstream-20261031, fourstate-clocking-contract-20261031, fourstate-rocky-audit-20261031, fourstate-upstream-20261101, fourstate-upstream-20261102, fourstate-upstream-20261103, fourstate-upstream-20261104, fourstate-assoc-ref-20261104, fourstate-life-ref-20261104, fourstate-emitv-args-20261104, fourstate-upstream-20261105, fourstate-emitv-ccall-20261105, fourstate-pull-audit-20261105, fourstate-assert-stimulus-20261105, fourstate-cache-lifecycle-20261105, fourstate-upstream-20261106, fourstate-simulate-display-20261106, fourstate-upstream-20261107, fourstate-upstream-20261108, fourstate-upstream-20261109, fourstate-upstream-20261111, fourstate-upstream-20261112, fourstate-upstream-20261113, fourstate-upstream-20261114, fourstate-ci-selection-20261114]
+    branches: [fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008, fourstate-followup-20261009, fourstate-icarus-lint-20261009, fourstate-finish-slice-20261009, fourstate-final-local-20261009, fourstate-plusargs-20261009, fourstate-finish-boundaries-20261009, fourstate-sync-20261010, fourstate-icarus-semantics-20261010, fourstate-sync-20261011, fourstate-strict-fix-20261011, fourstate-finish-boundary-20261011, fourstate-sv-controls-20261011, fourstate-sync-20261013, fourstate-sync-20261014, fourstate-sync-20261014-followup, fourstate-sync-20261015, fourstate-sync-20261017, fourstate-sv-icarus-20261026, fourstate-sv-icarus-20261026-public, fourstate-real-dynamic-format-20261027, fourstate-ancestor-context-20261027-public, fourstate-context-integration-20261027, fourstate-upstream-context-20261027, fourstate-output-port-alias-20261027, fourstate-upstream-output-20261027, fourstate-finish-coverage-20261027-public, fourstate-upstream-subst-20261027, fourstate-upstream-20261028, fourstate-purity-20261028, fourstate-purity-command-20261028, fourstate-select-guard-20261028, fourstate-lambda-int-20261028, fourstate-queue-contract-20261028, fourstate-mixed-packed-net-20261028, fourstate-upstream-20261029, fourstate-upstream-20261030, fourstate-upstream-20261031, fourstate-clocking-contract-20261031, fourstate-rocky-audit-20261031, fourstate-upstream-20261101, fourstate-upstream-20261102, fourstate-upstream-20261103, fourstate-upstream-20261104, fourstate-assoc-ref-20261104, fourstate-life-ref-20261104, fourstate-emitv-args-20261104, fourstate-upstream-20261105, fourstate-emitv-ccall-20261105, fourstate-pull-audit-20261105, fourstate-assert-stimulus-20261105, fourstate-cache-lifecycle-20261105, fourstate-upstream-20261106, fourstate-simulate-display-20261106, fourstate-upstream-20261107, fourstate-upstream-20261108, fourstate-upstream-20261109, fourstate-upstream-20261111, fourstate-upstream-20261112, fourstate-upstream-20261113, fourstate-upstream-20261114, fourstate-ci-selection-20261114, fourstate-rebuild-20261122T0036Z]
   pull_request:
     branches: [dev/fourstate, fourstate-portable, fourstate-upstream-20261008, fourstate-sv-20261008, fourstate-readmem-20261008, fourstate-nba-20261008, fourstate-pull-20261008, fourstate-resolve-20261008, fourstate-amd-repair-20261008]
   workflow_dispatch:
@@ -91,7 +91,7 @@ jobs:
           export PATH="$PWD/.ci-tools/bin:$PATH"
           export CPPFLAGS="-I$PWD/.ci-tools/include -I$(brew --prefix zlib)/include"
           export LDFLAGS="-L$(brew --prefix zlib)/lib"
-          python3 ci/portable/run_icarus_sweep.py --platform macos-arm64 \
+          python3 ci/portable/run_pinned_with_focus.py --platform macos-arm64 \
             --verilator-root "$PWD" --expected-verilator-sha "$(git rev-parse HEAD)" \
             --bzip2-prefix "$(brew --prefix bzip2)" --jobs 2 --output pinned-icarus
       - name: Print original fixed128 case evidence
@@ -123,6 +123,13 @@ jobs:
             --expected-head "$(git rev-parse HEAD)" --run-id "$GITHUB_RUN_ID" \
             --platform macos-arm64 --producer-root "$(pwd -P)" \
             --prior-result "$PRODUCER_PRIOR_RESULT" --output out/producer-core-review.json
+      - name: Upload focused RTMD evidence
+        if: ${{ !cancelled() && hashFiles('out/rtmd-focus/results.json') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rtmd-focus-macos-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: out/rtmd-focus/
+          if-no-files-found: error
       - name: Upload macos main artifact (primary)
         id: upload_main_primary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -482,7 +489,7 @@ jobs:
                   portable_owner_home=\$(mktemp -d /tmp/verilator-owner-home.XXXXXX)
                   exec env HOME=\"\$portable_owner_home\" \"\$@\"
                 " portable-owner \
-                python3 ci/portable/run_icarus_sweep.py --platform rocky8-x86_64 \
+                python3 ci/portable/run_pinned_with_focus.py --platform rocky8-x86_64 \
                 --verilator-root /work --expected-verilator-sha "$ICARUS_EXPECTED_SHA" \
                 --jobs 2 --output pinned-icarus
             '
@@ -511,6 +518,13 @@ jobs:
         env:
           PRODUCER_PRIOR_RESULT: ${{ job.status }}
         run: bash ci/portable/rocky_audit.bash producer
+      - name: Upload focused RTMD evidence
+        if: ${{ !cancelled() && hashFiles('out/rtmd-focus/results.json') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rtmd-focus-rocky8-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: out/rtmd-focus/
+          if-no-files-found: error
       - name: Upload rocky8 main artifact (primary)
         id: upload_main_primary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -31,6 +31,7 @@
 #include "V3Mutex.h"
 #include "V3Options.h"
 
+#include <atomic>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -125,6 +126,8 @@ class V3Global final {
     bool m_hasPrintedObjects = false;  // Design has format args printed with to_string()
     bool m_fourstateHandled = false;  // There should be no more fourstate values
     uint64_t m_currentHierBlockCost = 0;  // Total cost of this hier block, used for scheduling
+
+    static std::atomic<uint64_t> s_opCount;  // Pseudo-instruction/operation count
 
     // Memory address to short string mapping (for debug)
     std::unordered_map<const void*, std::string>
@@ -239,6 +242,16 @@ public:
     static std::vector<std::string> verilatedCppFiles();
     uint64_t currentHierBlockCost() const { return m_currentHierBlockCost; }
     void currentHierBlockCost(uint64_t cost) { m_currentHierBlockCost = cost; }
+
+    // Under debug, the number of accept() or visit() or other accesses.
+    // Roughly correlates to instruction count to detect O(n^2) iteration problems;
+    // ideally use instruction counters but are not available on all platforms/VMs.
+    static uint64_t opCount() { return s_opCount; }  // 0 if not debug
+    VL_ATTR_ALWINLINE static void opCountInc(uint64_t inc = 1) VL_MT_SAFE {
+#ifdef VL_DEBUG
+        s_opCount.fetch_add(inc, std::memory_order_relaxed);
+#endif
+    }
 };
 
 extern V3Global v3Global;

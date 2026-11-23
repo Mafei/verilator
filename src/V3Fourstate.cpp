@@ -1181,9 +1181,8 @@ public:
                 for (const Driver& driver : it->second.drivers) {
                     if (driver.assignp
                         && (driver.assignp->timingControlp() || driver.assignp->strengthSpecp()
-                            || driver.assignp->rhsp()->exists([](const AstBufIf1*) {
-                                   return true;
-                               }))) {
+                            || driver.assignp->rhsp()->exists(
+                                [](const AstBufIf1*) { return true; }))) {
                         unsupported = true;
                     }
                 }
@@ -3570,6 +3569,16 @@ class FourstateVisitor final : public VNVisitor {
         return nullptr;
     }
 
+    void visit(AstRtmdVar* const nodep) override {
+        AstVarRef* const refp = nodep->refp();
+        if (!refp || !needsSplitting(refp->varp()->dtypep())) return;
+        AstVarRef* const valuep = VN_AS(getFourstateExpressionValue(refp), VarRef);
+        AstVarRef* const xzp = VN_AS(getFourstateExpressionXZ(refp), VarRef);
+        refp->replaceWith(valuep);
+        nodep->xzRefp(xzp);
+        VL_DO_DANGLING(pushDeletep(refp), refp);
+    }
+
     void visit(AstNodeAssign* const nodep) override {
         if (AstAssign* const assignp = VN_CAST(nodep, Assign)) {
             if (isFourstate(nodep->lhsp())) {
@@ -3590,10 +3599,9 @@ class FourstateVisitor final : public VNVisitor {
             iterateChildren(newp);
             return;
         }
-        if (VN_IS(nodep, AssignW)
-            && nodep->rhsp()->exists([](const AstBufIf1*) { return true; })) {
-            // Gate getters can create precalculations, including pure function results.
-            // Their storage belongs to this continuous process, not another gate's pool.
+        if (VN_IS(nodep, AssignW)) {
+            // Precalculations of independent continuous processes must not reuse storage.
+            // Nested conditionals also create branch captures whose final values are traced.
             VL_RESTORER_CLEAR(m_tmpUnusedVarps);
             lowerOrdinaryAssignment(nodep);
             return;

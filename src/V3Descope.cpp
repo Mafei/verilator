@@ -245,6 +245,19 @@ class DescopeVisitor final : public VNVisitor {
         // Delete the varscope when we're finished
         VL_DO_DANGLING(pushDeletep(nodep->unlinkFrBack()), nodep);
     }
+    void visit(AstRtmdVar* nodep) override {
+        // Descriptors locate the value by its offset from the symbol table. That could be
+        // derived from an absolute self pointer ('(&vlSymsp->vlInst.scope)'), but a self pointer
+        // is only text, so the emitter would have to parse the scope back out of it. Record the
+        // scope itself instead, and leave the self pointer empty.
+        if (!nodep->refp()) return;
+        nodep->refScopep(nodep->vscp()->scopep());
+        nodep->refp()->varScopep(nullptr);
+        if (AstVarRef* const xzp = nodep->xzRefp()) {
+            nodep->xzRefScopep(xzp->varScopep()->scopep());
+            xzp->varScopep(nullptr);
+        }
+    }
     void visit(AstNodeVarRef* nodep) override {
         iterateChildren(nodep);
         if (!nodep->varScopep()) {

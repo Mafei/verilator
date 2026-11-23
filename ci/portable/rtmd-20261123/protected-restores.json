@@ -1,0 +1,578 @@
+[
+  {
+    "path": "test_regress/t/t_assert_future_bad.out",
+    "baseline_sha256": "31aa3a0062ffb3065d3ca23d22c3a3312e486cc7cb88c82b1a75c5128a44de10",
+    "merge_preview_sha256": "77c3beacdd08133dc8358ebf4d1398b66a79c866551c9f32f21d5ce0a420c3cc",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_assert_seq_event_bad.out",
+    "baseline_sha256": "a13366437f2db5a8148d3550cf5fae4f45bb481cf8c974ee4dd1ee12b4d54477",
+    "merge_preview_sha256": "ca2d11e191b7f5a69d8ac91f20819ffd2ef6079ecaad5504a9143041b7969bd1",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_assign_automatic_bad.out",
+    "baseline_sha256": "cc529dd91344d42c69c4fc59bf4fe85d8626b0edc6f3b3c81a6d442d97f0d4f1",
+    "merge_preview_sha256": "33392735e6ed1e52a169abfd81dfe9e124ddd902b91d5822364a36da8f8d2617",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_assignment_compatibility_bad.out",
+    "baseline_sha256": "cc3e65b905867d11e43d871abaaab8e44726823b854f73ba00e9dd4e25be3788",
+    "merge_preview_sha256": "48337d85f5c0cc662db2446ceb0c51efd8ad4cf47b6894d1e1186f13d84f8912",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_case_default_bad.out",
+    "baseline_sha256": "c3b2c388bbbf10fa1f56ada4a477ea62dd75d49b02812b826e586a79955bf937",
+    "merge_preview_sha256": "a40ba88501654c2509277c9e4948b6034972ce29e7b20add8c7c5d5ee8eba407",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_class_super_new_bad_nfirst.out",
+    "baseline_sha256": "6886db33de178462f44f52e5d7afc6dc26e2d736fca58765867e39e72e3c5e97",
+    "merge_preview_sha256": "5d3532ba0421673e9c459c1a27165bb258bcc0a27e3b8c187de276808d4171c1",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_constraint_unsat.out",
+    "baseline_sha256": "ab1d4df035b79c065777633246fa726d559e37029f589ad147645ed20da811dc",
+    "merge_preview_sha256": "172bb43b448136a88e55e2732ea50a7bd41773ba112c38a21f6fcaa4e8ee94c9",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_constraint_unsat_nowarn.out",
+    "baseline_sha256": "c217afb2032c500142c68a012af0e7af0ac0316b9f2a36d2e810e76dd3fbd238",
+    "merge_preview_sha256": "e4d9d2429b75dca5385bbd675854c4c7d33f14efb4ac7233eb25cc39e55b7daf",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_constraint_unsat_protect_ids.out",
+    "baseline_sha256": "6351de5b6b76891efc6bbe3567ff4d5c8d28b41b36b3ae86de29d4b8f3a7fb08",
+    "merge_preview_sha256": "0c6711036ff434eb35ca0cb2c8bcc22af38db012033dcb82db4d57378b002038",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_expr.out",
+    "baseline_sha256": "34b974e732a4ae8a48a4e2bca794bf40f2eb5a084b76077e7b27ce0d48ba7703",
+    "merge_preview_sha256": "d80a58d2645b1bff6d97bca53b04011691327a9a88be38aaba2e8e945590ab3b",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_expr_max.out",
+    "baseline_sha256": "b07fa66a772c9c8c8aad48236874433cd47ed53115e653864eafe0fb3be03fc0",
+    "merge_preview_sha256": "aef699f33864aca6de5461b08beedddf1be7202e7492229a1e8702aa6e6cd557",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_expr_trace.out",
+    "baseline_sha256": "34b974e732a4ae8a48a4e2bca794bf40f2eb5a084b76077e7b27ce0d48ba7703",
+    "merge_preview_sha256": "d80a58d2645b1bff6d97bca53b04011691327a9a88be38aaba2e8e945590ab3b",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_fsm_beginif_branch.out",
+    "baseline_sha256": "c6d651d33fe46966872c936fc671425d49f6908145cc15bbd4fcf693587b1cf9",
+    "merge_preview_sha256": "0f47a2d16a216cbe01e907a2d98343730b40c8adcfe0e69085d284ac20aeef50",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_fsm_compound_reset_branch.out",
+    "baseline_sha256": "99020108a2e95dca9e1bbf6dc2d45a5fb2c4486ef7508b7f2251b8dbb4350a5e",
+    "merge_preview_sha256": "f3d9eb1912a3a562649062fccae414df63ea8a9631169074c89d0ac334336a88",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_fsm_empty_reset_fold.out",
+    "baseline_sha256": "c85662b41464a226edecf01292f3453156c393f92e202f3186a90bac736bafda",
+    "merge_preview_sha256": "7b69b67b29ec7515119a0422bea493e297d23449495251cd941e9a3410024298",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_fsm_reset_all.out",
+    "baseline_sha256": "fde891058de2e9bdb1e58b97d07034e20cf785b859368b830145a349043f4f0b",
+    "merge_preview_sha256": "b5c0f1b41daf3d50ae0af50904792e680f311a9a4e49c6b78ffaf442afe73228",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_fsm_two_proc_multi.out",
+    "baseline_sha256": "aa254ad1519e4189d0bde04a78ac83c03474d8053e50b3abb9c17c89103e81ca",
+    "merge_preview_sha256": "e9086262f9291c15a4d39bf1627cbac56169ee9972798bdee2ac7daacdc03a69",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor.dat.out",
+    "baseline_sha256": "234004a0301c70e66303512f3dd285bbeeee974aaefe8c1f51fba98dd3dbc9dd",
+    "merge_preview_sha256": "69c1c47665b8e86ce98edad6d0f231e754880caa2b1e893ed5e18f2aa3cdb9d5",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor.py",
+    "baseline_sha256": "3791ac9fa5320124fad504d00930962426b9c712d2879f9d0567913e328413ee",
+    "merge_preview_sha256": "c1949bec7ab0b8c3a12040a6169b69d8f8dce265f58887970143c9d1668e5714",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor.v",
+    "baseline_sha256": "edfefd0513263027ea6bbbc73d832ea69993cd2f83aa30660b38825b0c3ee1f4",
+    "merge_preview_sha256": "0c6593f400ce1a102e5ff9a85ee94f1bf90a6095fbb22e470b9a8395e09aefcb",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor_default.dat.out",
+    "baseline_sha256": "54a9376810c2b9f584de66347e38580aea19bb7d1c737ffbdb3a53a43f8f30c2",
+    "merge_preview_sha256": "d29effdeac89e46c4f886e5be9ad3a3b72b3b2b409181a79057b849d17dc5e3c",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_genfor_default.py",
+    "baseline_sha256": "bba59754e435bff6e6cec3978a87e601b8ac0c536434d12721702541be06e8db",
+    "merge_preview_sha256": "bb94a31e08151f97422e6947bff896558dea4c16bc7328662db05884105901e9",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_line.out",
+    "baseline_sha256": "d85be10349b94079a63b6b5c656cbf98ca6c0c97e17bf20a5ba3e6130c546db4",
+    "merge_preview_sha256": "e64ccb1f35a2dec43d49bb91777c0f8235d9fe4d9557f27db70cb16f3121568b",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_line_cc.info.out",
+    "baseline_sha256": "49b40a3bf73ffbf2613203c9dcf88d2779873e51e86df81c5e81064dc55b6960",
+    "merge_preview_sha256": "7f5f2d096ba20462dd7daf4774c0e74997c8b94647d4743ddff9afa3cb940426",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_line_expr.out",
+    "baseline_sha256": "21c47c0e754d1fef54c719be623a7d3c9edf6eb11b760101538cd167d5e97365",
+    "merge_preview_sha256": "138305507982942451bb304e87a6f0c2b791e344560b6c4dbeed7aa01ebd9277",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_line_only.out",
+    "baseline_sha256": "bbde52fe19db090dff174fcd81dd831a4e958eb9683b1cbe9c5b2c53a0719b72",
+    "merge_preview_sha256": "6db9cc38c9270369d0794ac9d28c07009ab2256c4fe6ea4a0298615e64cb475c",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_line_trace.out",
+    "baseline_sha256": "5d12338e2f9aa6182e63321d7788f6a6f2c0ce0a7dc9e6a8853295956fd182ce",
+    "merge_preview_sha256": "885824848120f41ac776355bb2304975e3a8e03cdc719a3f37be00920409a165",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_main.out",
+    "baseline_sha256": "4377637c40e9a742102c4e2aaa2f22301a9ef75b2168ef95af75b121e30f9fa8",
+    "merge_preview_sha256": "6faf1dbdbad3087175c189782e7e8318eaf6250a11f0432fe7f35188feb83a55",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_sys_unsup.out",
+    "baseline_sha256": "59a431ecc703808417e2820944f674a7f4ce3fc2893de3b60501e3dc731b2205",
+    "merge_preview_sha256": "a620922a5ea564a0bbce3e9d27e7392106a3055dbe6241233b905a601f1fb6b7",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_toggle.out",
+    "baseline_sha256": "805b43c89c4d68fd26dc765e84d625606fc715275e4ce5cc7b14fe8b976632c6",
+    "merge_preview_sha256": "4c11fd739edccccae0ec212ba1e80240a4e96d335b21f79c4d01fe0b3bdb4adf",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_toggle__all.out",
+    "baseline_sha256": "8d9d3857480f18f259bafa814769b30ae98a63b1c7966005b5db280a09bdcab4",
+    "merge_preview_sha256": "b70bf2fb5ed6f16ddb92266f511c561bf63a8cd16b9eaff04eac28b704be1f2c",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_cover_toggle__points.out",
+    "baseline_sha256": "ac2a93a695212ea986f379c41235674a5bb3511f472761a87c3da9c030e355fc",
+    "merge_preview_sha256": "63137265349b66005461714183171766f73f15e030b13a2a9db46b806ac5b967",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_coverage_prop_seq.out",
+    "baseline_sha256": "312abbe273f0d24a56cfe1608517496cf98f2f6a8a9567c9e2776bb23ccdc9a8",
+    "merge_preview_sha256": "c9c475b4719b4993d810e05d6fb1a0f5fefc88aeaf766b73ab30dd19a2225df4",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv.out",
+    "baseline_sha256": "7bffb61f8b54fa17bc166f83d4e5361c37a3a6635daa4f279383abda6c541fb1",
+    "merge_preview_sha256": "b25c827b08b69b8a0749e327ce15a85e6e4e3110d6741158ae549ffcb9aa62d5",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv.py",
+    "baseline_sha256": "cd0d315251ef9286847ca30068f0fbb7a2d7fb26c7f9dfd7d0cefa7fda7107f4",
+    "merge_preview_sha256": "5174ed8e9fa97de94d7638aadcddd799f479264c4d2253ce10564ba4c6607ae8",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_debug_emitv.v",
+    "baseline_sha256": "8360a180c2ce280cf808a97070deafc1ec90c277c709e277c1b02a4415899775",
+    "merge_preview_sha256": "9be4ac1e00608a6924e7b4100d6dfcf9da8447a0eb654187c2ce5a358dcdf25a",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_defparam_multi.out",
+    "baseline_sha256": "af6636f1799f1027fae402a22e8b69a271d059e53ebbd704f7e8bc70fb7889a7",
+    "merge_preview_sha256": "fd1956c76ebd195ec06f61bb104fa3f07ad031dc3ea829f856a1240ab7a4c253",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_disable_begin_shadow_bad.out",
+    "baseline_sha256": "c8769c68f56ad26d51ee6aa0ec73ff52c163f74b96b8652467e794da9a23b05f",
+    "merge_preview_sha256": "71ee910ce94c37ccd3e3d0306f4c860cf04587aea4cd0b02663a3869b9c60726",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_dynarray_method_bad.out",
+    "baseline_sha256": "8618de75c64a4b51f968259a36a21f5f4ad1621ca0db543287cfb8ebce5f7218",
+    "merge_preview_sha256": "05838bee81632863b4f9c0b8d375ef351ea8f05b21677bf6e264b662291c2a25",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_flag_deprecated_bad.out",
+    "baseline_sha256": "5a2a2d9c4da981d5b38859f1df76c1832c8c08952137ca9d364a19479cb7d88a",
+    "merge_preview_sha256": "f360b9cfe8e486d63b7a3dcbfd367c6c7572409ee7f8a68620035daefea4f14e",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_flag_values_bad.out",
+    "baseline_sha256": "99a53c7495117e8a2a57477317216d718ac81196ac6cc47e6bdc1b8dd138c82c",
+    "merge_preview_sha256": "ce50fe303a9016cde55fb124f9254d830c02b0445da9a1289f16b94f658b2a88",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_func_bad.out",
+    "baseline_sha256": "491279c30dcc2130f4e8189a6fd9bc5813bc8d46b50138f8a2afdeee9e214267",
+    "merge_preview_sha256": "c30e47606e5ee4fc4fe165c1deacc32d6eb1c795bffcd82c652f2b991e4af666",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_func_return_bad.out",
+    "baseline_sha256": "0f373da4c0f2330e28bba21c52d6788edc590fb094c995766dce0f37b01ee529",
+    "merge_preview_sha256": "97f9343f0796402d8a4109afa14f32995735aafc553cbca06eb83d4da6cba5bf",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_func_wide_out_bad.out",
+    "baseline_sha256": "518ba62c0fd90b0526a66269967a72310b306d9c2d26385072dd5005a550b798",
+    "merge_preview_sha256": "ce029b8aa5279efb115985bac5c8b2dfe7c1baf8a152513229fa80eed44d185e",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_gen_var_bad.out",
+    "baseline_sha256": "96766d9ec3c29cf8f296cefb5426e8365bd20f202199b7e13c70369456f4950a",
+    "merge_preview_sha256": "c101e0f02223552d67c88aa6c990df73529c15b3ae29f5e216a94aeebdb20de5",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_interface_input_port_assign_bad.out",
+    "baseline_sha256": "a28149749f89cc1ff564b5368c9fb1767a23ea5fa91d5c71d9d369484b3dc6e2",
+    "merge_preview_sha256": "431a24e237f4cdee4635ddc049e760bec68980004104240e6fc54148b3c395c2",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_lint_contassreg_bad.out",
+    "baseline_sha256": "b1adc0303255e27e44a41de949247bb92546bc5db8f7b87b93b72bc03173cd7d",
+    "merge_preview_sha256": "db570ec75b4d81150c3eb0d94bb8c8e64219f6a62028ea551710c02aef7b5f8c",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_lint_latch_bad.out",
+    "baseline_sha256": "2e56dc9139040bb691f2e09a3d0d49a04bdf70a5362d839e55e5485feec0eb03",
+    "merge_preview_sha256": "00bcd3a0c5c4bf8f1e8f4019ced9bf2c2935e7d1dbeabaf696e4572322ae33db",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_lint_syncasyncnet_bad.out",
+    "baseline_sha256": "f7c8373c10d0dfadb65fe57e066128c8a4df6fd62fa44211b479ea49e756704e",
+    "merge_preview_sha256": "746690f69e8c0dddaad2839fb1091d9701b0c93d69f02bfc23e7e32e88340f99",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_lint_syncasyncnet_bad2.out",
+    "baseline_sha256": "e5d7305f78dae9966d6a20d6934581cd22503fa693aeb0f0823465ce5db9622b",
+    "merge_preview_sha256": "061d95ba67b9a41697284349006859994ad57de09b21e01239de665325a80b4a",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_lint_unused_bad.out",
+    "baseline_sha256": "f79d9978f68cf55937a024015120ef776b942b5dea33c5027a4cce9720024a92",
+    "merge_preview_sha256": "38ee969fa2295869142168334352898927aacf63a4676b14edff521c0071573f",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_math_eq_bad.out",
+    "baseline_sha256": "53c69c770aa0552d6fbaeeb74f707cca83a76496520958e9a2ab97f525d022b5",
+    "merge_preview_sha256": "de30ed14e39e01dfd324b094bc086a685e4df9d9989ed16e86ee47b3a3241e2a",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_param_hier_bad.out",
+    "baseline_sha256": "53cf83e41feaf8198370d22978e73af5572cc139d4058c0746f462ff2084efd8",
+    "merge_preview_sha256": "7017f148049e548fbc5313f18f7a886ae5392ae781bfbf1ccb632c0a23a043f8",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_param_noval_bad.out",
+    "baseline_sha256": "79d3d380448dc7729cde387e4ed9e7ea5d776655ba54f979ecc123addb1fbc3f",
+    "merge_preview_sha256": "ef168324bdd90341eba54261aa4ac3c82a9ffa424faf5ca38684741b5df06157",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_preproc.out",
+    "baseline_sha256": "7fd86f8a6efeda77090c6ac88c32452a74ded460b02b8ef02d1cfc85f4034f1a",
+    "merge_preview_sha256": "ef1f6b5e45a76a9b8f8236ee86b0a0efd917c111c903dfafac63ad75521141d2",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_preproc_comments.out",
+    "baseline_sha256": "6e0bdf74adcff3dcd6981ffe22398bd9c4fb0e4a9ba58cea78819220ddb4e73e",
+    "merge_preview_sha256": "a72a5a27b78b6645fed46a6006f3ff5a6b0984efe43138b4581f9d8e85ebf59d",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_preproc_defines.out",
+    "baseline_sha256": "b71de8a6441cf3e99867c93c5f2413260a268ccbde9dd419b548dbf50d172c51",
+    "merge_preview_sha256": "2f6cf0d1c009dea279bd976aee2ced0648b0af8f8bfd800dac88399a5f2f467e",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_preproc_dump_defines.out",
+    "baseline_sha256": "8ed256ba42de1ea9a1fd6f570402ea50a7eb6143169051050d61074befad5000",
+    "merge_preview_sha256": "872ecd47a154b12d9764b80a087635c842adde8d6abc48cc5306bd39de927458",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_prop_s_always_eos_count.out",
+    "baseline_sha256": "b20a2d087f4f9c2ff4b9f40e856f1499062539367e08428b3e322fd7594df167",
+    "merge_preview_sha256": "767b7d834db0968349cb2b7d572d54c7020af7c17ac8347298dd09a1fbf5bbc2",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_property_nested_instance_unsup.out",
+    "baseline_sha256": "1aff8ef588938f4c8fd113601a3fa6c2191faec4d44680b4f5a87f9c1f36534e",
+    "merge_preview_sha256": "1321275b34ab28494fdc24035cf7afb467bf2a23db75115b005ec74d2342bbbf",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_property_nfa_edge_shapes.out",
+    "baseline_sha256": "220f092017ada0fc9f1e5fd2a4fe0447dd3e2359265e0c744a487380626d4207",
+    "merge_preview_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_property_nfa_msgs_unsup.out",
+    "baseline_sha256": "85b946c8c2f821c13be2ba59ea86d9f89bddbae52328dcfc0736df921ef2d2db",
+    "merge_preview_sha256": "1348606ed2855a680c941a7134cb7ecd8c30190fd3632a4f920e8631afef7b45",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_randomize_with_dyn_arr_multi_dyn_unsup.out",
+    "baseline_sha256": "a7eb7fe5ed10431717e1325ab71b2504b2acf5e1952f84508013bc24da6675ef",
+    "merge_preview_sha256": "4b8b62ecda299da9361e50b9044df59ca0821d82fe543ad4a768e6a553f0e59a",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_stream_bad.out",
+    "baseline_sha256": "11f85e5119372c3c23fba17e0f5989e6763ed853036bd63576b9c13fef408403",
+    "merge_preview_sha256": "cdf6f01df1f33e4982686c79a1181056fae6fd046adb0dd559b0e57bb185c8d8",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_sys_readmem_bad_end.out",
+    "baseline_sha256": "ac72dcfea0a71acf6b97d0213d9b94d20038da863de94fb26427fcfebe77943e",
+    "merge_preview_sha256": "a22cedd3aa9d24d28f48def2d722cf1b583c70a7ecb40612d23eb1f77714e6b4",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_class.out",
+    "baseline_sha256": "eef3eb980320562cf0766386f4f9f972d414f9b25553ac8a9af4f21dd717acca",
+    "merge_preview_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_complex_default_cc_fst.out",
+    "baseline_sha256": "181f84bba7b3c8d9967e51edb85ff196f42b80ed1490c454041e96689bb13eca",
+    "merge_preview_sha256": "6010897502c7de09750a59b25c47862e1c10036350b527814d8107f014a382c9",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_complex_default_sc_fst.out",
+    "baseline_sha256": "d7a08b73451086584b2e5e881941e94a671bfe38d74eaab3af0feb47be700aca",
+    "merge_preview_sha256": "8b78de401938cedc36e3efc6f8c58ae4b73583bbb53aff0ce15f8a1f65effba3",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_complex_params_cc_fst.out",
+    "baseline_sha256": "181f84bba7b3c8d9967e51edb85ff196f42b80ed1490c454041e96689bb13eca",
+    "merge_preview_sha256": "6010897502c7de09750a59b25c47862e1c10036350b527814d8107f014a382c9",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_complex_params_sc_fst.out",
+    "baseline_sha256": "d7a08b73451086584b2e5e881941e94a671bfe38d74eaab3af0feb47be700aca",
+    "merge_preview_sha256": "8b78de401938cedc36e3efc6f8c58ae4b73583bbb53aff0ce15f8a1f65effba3",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_complex_structs_cc_fst.out",
+    "baseline_sha256": "e9787c8182e5e1229b52fd0d65e4c9adfe3019a85cbfbc2ea053b01adc6b9b6a",
+    "merge_preview_sha256": "a47f9f29f20d940213b8c976e52ae29bf205fc13e0efdef9554bad89e830ec26",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_complex_structs_sc_fst.out",
+    "baseline_sha256": "d8d49ad8f7695af29e3f68425a82ce12337e90deb3db32011218f102dd5dd1f9",
+    "merge_preview_sha256": "1a6ca2c0782e9c4747223964473c96e5fd1bdf9b9fa42de5e0a5ad53ec8abc26",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_enum_fst.out",
+    "baseline_sha256": "19bd91a66407837cd43a0f1e7202d9006cf17a92c83c6ea81c573219124e14e7",
+    "merge_preview_sha256": "034b718dbb7869ecedc92574620802b62ecfec7a3a2795405a2aef396705c7c8",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_hier_block_default_cc_fst.out",
+    "baseline_sha256": "a15adfa43a4f9e2e6534c689089a2123aa578d253b5fb4249028e3c949575cff",
+    "merge_preview_sha256": "6953c70853e9ff1459d44173b314d919ca9001af35fa1f4eead6f4b011c4b8ce",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_hier_block_default_sc_fst.out",
+    "baseline_sha256": "ede796ab90b9f0305fc5a79d46404d71790d418f03a42261d529ca173ee2fdf5",
+    "merge_preview_sha256": "393777a9c519decf5f7b0223d66fad07e1618ae157a04238835514c7dedeb23f",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_hier_block_notop_cc_fst.out",
+    "baseline_sha256": "deddfc4d447940fb23622828ec8bbdbc7533f6a91e38c0fbbb915fc7be35c5fe",
+    "merge_preview_sha256": "bab755f9b0521dc535df77e273b863121685b5318cf6d94785f8bfcc510e5c2f",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_hier_block_statefulpkg_cc_vcd.out",
+    "baseline_sha256": "5c1d26c1bd726ef33032b352dd1c14f59cceb496c92691c04494048d721cf337",
+    "merge_preview_sha256": "20969f62f05cfab251ad0e1fbc9c8f4088ea22946e93c96edf476f4f9c3812fc",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_iface.out",
+    "baseline_sha256": "7cddffa58a90dc528b3122a58d663b47b6ace8f02c19cb1473e5abf389a75141",
+    "merge_preview_sha256": "3a87eac2d425cda635ed9fbfa850e0023d120813dd68647b75908172a3ccb39b",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_no_top_name2_fst.out",
+    "baseline_sha256": "110ec81ae61ca29e6534851913295127bae40fa0a72026b264fadb79006b5fc5",
+    "merge_preview_sha256": "ac43ba05f84f20454af6fd678621dd5322d98c11fe3c45d5b3a653497acf6f12",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_no_top_name2_saif.out",
+    "baseline_sha256": "cca7f520ced07920d035e5419f5fb81aafa9cd92b0c245621d7698bf9023603f",
+    "merge_preview_sha256": "5bb33e00e5b730e80ba5b7987b81ff01966941b31405e5400fe5b88040ae4161",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_no_top_name2_vcd.out",
+    "baseline_sha256": "f12db3d4a0d393265829dd5d4ad8f25dbc63c55a34a51472c922051abd73f4bf",
+    "merge_preview_sha256": "e1fcfe19a5da97360e1567278f9686784fd389e66f5d86829560fa87ebc6005c",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_noflag_bad.out",
+    "baseline_sha256": "af420cb5f68588d3fa4721ed3c71c9208e958aed98d7c9d25f34a8f82b3ffb86",
+    "merge_preview_sha256": "e23974e1abd758317afeacd754f411d4ca26906481aadd28de701d06e0a811d4",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_param_fst.out",
+    "baseline_sha256": "df3a465cba26de7f64301d3b01db1ac391564f7efa795695be3356b022313508",
+    "merge_preview_sha256": "810f5571fc483eb04d563fe224a184b4b010976fa627efe4c84c947cf7f8663d",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_split_struct_fst.out",
+    "baseline_sha256": "bfd4f7e2674b47a85b8d10777f1582509eb2bdf69559333f15faa3b7d203fafe",
+    "merge_preview_sha256": "39a79613d31d98d576fa41a4b3ffd478b11982a7f6249e01891300eadaf1dfab",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_type_dupes_default_fst.out",
+    "baseline_sha256": "f851fe9fa41f04300781afc032e2d66f99d695aa05e8a77dd43ac8b1a3cc3757",
+    "merge_preview_sha256": "ac2df0614b6e2edbbd65fee7e9c5fb264dff86ebbcce2835b07b31966035fd47",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_trace_type_dupes_structs_fst.out",
+    "baseline_sha256": "f0e15f8ef7a9bad2579d5311ad9e28b917f78ce69f7c5afeb8c5bddbb72bed7a",
+    "merge_preview_sha256": "39640263626f9081766cfd14c5858849aac7cd9cf7f2877108916746e34a9581",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_typedef_fwd_bad.out",
+    "baseline_sha256": "f2a40ff3b9cee91f8bcef7cbcaa2d9ba7cbcb6905d0967080be576442276011d",
+    "merge_preview_sha256": "6b5a9c3db9e1f93e35c20210dbc43b33f5478438ee821ce47136af736e5610e1",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_udp_bad.out",
+    "baseline_sha256": "7671648178e78656c2940e2a8032fe07d59c28ab6cc8812158994a6b1c65f709",
+    "merge_preview_sha256": "570e4498c450e0f6459b9a099dd816a2bc81d9c4b772de7498953bbea6b6db87",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_udp_bad_first_input.out",
+    "baseline_sha256": "d520a171d2d1e913524fb2389455352ee0bb20129859ad7c967bcce348600789",
+    "merge_preview_sha256": "94625ed3fb5accc1a0ac93b87027b99b16cae14ca1b85b148447a2fd61a4a5e6",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_udp_bad_illegal_output.out",
+    "baseline_sha256": "09d3b6839738feff39f47bea2e529663036bf7a1f58d35d5ea93e26ed5338d0b",
+    "merge_preview_sha256": "95a0b37ec4ace2489432edbcf8738a145e07fc4329a83f6781f9b94daa8bd618",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_udp_bad_multi_output.out",
+    "baseline_sha256": "6f0b9c1e74a88ea4cf24f2c88c61bc2225a73ca9f850e305bdf7ccbdba41da69",
+    "merge_preview_sha256": "b96f01a90a1e5eccacabdd778170576e35eec8782bb62ae9ecc4dc7d7d02b234",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_udp_sequential_bad.out",
+    "baseline_sha256": "fcb4727ee3929c54c1c6cbb324e3002ac453d9273b80c9b91018466b394d05e3",
+    "merge_preview_sha256": "87450ddc57d4c7caf28dfba7202bb31edcce5f8cdc5aaa0ba9443d53fd2d5a88",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_vlcov_hier_report_runtime.out",
+    "baseline_sha256": "df10757ae66d3b4c612ec121e48671a391973b71432b7b3d15256c1b36f5dbae",
+    "merge_preview_sha256": "d922698a15602a3e25a49b59abe0a57c56142871375f114a42f2c0cfeecbd6d4",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_vlt_warn_range_bad.out",
+    "baseline_sha256": "1156f70e09406dae9fef67170fea40267f7931700afa8010be1c070ff7d8eb9e",
+    "merge_preview_sha256": "6917f12494038dd430a4ae2fd417765f0e436b0d6025de788d4441c2e2d6ed8c",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_wire_behp1364_bad.out",
+    "baseline_sha256": "e96c8824029ad8b7692e0dc5bb49f1326c1407d3e206057744f3d45a63d50bca",
+    "merge_preview_sha256": "002a9a4c646654b4b19353840ae70ae47219f9e63f00b7b6b299b54bbefdbb5a",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  },
+  {
+    "path": "test_regress/t/t_wire_behp1800_bad.out",
+    "baseline_sha256": "95cfeeaf4472cf264b3e82320276b26726ec0fb13242d3b80e47017d17333981",
+    "merge_preview_sha256": "c251c8131159e5460fa3e71faa095c78741d86d9a2f2ff0b7573de505c39b95d",
+    "reason": "Preserve published protected input/oracle bytes; incoming output changes remain unapproved"
+  }
+]

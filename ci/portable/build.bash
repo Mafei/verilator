@@ -57,7 +57,7 @@ assert hashlib.sha256(open('.ci-tools-src/wavetools.tar.gz','rb').read()).hexdig
 PYHASH
     mkdir -p .ci-tools/bin
     tar xzf .ci-tools-src/wavetools.tar.gz -C .ci-tools-src
-    cp .ci-tools-src/wavetools-v0.1.2-macos-arm64/wavediff .ci-tools/bin/
+    cp .ci-tools-src/wavetools-v0.1.2-macos-arm64/{wavediff,wavecat} .ci-tools/bin/
 fi
 # The scanner and FlexLexer.h must be from the same GNU Flex release.
 cd .ci-tools-src
@@ -157,6 +157,12 @@ fi
 cat out/dependencies.txt
 cp out/dependencies.txt stage/opt/verilator-fourstate/
 tar -czf "out/verilator-fourstate-$platform.tar.gz" -C stage/opt verilator-fourstate
+rtmd_focus_status=0
+(
+    export VERILATOR_ROOT="$root"
+    python3 ci/portable/focus_rtmd.py
+) || rtmd_focus_status=$?
+printf 'RTMD_FOCUS_EXIT=%s\n' "$rtmd_focus_status"
 if [[ $platform == macos-arm64 ]]; then
     mkdir -p /tmp/verilator-relocated
     tar xzf "out/verilator-fourstate-$platform.tar.gz" -C /tmp/verilator-relocated
@@ -174,7 +180,7 @@ export MAKEFLAGS="${MAKEFLAGS:-} VM_PARALLEL_BUILDS=1"
 regress_status=0
 # Preserve the historical 564-driver prefix and audit the original 438 separately.
 # Appended upstream and capture groups are additional selected drivers.
-python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 upstream_daily_20261029 upstream_daily_20261030 upstream_daily_20261031 clocking_contract_20261031 output_lvalue_20261031 upstream_daily_20261101 upstream_daily_20261102 upstream_daily_20261103 upstream_daily_20261104 assoc_ref_20261104 life_ref_20261104 emitv_args_20261104 upstream_daily_20261105 emitv_ccall_20261105 pull_audit_20261105 upstream_daily_20261106_new upstream_daily_20261106_changed nba_capture_20261106 simulate_display_20261106 upstream_daily_20261107 upstream_daily_20261108 upstream_daily_20261109 upstream_daily_20261111 upstream_daily_20261112 upstream_daily_20261113 upstream_daily_20261114 || regress_status=$?
+python3 ci/portable/run_regressions.py fourstate integration upstream capabilities extended followup readmem nba pull resolve amd-repair deassign finish_slice plusargs finish_propagation upstream_sync_20261010 icarus_semantics upstream_sync_20261011 strict_repairs_20261011 finish_boundary_20261011 upstream_daily_20261012 sv_controls_20261012 upstream_daily_20261013 upstream_daily_20261014 upstream_daily_20261014_followup upstream_daily_20261015 finish_coverage_20261015 upstream_sync_20261017 sv_semantics_20261026 fourstate_constructors_20261026 upstream_sync_20261026 tri_storage_20261026 optimizer_alias_20261026 upstream_late_20261026 sv_read_string_20261026 upstream_daily_20261029 upstream_daily_20261030 upstream_daily_20261031 clocking_contract_20261031 output_lvalue_20261031 upstream_daily_20261101 upstream_daily_20261102 upstream_daily_20261103 upstream_daily_20261104 assoc_ref_20261104 life_ref_20261104 emitv_args_20261104 upstream_daily_20261105 emitv_ccall_20261105 pull_audit_20261105 upstream_daily_20261106_new upstream_daily_20261106_changed nba_capture_20261106 simulate_display_20261106 upstream_daily_20261107 upstream_daily_20261108 upstream_daily_20261109 upstream_daily_20261111 upstream_daily_20261112 upstream_daily_20261113 upstream_daily_20261114 upstream_rtmd_20261123 || regress_status=$?
 clocking_wave_status=0
 python3 ci/portable/clocking_wave.py || clocking_wave_status=$?
 legacy_replay_status=0
@@ -233,7 +239,7 @@ if [[ ${smoke_status:-0} != 0 || ${smoke_record_status:-0} != 0 || $regress_stat
       $legacy_audit_status != 0 || $evidence_status != 0 ||
       $icarus_run_status != 0 || $icarus_check_status != 0 || $icarus_full18_status != 0 ||
       $finish9_run_status != 0 || $finish9_check_status != 0 ||
-      $thread_controls_status != 0 || $ram_matrix_status != 0 ]]; then
+      $thread_controls_status != 0 || $ram_matrix_status != 0 || ${rtmd_focus_status:-0} != 0 ]]; then
     echo "Cloud validation failed: smoke=${smoke_status:-0}, smoke-record=${smoke_record_status:-0}, regress=$regress_status, regression-check=$regression_check_status, clocking-wave=$clocking_wave_status, legacy-replay=$legacy_replay_status, legacy-audit=$legacy_audit_status, evidence=$evidence_status"
     exit 1
 fi

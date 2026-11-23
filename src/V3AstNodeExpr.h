@@ -1278,6 +1278,29 @@ public:
     string emitC() final override { V3ERROR_NA_RETURN(""); }
     bool cleanOut() const final override { V3ERROR_NA_RETURN(true); }
 };
+class AstCoverageControl final : public AstNodeExpr {
+    // $coverage_control, replaced in V3Width
+    // @astgen op1 := controlp : AstNodeExpr
+    // @astgen op2 := coverageTypep : AstNodeExpr
+    // @astgen op3 := scopeDefp : AstNodeExpr
+    const bool m_rootInstance;  // The modules_or_instance argument is $root
+public:
+    AstCoverageControl(FileLine* fl, AstNodeExpr* controlp, AstNodeExpr* coverageTypep,
+                       AstNodeExpr* scopeDefp, bool rootInstance)
+        : ASTGEN_SUPER_CoverageControl(fl)
+        , m_rootInstance{rootInstance} {
+        this->controlp(controlp);
+        this->coverageTypep(coverageTypep);
+        this->scopeDefp(scopeDefp);
+    }
+    ASTGEN_MEMBERS_AstCoverageControl;
+    void dump(std::ostream& str) const override;
+    void dumpJson(std::ostream& str) const override;
+    bool rootInstance() const { return m_rootInstance; }
+    string emitVerilog() override { V3ERROR_NA_RETURN(""); }
+    string emitC() override { V3ERROR_NA_RETURN(""); }
+    bool cleanOut() const override { V3ERROR_NA_RETURN(true); }
+};
 class AstCvtArrayToArray final : public AstNodeExpr {
     // Copy/Cast from dynamic/unpacked types to dynamic/unpacked types
     // @astgen op1 := fromp : AstNodeExpr
@@ -3354,6 +3377,7 @@ public:
     void numberOperate(V3Number& out, const V3Number& lhs, const V3Number& rhs) override {
         out.opWildEq(lhs, rhs);
     }
+    string verilogKwd() const override { return "==?"; }
     string emitVerilog() override { return "%k(%l %f==? %r)"; }
     string emitC() override {
         if (v3Global.opt.fourstate()) {
@@ -3929,6 +3953,7 @@ public:
     void numberOperate(V3Number& out, const V3Number& lhs, const V3Number& rhs) override {
         out.opWildNeq(lhs, rhs);
     }
+    string verilogKwd() const override { return "!=?"; }
     string emitVerilog() override { return "%k(%l %f!=? %r)"; }
     string emitC() override {
         if (v3Global.opt.fourstate()) {
@@ -4598,6 +4623,7 @@ public:
     void numberOperate(V3Number& out, const V3Number& lhs, const V3Number& rhs) override {
         out.opCaseEq(lhs, rhs);
     }
+    string verilogKwd() const override { return "==="; }
     string emitVerilog() override { return "%k(%l %f=== %r)"; }
     string emitC() override { return "VL_EQ_%lq(%lW, %P, %li, %ri)"; }
     string emitSimpleOperator() override { return "=="; }
@@ -4723,6 +4749,7 @@ public:
     void numberOperate(V3Number& out, const V3Number& lhs, const V3Number& rhs) override {
         out.opCaseNeq(lhs, rhs);
     }
+    string verilogKwd() const override { return "!=="; }
     string emitVerilog() override { return "%k(%l %f!== %r)"; }
     string emitC() override { return "VL_NEQ_%lq(%lW, %P, %li, %ri)"; }
     string emitSimpleOperator() override { return "!="; }
