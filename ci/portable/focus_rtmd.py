@@ -9,6 +9,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from run_regressions import actual_passed_names, parse_summary
@@ -113,6 +114,15 @@ def main():  # pylint: disable=too-many-locals,too-many-branches,too-many-statem
             'driver_sha256': sha(root / 'test_regress/t' / ('t_' + name + '.py'))
         }
         if name in SOLVER_CASES:
+            # The runtime reaps its immediate solver launcher before its
+            # separate waiter can finish observing the real solver's EOF exit.
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                started = list((case / 'solver').glob('*.started.json'))
+                finished = list((case / 'solver').glob('*.finished.json'))
+                if started and len(started) == len(finished):
+                    break
+                time.sleep(0.05)
             starts = list((case / 'solver').glob('*.started.json'))
             finishes = list((case / 'solver').glob('*.finished.json'))
             row['solver_started'] = len(starts)
